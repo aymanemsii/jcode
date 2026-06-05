@@ -558,6 +558,7 @@ impl App {
             usage_report_refreshing: false,
             productivity_refreshing: false,
             last_overnight_card_refresh: None,
+            workspace_client: crate::tui::workspace_client::WorkspaceClientState::default(),
         };
 
         for notice in app.provider.drain_startup_notices() {
@@ -928,6 +929,7 @@ impl App {
             usage_report_refreshing: false,
             productivity_refreshing: false,
             last_overnight_card_refresh: None,
+            workspace_client: crate::tui::workspace_client::WorkspaceClientState::default(),
         };
 
         for notice in app.provider.drain_startup_notices() {
