@@ -59,12 +59,16 @@ pub(super) fn render_memory_widget(data: &InfoWidgetData, inner: Rect) -> Vec<Li
 }
 
 fn render_memory_header_line(
-    _info: &MemoryInfo,
+    info: &MemoryInfo,
     activity: Option<&MemoryActivity>,
     max_width: usize,
 ) -> Line<'static> {
     let title = "Memory".to_string();
-    let (badge, badge_color) = memory_status_badge(activity);
+    let (badge, badge_color) = if info.disabled {
+        ("DISABLED".to_string(), rgb(150, 120, 120))
+    } else {
+        memory_status_badge(activity)
+    };
     let badge_text = format!(" {} ", badge);
     let title_width = UnicodeWidthStr::width(title.as_str());
     let badge_width = UnicodeWidthStr::width(badge_text.as_str());
@@ -130,6 +134,9 @@ fn memory_should_render_pipeline(activity: &MemoryActivity) -> bool {
 }
 
 fn memory_compact_summary(info: &MemoryInfo) -> String {
+    if info.disabled {
+        return "disabled".to_string();
+    }
     if let Some(activity) = info.activity.as_ref() {
         if activity.is_processing() {
             return memory_active_summary(&activity.state)
@@ -602,7 +609,9 @@ pub(super) fn render_memory_compact(info: &MemoryInfo, inner_width: u16) -> Vec<
 
     let title_width = UnicodeWidthStr::width(title.as_str());
     let summary_width = max_width.saturating_sub(title_width + 5);
-    let accent = if let Some(activity) = info.activity.as_ref() {
+    let accent = if info.disabled {
+        rgb(150, 120, 120)
+    } else if let Some(activity) = info.activity.as_ref() {
         memory_status_badge(Some(activity)).1
     } else if info.total_count > 0 {
         rgb(160, 160, 170)
