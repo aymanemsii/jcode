@@ -221,6 +221,103 @@ fn collect_cli_model_names_prefers_available_routes_and_dedupes() {
     assert_eq!(models, vec!["gpt-5.4", "claude-sonnet-4"]);
 }
 
+#[test]
+fn queue_priority_parser_accepts_supported_values() {
+    assert_eq!(
+        parse_queue_priority(None).unwrap(),
+        crate::queue::TaskPriority::Normal
+    );
+    assert_eq!(
+        parse_queue_priority(Some("low")).unwrap(),
+        crate::queue::TaskPriority::Low
+    );
+    assert_eq!(
+        parse_queue_priority(Some("normal")).unwrap(),
+        crate::queue::TaskPriority::Normal
+    );
+    assert_eq!(
+        parse_queue_priority(Some("high")).unwrap(),
+        crate::queue::TaskPriority::High
+    );
+    assert_eq!(
+        parse_queue_priority(Some("urgent")).unwrap(),
+        crate::queue::TaskPriority::Urgent
+    );
+}
+
+#[test]
+fn queue_priority_parser_rejects_invalid_values() {
+    let err = parse_queue_priority(Some("medium")).expect_err("invalid priority");
+    assert!(err.to_string().contains("Invalid queue priority"));
+    assert!(err.to_string().contains("low, normal, high, urgent"));
+}
+
+#[test]
+fn queue_list_format_handles_empty_and_tasks() {
+    let empty = crate::queue::QueueState { tasks: Vec::new() };
+    assert_eq!(format_queue_list(&empty), "Queue is empty.");
+
+    let task = crate::queue::Task {
+        id: "task_1".to_string(),
+        title: "Fix docs".to_string(),
+        description: "Update queue docs".to_string(),
+        project: Some("jcode".to_string()),
+        status: crate::queue::TaskStatus::Backlog,
+        priority: crate::queue::TaskPriority::High,
+        worker_profile: Some("default".to_string()),
+        output_path: Some("out.md".to_string()),
+        created_at: chrono::DateTime::parse_from_rfc3339("2026-06-20T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        updated_at: chrono::DateTime::parse_from_rfc3339("2026-06-20T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    };
+    let state = crate::queue::QueueState { tasks: vec![task] };
+    let output = format_queue_list(&state);
+    assert!(output.contains("task_1"));
+    assert!(output.contains("Fix docs"));
+    assert!(output.contains("status: backlog"));
+    assert!(output.contains("priority: high"));
+    assert!(output.contains("project: jcode"));
+    assert!(output.contains("worker_profile: default"));
+    assert!(output.contains("output_path: out.md"));
+}
+
+#[test]
+fn queue_status_format_counts_all_statuses() {
+    let make_task = |status| crate::queue::Task {
+        id: crate::id::new_id("task"),
+        title: "Task".to_string(),
+        description: String::new(),
+        project: None,
+        status,
+        priority: crate::queue::TaskPriority::Normal,
+        worker_profile: None,
+        output_path: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            make_task(crate::queue::TaskStatus::Backlog),
+            make_task(crate::queue::TaskStatus::Backlog),
+            make_task(crate::queue::TaskStatus::Ready),
+            make_task(crate::queue::TaskStatus::Done),
+        ],
+    };
+
+    let output = format_queue_status(&state);
+    assert!(output.contains("backlog: 2"));
+    assert!(output.contains("ready: 1"));
+    assert!(output.contains("running: 0"));
+    assert!(output.contains("review: 0"));
+    assert!(output.contains("done: 1"));
+    assert!(output.contains("blocked: 0"));
+    assert!(output.contains("cancelled: 0"));
+    assert!(output.contains("total: 4"));
+}
+
 fn test_route(model: &str, provider: &str, api_method: &str) -> ModelRoute {
     ModelRoute {
         model: model.to_string(),

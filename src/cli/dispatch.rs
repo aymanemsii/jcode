@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use super::args::{
     AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, MemoryCommand,
-    ModelCommand, ProviderCommand, RestartCommand, ServerCommand, SessionCommand,
+    ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand, SessionCommand,
     TranscriptModeArg,
 };
 use crate::{
@@ -253,6 +253,25 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 clear,
                 json,
             } => commands::run_session_rename_command(&session, name.as_deref(), clear, json)?,
+        },
+        Some(Command::Queue(subcmd)) => match subcmd {
+            QueueCommand::List => commands::run_queue_list_command()?,
+            QueueCommand::Add {
+                title,
+                description,
+                project,
+                priority,
+                worker_profile,
+                output_path,
+            } => commands::run_queue_add_command(commands::QueueAddOptions {
+                title,
+                description,
+                project,
+                priority,
+                worker_profile,
+                output_path,
+            })?,
+            QueueCommand::Status => commands::run_queue_status_command()?,
         },
         Some(Command::Ambient(subcmd)) => {
             commands::run_ambient_command(map_ambient_subcommand(subcmd)).await?;

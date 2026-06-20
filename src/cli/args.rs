@@ -274,6 +274,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Session(SessionCommand),
 
+    /// Queue mode task storage commands
+    #[command(subcommand)]
+    Queue(QueueCommand),
+
     /// Ambient mode management
     #[command(subcommand)]
     Ambient(AmbientCommand),
@@ -786,6 +790,41 @@ pub(crate) enum SessionCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum QueueCommand {
+    /// List queued tasks
+    List,
+
+    /// Add a task to the queue
+    Add {
+        /// Task title
+        title: String,
+
+        /// Task description
+        #[arg(long)]
+        description: Option<String>,
+
+        /// Project label or path
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Task priority: low, normal, high, urgent
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Worker profile name to record with the task
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Expected output path to record with the task
+        #[arg(long)]
+        output_path: Option<String>,
+    },
+
+    /// Show task counts by status
+    Status,
 }
 
 #[derive(Subcommand, Debug)]

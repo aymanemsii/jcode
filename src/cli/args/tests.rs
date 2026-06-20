@@ -463,6 +463,57 @@ fn quiet_global_flag_parses() {
 }
 
 #[test]
+fn queue_subcommands_parse() {
+    let args = Args::try_parse_from(["jcode", "queue", "list"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::List)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
+        "add",
+        "Fix docs",
+        "--description",
+        "Update queue docs",
+        "--project",
+        "jcode",
+        "--priority",
+        "high",
+        "--worker-profile",
+        "default",
+        "--output-path",
+        "out.md",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Add {
+            title,
+            description,
+            project,
+            priority,
+            worker_profile,
+            output_path,
+        })) => {
+            assert_eq!(title, "Fix docs");
+            assert_eq!(description.as_deref(), Some("Update queue docs"));
+            assert_eq!(project.as_deref(), Some("jcode"));
+            assert_eq!(priority.as_deref(), Some("high"));
+            assert_eq!(worker_profile.as_deref(), Some("default"));
+            assert_eq!(output_path.as_deref(), Some("out.md"));
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "status"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Status)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+}
+
+#[test]
 fn acp_subcommand_parses() {
     let args = Args::try_parse_from(["jcode", "acp"]).unwrap();
     match args.command {

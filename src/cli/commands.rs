@@ -1507,6 +1507,145 @@ pub fn run_session_rename_command(
     Ok(())
 }
 
+pub(crate) struct QueueAddOptions {
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) project: Option<String>,
+    pub(crate) priority: Option<String>,
+    pub(crate) worker_profile: Option<String>,
+    pub(crate) output_path: Option<String>,
+}
+
+pub fn run_queue_list_command() -> Result<()> {
+    let state = crate::queue::load()?;
+    println!("{}", format_queue_list(&state));
+    Ok(())
+}
+
+pub(crate) fn run_queue_add_command(options: QueueAddOptions) -> Result<()> {
+    let priority = parse_queue_priority(options.priority.as_deref())?;
+    let mut state = crate::queue::load()?;
+    let task = crate::queue::Task::new(
+        options.title,
+        options.description.unwrap_or_default(),
+        non_empty(options.project),
+        priority,
+        non_empty(options.worker_profile),
+        non_empty(options.output_path),
+    );
+    let id = task.id.clone();
+    let title = task.title.clone();
+    state.tasks.push(task);
+    crate::queue::save(&state)?;
+    println!("Added queue task {id}: {title}");
+    Ok(())
+}
+
+pub fn run_queue_status_command() -> Result<()> {
+    let state = crate::queue::load()?;
+    println!("{}", format_queue_status(&state));
+    Ok(())
+}
+
+fn parse_queue_priority(raw: Option<&str>) -> Result<crate::queue::TaskPriority> {
+    let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(crate::queue::TaskPriority::Normal);
+    };
+    match raw {
+        "low" => Ok(crate::queue::TaskPriority::Low),
+        "normal" => Ok(crate::queue::TaskPriority::Normal),
+        "high" => Ok(crate::queue::TaskPriority::High),
+        "urgent" => Ok(crate::queue::TaskPriority::Urgent),
+        other => anyhow::bail!(
+            "Invalid queue priority '{other}'. Expected one of: low, normal, high, urgent."
+        ),
+    }
+}
+
+fn format_queue_list(state: &crate::queue::QueueState) -> String {
+    if state.tasks.is_empty() {
+        return "Queue is empty.".to_string();
+    }
+
+    state
+        .tasks
+        .iter()
+        .map(|task| {
+            let mut lines = vec![
+                format!("{}  {}", task.id, task.title),
+                format!("  status: {}", task_status_label(task.status)),
+                format!("  priority: {}", task_priority_label(task.priority)),
+            ];
+            if !task.description.trim().is_empty() {
+                lines.push(format!("  description: {}", task.description));
+            }
+            if let Some(project) = task.project.as_deref().filter(|value| !value.is_empty()) {
+                lines.push(format!("  project: {project}"));
+            }
+            if let Some(worker_profile) = task
+                .worker_profile
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                lines.push(format!("  worker_profile: {worker_profile}"));
+            }
+            if let Some(output_path) = task
+                .output_path
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                lines.push(format!("  output_path: {output_path}"));
+            }
+            lines.join("\n")
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn format_queue_status(state: &crate::queue::QueueState) -> String {
+    let statuses = [
+        crate::queue::TaskStatus::Backlog,
+        crate::queue::TaskStatus::Ready,
+        crate::queue::TaskStatus::Running,
+        crate::queue::TaskStatus::Review,
+        crate::queue::TaskStatus::Done,
+        crate::queue::TaskStatus::Blocked,
+        crate::queue::TaskStatus::Cancelled,
+    ];
+    let mut lines = Vec::new();
+    for status in statuses {
+        let count = state
+            .tasks
+            .iter()
+            .filter(|task| task.status == status)
+            .count();
+        lines.push(format!("{}: {count}", task_status_label(status)));
+    }
+    lines.push(format!("total: {}", state.tasks.len()));
+    lines.join("\n")
+}
+
+fn task_status_label(status: crate::queue::TaskStatus) -> &'static str {
+    match status {
+        crate::queue::TaskStatus::Backlog => "backlog",
+        crate::queue::TaskStatus::Ready => "ready",
+        crate::queue::TaskStatus::Running => "running",
+        crate::queue::TaskStatus::Review => "review",
+        crate::queue::TaskStatus::Done => "done",
+        crate::queue::TaskStatus::Blocked => "blocked",
+        crate::queue::TaskStatus::Cancelled => "cancelled",
+    }
+}
+
+fn task_priority_label(priority: crate::queue::TaskPriority) -> &'static str {
+    match priority {
+        crate::queue::TaskPriority::Low => "low",
+        crate::queue::TaskPriority::Normal => "normal",
+        crate::queue::TaskPriority::High => "high",
+        crate::queue::TaskPriority::Urgent => "urgent",
+    }
+}
+
 async fn run_ambient_visible() -> Result<()> {
     use crate::ambient::VisibleCycleContext;
 
