@@ -1528,6 +1528,16 @@ pub fn run_queue_next_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_start_next_command() -> Result<()> {
+    let mut state = crate::queue::load()?;
+    let output = start_next_queue_task(&mut state, chrono::Utc::now());
+    if output.started {
+        crate::queue::save(&state)?;
+    }
+    println!("{}", output.message);
+    Ok(())
+}
+
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
     let state = crate::queue::load()?;
     let task = find_queue_task(&state, task_id)?;
@@ -1693,6 +1703,37 @@ fn format_queue_task(task: &crate::queue::Task) -> String {
     lines.join("\n")
 }
 
+struct QueueStartNextOutput {
+    started: bool,
+    message: String,
+}
+
+fn start_next_queue_task(
+    state: &mut crate::queue::QueueState,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> QueueStartNextOutput {
+    let Some(index) = next_queue_task_index(state) else {
+        return QueueStartNextOutput {
+            started: false,
+            message: "No actionable queue tasks found.".to_string(),
+        };
+    };
+
+    {
+        let task = &mut state.tasks[index];
+        task.status = crate::queue::TaskStatus::Running;
+        task.updated_at = updated_at;
+    }
+
+    QueueStartNextOutput {
+        started: true,
+        message: format!(
+            "Started queue task:\n{}",
+            format_queue_task(&state.tasks[index])
+        ),
+    }
+}
+
 fn format_queue_status(state: &crate::queue::QueueState) -> String {
     let statuses = [
         crate::queue::TaskStatus::Backlog,
@@ -1717,17 +1758,23 @@ fn format_queue_status(state: &crate::queue::QueueState) -> String {
 }
 
 fn next_queue_task(state: &crate::queue::QueueState) -> Option<&crate::queue::Task> {
+    next_queue_task_index(state).map(|index| &state.tasks[index])
+}
+
+fn next_queue_task_index(state: &crate::queue::QueueState) -> Option<usize> {
     state
         .tasks
         .iter()
-        .filter(|task| queue_actionable_status_rank(task.status).is_some())
-        .min_by_key(|task| {
+        .enumerate()
+        .filter(|(_, task)| queue_actionable_status_rank(task.status).is_some())
+        .min_by_key(|(_, task)| {
             (
                 queue_actionable_status_rank(task.status).unwrap_or(u8::MAX),
                 queue_priority_rank(task.priority),
                 task.created_at,
             )
         })
+        .map(|(index, _)| index)
 }
 
 fn queue_actionable_status_rank(status: crate::queue::TaskStatus) -> Option<u8> {

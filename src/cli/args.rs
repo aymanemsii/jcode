@@ -800,6 +800,9 @@ pub(crate) enum QueueCommand {
     /// Show the next actionable task
     Next,
 
+    /// Mark the next actionable task as running
+    StartNext,
+
     /// Show full details for one queued task
     Show {
         /// Task ID

@@ -496,6 +496,96 @@ fn queue_next_format_prints_selected_task() {
 }
 
 #[test]
+fn queue_start_next_marks_selected_task_running() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "backlog_urgent",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Urgent,
+                original_time,
+            ),
+            test_queue_task(
+                "ready_high",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                original_time,
+            ),
+        ],
+    };
+
+    let output = start_next_queue_task(&mut state, updated_time);
+
+    assert!(output.started);
+    assert!(output.message.starts_with("Started queue task:\n"));
+    assert!(output.message.contains("id: ready_high"));
+    assert!(output.message.contains("status: running"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Backlog);
+    assert_eq!(state.tasks[0].updated_at, original_time);
+    assert_eq!(state.tasks[1].status, crate::queue::TaskStatus::Running);
+    assert_eq!(state.tasks[1].updated_at, updated_time);
+}
+
+#[test]
+fn queue_start_next_uses_priority_and_age_ordering() {
+    let oldest = test_time("2026-06-20T10:00:00Z");
+    let newest = test_time("2026-06-20T12:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "high_newer",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                newest,
+            ),
+            test_queue_task(
+                "high_older",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                oldest,
+            ),
+            test_queue_task(
+                "normal_oldest",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Normal,
+                oldest,
+            ),
+        ],
+    };
+
+    let output = start_next_queue_task(&mut state, updated_time);
+
+    assert!(output.started);
+    assert!(output.message.contains("id: high_older"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+    assert_eq!(state.tasks[1].status, crate::queue::TaskStatus::Running);
+    assert_eq!(state.tasks[2].status, crate::queue::TaskStatus::Ready);
+}
+
+#[test]
+fn queue_start_next_does_not_modify_when_no_actionable_task_exists() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "blocked",
+            crate::queue::TaskStatus::Blocked,
+            crate::queue::TaskPriority::Urgent,
+            original_time,
+        )],
+    };
+    let before = state.clone();
+
+    let output = start_next_queue_task(&mut state, test_time("2026-06-20T13:00:00Z"));
+
+    assert!(!output.started);
+    assert_eq!(output.message, "No actionable queue tasks found.");
+    assert_eq!(state, before);
+}
+
+#[test]
 fn queue_status_format_counts_all_statuses() {
     let make_task = |status| crate::queue::Task {
         id: crate::id::new_id("task"),
