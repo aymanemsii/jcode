@@ -359,6 +359,111 @@ fn queue_show_format_prints_full_task_details() {
 }
 
 #[test]
+fn queue_handoff_output_contains_agent_brief_fields() {
+    let task = crate::queue::Task {
+        id: "task_1".to_string(),
+        title: "Fix docs".to_string(),
+        description: "Update queue docs".to_string(),
+        project: Some("jcode".to_string()),
+        status: crate::queue::TaskStatus::Ready,
+        priority: crate::queue::TaskPriority::High,
+        worker_profile: Some("coder".to_string()),
+        output_path: Some("out.md".to_string()),
+        created_at: test_time("2026-06-20T12:00:00Z"),
+        updated_at: test_time("2026-06-20T13:00:00Z"),
+    };
+
+    let output = format_queue_handoff(&task);
+
+    assert!(output.contains("# Queue Task Handoff: Fix docs"));
+    assert!(output.contains("- Task ID: task_1"));
+    assert!(output.contains("- Title: Fix docs"));
+    assert!(output.contains("- Description: Update queue docs"));
+    assert!(output.contains("- Status: ready"));
+    assert!(output.contains("- Priority: high"));
+    assert!(output.contains("- Worker profile: coder"));
+    assert!(output.contains("- Output path: out.md"));
+    assert!(output.contains("- Understand the task before editing."));
+    assert!(output.contains("- Report rollback instructions."));
+}
+
+#[test]
+fn queue_handoff_missing_task_reports_helpful_error() {
+    let state = crate::queue::QueueState { tasks: Vec::new() };
+
+    let err = find_queue_task(&state, "missing").expect_err("missing task");
+
+    assert!(
+        err.to_string()
+            .contains("Queue task 'missing' was not found")
+    );
+}
+
+#[test]
+fn queue_handoff_write_creates_expected_file() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let task = crate::queue::Task {
+        id: "task_1".to_string(),
+        title: "Fix docs".to_string(),
+        description: "Update queue docs".to_string(),
+        project: None,
+        status: crate::queue::TaskStatus::Ready,
+        priority: crate::queue::TaskPriority::High,
+        worker_profile: None,
+        output_path: None,
+        created_at: test_time("2026-06-20T12:00:00Z"),
+        updated_at: test_time("2026-06-20T13:00:00Z"),
+    };
+    let brief = format_queue_handoff(&task);
+
+    let path = write_queue_handoff(&task, &brief).expect("write handoff");
+
+    assert_eq!(
+        path,
+        project
+            .path()
+            .join(".jcode")
+            .join("queue")
+            .join("handoffs")
+            .join("task_1.md")
+    );
+    let written = std::fs::read_to_string(path).expect("read handoff");
+    assert_eq!(written, brief);
+}
+
+#[test]
+fn queue_handoff_next_selects_same_task_as_queue_next() {
+    let older = test_time("2026-06-20T10:00:00Z");
+    let newer = test_time("2026-06-20T11:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                newer,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "research_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("researcher"),
+            ),
+        ],
+    };
+
+    let next = next_queue_task(&state, None).expect("next task");
+    let handoff = format_queue_handoff(next);
+
+    assert_eq!(next.id, "research_ready");
+    assert!(handoff.contains("- Task ID: research_ready"));
+}
+
+#[test]
 fn queue_workers_format_handles_empty_and_profiles() {
     assert_eq!(
         format_worker_profiles(&[]),

@@ -1567,6 +1567,23 @@ pub fn run_queue_finish_command(
     Ok(())
 }
 
+pub fn run_queue_handoff_command(task_id: &str, write: bool) -> Result<()> {
+    let state = crate::queue::load()?;
+    let task = find_queue_task(&state, task_id)?;
+    emit_queue_handoff(task, write)
+}
+
+pub fn run_queue_handoff_next_command(worker_profile: Option<&str>, write: bool) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
+    let state = crate::queue::load()?;
+    let Some(task) = next_queue_task(&state, worker_profile) else {
+        println!("{}", no_actionable_queue_tasks_message(worker_profile));
+        return Ok(());
+    };
+    emit_queue_handoff(task, write)
+}
+
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
     let state = crate::queue::load()?;
     let task = find_queue_task(&state, task_id)?;
@@ -1713,6 +1730,91 @@ fn no_actionable_queue_tasks_message(worker_profile: Option<&str>) -> String {
         }
         None => "No actionable queue tasks found.".to_string(),
     }
+}
+
+fn emit_queue_handoff(task: &crate::queue::Task, write: bool) -> Result<()> {
+    let brief = format_queue_handoff(task);
+    if write {
+        let path = write_queue_handoff(task, &brief)?;
+        println!("{}", path.display());
+    } else {
+        println!("{brief}");
+    }
+    Ok(())
+}
+
+fn queue_handoff_file_path(task_id: &str) -> Result<std::path::PathBuf> {
+    Ok(std::env::current_dir()?
+        .join(".jcode")
+        .join("queue")
+        .join("handoffs")
+        .join(format!("{task_id}.md")))
+}
+
+fn write_queue_handoff(task: &crate::queue::Task, brief: &str) -> Result<std::path::PathBuf> {
+    let path = queue_handoff_file_path(&task.id)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", parent.display()))?;
+    }
+    std::fs::write(&path, brief)
+        .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", path.display()))?;
+    Ok(path)
+}
+
+fn format_queue_handoff(task: &crate::queue::Task) -> String {
+    let mut lines = vec![
+        format!("# Queue Task Handoff: {}", task.title),
+        String::new(),
+        "## Task".to_string(),
+        format!("- Task ID: {}", task.id),
+        format!("- Title: {}", task.title),
+        format!("- Description: {}", queue_handoff_value(&task.description)),
+    ];
+
+    if let Some(project) = task.project.as_deref().filter(|value| !value.is_empty()) {
+        lines.push(format!("- Project: {project}"));
+    }
+
+    lines.extend([
+        format!("- Status: {}", task_status_label(task.status)),
+        format!("- Priority: {}", task_priority_label(task.priority)),
+    ]);
+
+    if let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("- Worker profile: {worker_profile}"));
+    }
+    if let Some(output_path) = task
+        .output_path
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("- Output path: {output_path}"));
+    }
+
+    lines.extend([
+        format!("- Created at: {}", task.created_at.to_rfc3339()),
+        format!("- Updated at: {}", task.updated_at.to_rfc3339()),
+        String::new(),
+        "## Agent Instructions".to_string(),
+        "- Understand the task before editing.".to_string(),
+        "- Make the smallest necessary changes.".to_string(),
+        "- Avoid unrelated refactors.".to_string(),
+        "- Report changed files.".to_string(),
+        "- Report validation performed.".to_string(),
+        "- Report rollback instructions.".to_string(),
+    ]);
+
+    lines.join("\n")
+}
+
+fn queue_handoff_value(value: &str) -> &str {
+    let value = value.trim();
+    if value.is_empty() { "(none)" } else { value }
 }
 
 fn format_worker_profiles(profiles: &[crate::queue::WorkerProfile]) -> String {

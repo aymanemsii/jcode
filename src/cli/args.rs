@@ -834,6 +834,27 @@ pub(crate) enum QueueCommand {
         output_path: Option<String>,
     },
 
+    /// Generate an agent-ready Markdown handoff brief for one queued task
+    Handoff {
+        /// Task ID
+        task_id: String,
+
+        /// Write the brief to .jcode/queue/handoffs/<task-id>.md
+        #[arg(long)]
+        write: bool,
+    },
+
+    /// Generate an agent-ready Markdown handoff brief for the next actionable task
+    HandoffNext {
+        /// Only consider tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Write the brief to .jcode/queue/handoffs/<task-id>.md
+        #[arg(long)]
+        write: bool,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID

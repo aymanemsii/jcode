@@ -547,6 +547,44 @@ fn queue_subcommands_parse() {
         other => panic!("unexpected command: {:?}", other),
     }
 
+    let args = Args::try_parse_from(["jcode", "queue", "handoff", "task_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Handoff { task_id, write })) => {
+            assert_eq!(task_id, "task_1");
+            assert!(!write);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "handoff", "task_1", "--write"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Handoff { task_id, write })) => {
+            assert_eq!(task_id, "task_1");
+            assert!(write);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
+        "handoff-next",
+        "--worker-profile",
+        "researcher",
+        "--write",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::HandoffNext {
+            worker_profile,
+            write,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("researcher"));
+            assert!(write);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
     let args = Args::try_parse_from([
         "jcode",
         "queue",
