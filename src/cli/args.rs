@@ -797,6 +797,15 @@ pub(crate) enum QueueCommand {
     /// List queued tasks
     List,
 
+    /// List project-local worker profiles
+    Workers,
+
+    /// Show one project-local worker profile
+    Worker {
+        /// Worker profile name
+        name: String,
+    },
+
     /// Show the next actionable task
     Next,
 

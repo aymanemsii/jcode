@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -68,6 +69,23 @@ pub struct QueueState {
     pub tasks: Vec<Task>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerProfile {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct WorkerProfilesFile {
+    #[serde(default)]
+    workers: BTreeMap<String, WorkerProfileConfig>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct WorkerProfileConfig {
+    description: Option<String>,
+}
+
 pub fn default_queue_state() -> QueueState {
     QueueState::default()
 }
@@ -75,6 +93,39 @@ pub fn default_queue_state() -> QueueState {
 /// Resolve the path where the queue state JSON is persisted.
 pub fn queue_file_path() -> Result<PathBuf> {
     Ok(jcode_storage::jcode_dir()?.join("queue").join("queue.json"))
+}
+
+/// Resolve the project-local worker profile configuration path.
+pub fn worker_profiles_file_path() -> Result<PathBuf> {
+    Ok(std::env::current_dir()?.join(".jcode").join("workers.toml"))
+}
+
+/// Load worker profiles from a project-local TOML file.
+///
+/// Missing files are treated as an empty profile collection so projects can opt
+/// in gradually.
+pub fn load_worker_profiles() -> Result<Vec<WorkerProfile>> {
+    load_worker_profiles_from_path(worker_profiles_file_path()?)
+}
+
+pub fn load_worker_profiles_from_path(path: PathBuf) -> Result<Vec<WorkerProfile>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    let parsed: WorkerProfilesFile = toml::from_str(&content)
+        .map_err(|err| anyhow::anyhow!("failed to parse {}: {err}", path.display()))?;
+
+    Ok(parsed
+        .workers
+        .into_iter()
+        .map(|(name, profile)| WorkerProfile {
+            name,
+            description: profile.description,
+        })
+        .collect())
 }
 
 /// Load the queue state from disk, creating an empty state if none exists yet.
@@ -173,5 +224,70 @@ mod tests {
         } else {
             crate::env::remove_var("JCODE_HOME");
         }
+    }
+
+    #[test]
+    fn test_parse_worker_profiles_toml() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("workers.toml");
+        std::fs::write(
+            &path,
+            r#"
+[workers.researcher]
+description = "Researches sources and produces structured notes"
+
+[workers.coder]
+description = "Implements code changes"
+
+[workers.reviewer]
+description = "Reviews outputs and checks quality"
+"#,
+        )
+        .unwrap();
+
+        let profiles = load_worker_profiles_from_path(path).unwrap();
+
+        assert_eq!(
+            profiles,
+            vec![
+                WorkerProfile {
+                    name: "coder".to_string(),
+                    description: Some("Implements code changes".to_string()),
+                },
+                WorkerProfile {
+                    name: "researcher".to_string(),
+                    description: Some(
+                        "Researches sources and produces structured notes".to_string()
+                    ),
+                },
+                WorkerProfile {
+                    name: "reviewer".to_string(),
+                    description: Some("Reviews outputs and checks quality".to_string()),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_missing_worker_profiles_toml_returns_empty_profiles() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join(".jcode").join("workers.toml");
+
+        let profiles = load_worker_profiles_from_path(path).unwrap();
+
+        assert!(profiles.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_worker_profiles_toml_reports_path() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path().join("workers.toml");
+        std::fs::write(&path, "[workers.coder\n").unwrap();
+
+        let err = load_worker_profiles_from_path(path.clone()).expect_err("invalid toml");
+
+        let message = err.to_string();
+        assert!(message.contains("failed to parse"));
+        assert!(message.contains(&path.display().to_string()));
     }
 }

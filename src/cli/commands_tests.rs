@@ -359,6 +359,120 @@ fn queue_show_format_prints_full_task_details() {
 }
 
 #[test]
+fn queue_workers_format_handles_empty_and_profiles() {
+    assert_eq!(
+        format_worker_profiles(&[]),
+        "No worker profiles found in .jcode/workers.toml."
+    );
+
+    let profiles = vec![
+        crate::queue::WorkerProfile {
+            name: "coder".to_string(),
+            description: Some("Implements code changes".to_string()),
+        },
+        crate::queue::WorkerProfile {
+            name: "reviewer".to_string(),
+            description: None,
+        },
+    ];
+
+    let output = format_worker_profiles(&profiles);
+    assert!(output.contains("coder  Implements code changes"));
+    assert!(output.contains("reviewer"));
+}
+
+#[test]
+fn queue_worker_format_prints_one_profile() {
+    let profile = crate::queue::WorkerProfile {
+        name: "researcher".to_string(),
+        description: Some("Researches sources and produces structured notes".to_string()),
+    };
+
+    let output = format_worker_profile(&profile);
+
+    assert!(output.contains("name: researcher"));
+    assert!(output.contains("description: Researches sources and produces structured notes"));
+}
+
+#[test]
+fn queue_worker_lookup_reports_missing_profile() {
+    let profiles = vec![crate::queue::WorkerProfile {
+        name: "coder".to_string(),
+        description: None,
+    }];
+
+    let err = find_worker_profile(&profiles, "reviewer").expect_err("missing profile");
+
+    assert!(
+        err.to_string()
+            .contains("Worker profile 'reviewer' was not found in .jcode/workers.toml")
+    );
+}
+
+#[test]
+fn queue_add_accepts_existing_worker_profile() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ndescription = \"Implements code changes\"\n",
+    )
+    .unwrap();
+
+    run_queue_add_command(QueueAddOptions {
+        title: "Implement feature".to_string(),
+        description: None,
+        project: None,
+        priority: None,
+        worker_profile: Some("coder".to_string()),
+        output_path: None,
+    })
+    .expect("add task");
+
+    let state = crate::queue::load().expect("load queue state");
+    assert_eq!(state.tasks.len(), 1);
+    assert_eq!(state.tasks[0].worker_profile.as_deref(), Some("coder"));
+}
+
+#[test]
+fn queue_add_rejects_missing_worker_profile_when_config_exists() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ndescription = \"Implements code changes\"\n",
+    )
+    .unwrap();
+
+    let err = run_queue_add_command(QueueAddOptions {
+        title: "Review feature".to_string(),
+        description: None,
+        project: None,
+        priority: None,
+        worker_profile: Some("reviewer".to_string()),
+        output_path: None,
+    })
+    .expect_err("missing worker profile");
+
+    assert!(
+        err.to_string()
+            .contains("Worker profile 'reviewer' was not found in .jcode/workers.toml")
+    );
+    let state = crate::queue::load().expect("load queue state");
+    assert!(state.tasks.is_empty());
+}
+
+#[test]
 fn queue_next_prefers_ready_over_backlog() {
     let newer = test_time("2026-06-20T13:00:00Z");
     let older = test_time("2026-06-20T12:00:00Z");
@@ -756,6 +870,24 @@ fn test_queue_task(
         output_path: None,
         created_at,
         updated_at: created_at,
+    }
+}
+
+struct CurrentDirGuard {
+    previous: std::path::PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &std::path::Path) -> Self {
+        let previous = std::env::current_dir().expect("current dir");
+        std::env::set_current_dir(path).expect("set current dir");
+        Self { previous }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.previous).expect("restore current dir");
     }
 }
 

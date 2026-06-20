@@ -470,6 +470,20 @@ fn queue_subcommands_parse() {
         other => panic!("unexpected command: {:?}", other),
     }
 
+    let args = Args::try_parse_from(["jcode", "queue", "workers"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Workers)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "worker", "coder"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Worker { name })) => {
+            assert_eq!(name, "coder");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
     let args = Args::try_parse_from(["jcode", "queue", "next"]).unwrap();
     match args.command {
         Some(Command::Queue(QueueCommand::Next)) => {}

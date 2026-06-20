@@ -1522,6 +1522,19 @@ pub fn run_queue_list_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_workers_command() -> Result<()> {
+    let profiles = crate::queue::load_worker_profiles()?;
+    println!("{}", format_worker_profiles(&profiles));
+    Ok(())
+}
+
+pub fn run_queue_worker_command(name: &str) -> Result<()> {
+    let profiles = crate::queue::load_worker_profiles()?;
+    let profile = find_worker_profile(&profiles, name)?;
+    println!("{}", format_worker_profile(profile));
+    Ok(())
+}
+
 pub fn run_queue_next_command() -> Result<()> {
     let state = crate::queue::load()?;
     println!("{}", format_queue_next(&state));
@@ -1559,13 +1572,15 @@ pub fn run_queue_show_command(task_id: &str) -> Result<()> {
 
 pub(crate) fn run_queue_add_command(options: QueueAddOptions) -> Result<()> {
     let priority = parse_queue_priority(options.priority.as_deref())?;
+    let worker_profile = non_empty(options.worker_profile);
+    validate_queue_worker_profile(worker_profile.as_deref())?;
     let mut state = crate::queue::load()?;
     let task = crate::queue::Task::new(
         options.title,
         options.description.unwrap_or_default(),
         non_empty(options.project),
         priority,
-        non_empty(options.worker_profile),
+        worker_profile,
         non_empty(options.output_path),
     );
     let id = task.id.clone();
@@ -1681,6 +1696,70 @@ fn format_queue_next(state: &crate::queue::QueueState) -> String {
         Some(task) => format!("Next queue task:\n{}", format_queue_task(task)),
         None => "No actionable queue tasks found.".to_string(),
     }
+}
+
+fn format_worker_profiles(profiles: &[crate::queue::WorkerProfile]) -> String {
+    if profiles.is_empty() {
+        return "No worker profiles found in .jcode/workers.toml.".to_string();
+    }
+
+    profiles
+        .iter()
+        .map(|profile| {
+            let mut line = profile.name.clone();
+            if let Some(description) = profile
+                .description
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                line.push_str("  ");
+                line.push_str(description);
+            }
+            line
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_worker_profile(profile: &crate::queue::WorkerProfile) -> String {
+    let mut lines = vec![format!("name: {}", profile.name)];
+    if let Some(description) = profile
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("description: {description}"));
+    }
+    lines.join("\n")
+}
+
+fn find_worker_profile<'a>(
+    profiles: &'a [crate::queue::WorkerProfile],
+    name: &str,
+) -> Result<&'a crate::queue::WorkerProfile> {
+    profiles
+        .iter()
+        .find(|profile| profile.name == name)
+        .ok_or_else(|| {
+            anyhow::anyhow!("Worker profile '{name}' was not found in .jcode/workers.toml.")
+        })
+}
+
+fn validate_queue_worker_profile(worker_profile: Option<&str>) -> Result<()> {
+    let Some(worker_profile) = worker_profile else {
+        return Ok(());
+    };
+
+    let path = crate::queue::worker_profiles_file_path()?;
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let profiles = crate::queue::load_worker_profiles_from_path(path)?;
+    find_worker_profile(&profiles, worker_profile)?;
+    Ok(())
 }
 
 fn format_queue_task(task: &crate::queue::Task) -> String {
