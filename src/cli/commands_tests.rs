@@ -473,6 +473,27 @@ fn queue_add_rejects_missing_worker_profile_when_config_exists() {
 }
 
 #[test]
+fn queue_worker_filter_validation_rejects_missing_profile_when_config_exists() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ndescription = \"Implements code changes\"\n",
+    )
+    .unwrap();
+
+    let err = validate_queue_worker_profile(Some("researcher"))
+        .expect_err("missing worker profile should fail");
+
+    assert!(
+        err.to_string()
+            .contains("Worker profile 'researcher' was not found in .jcode/workers.toml")
+    );
+}
+
+#[test]
 fn queue_next_prefers_ready_over_backlog() {
     let newer = test_time("2026-06-20T13:00:00Z");
     let older = test_time("2026-06-20T12:00:00Z");
@@ -493,7 +514,7 @@ fn queue_next_prefers_ready_over_backlog() {
         ],
     };
 
-    assert_eq!(next_queue_task(&state).unwrap().id, "ready_low");
+    assert_eq!(next_queue_task(&state, None).unwrap().id, "ready_low");
 }
 
 #[test]
@@ -524,7 +545,7 @@ fn queue_next_sorts_priorities_then_created_at() {
         ],
     };
 
-    assert_eq!(next_queue_task(&state).unwrap().id, "urgent_middle");
+    assert_eq!(next_queue_task(&state, None).unwrap().id, "urgent_middle");
 
     let state = crate::queue::QueueState {
         tasks: vec![
@@ -543,7 +564,96 @@ fn queue_next_sorts_priorities_then_created_at() {
         ],
     };
 
-    assert_eq!(next_queue_task(&state).unwrap().id, "high_older");
+    assert_eq!(next_queue_task(&state, None).unwrap().id, "high_older");
+}
+
+#[test]
+fn queue_next_worker_filter_selects_only_requested_worker() {
+    let older = test_time("2026-06-20T10:00:00Z");
+    let newer = test_time("2026-06-20T11:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "research_backlog",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("researcher"),
+            ),
+            test_queue_task_with_worker(
+                "research_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Low,
+                newer,
+                Some("researcher"),
+            ),
+            test_queue_task_with_worker(
+                "coder_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "unassigned_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                None,
+            ),
+        ],
+    };
+
+    assert_eq!(
+        next_queue_task(&state, Some("researcher")).unwrap().id,
+        "research_ready"
+    );
+}
+
+#[test]
+fn queue_next_worker_filter_ignores_other_workers() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "coder_ready",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            created_at,
+            Some("coder"),
+        )],
+    };
+
+    assert!(next_queue_task(&state, Some("researcher")).is_none());
+    assert_eq!(
+        format_queue_next(&state, Some("researcher")),
+        "No actionable queue tasks found for worker_profile 'researcher'."
+    );
+}
+
+#[test]
+fn queue_next_without_worker_filter_preserves_normal_behavior() {
+    let older = test_time("2026-06-20T10:00:00Z");
+    let newer = test_time("2026-06-20T11:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                newer,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "research_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("researcher"),
+            ),
+        ],
+    };
+
+    assert_eq!(next_queue_task(&state, None).unwrap().id, "research_ready");
 }
 
 #[test]
@@ -584,9 +694,9 @@ fn queue_next_ignores_non_actionable_statuses() {
         ],
     };
 
-    assert!(next_queue_task(&state).is_none());
+    assert!(next_queue_task(&state, None).is_none());
     assert_eq!(
-        format_queue_next(&state),
+        format_queue_next(&state, None),
         "No actionable queue tasks found."
     );
 }
@@ -602,7 +712,7 @@ fn queue_next_format_prints_selected_task() {
         )],
     };
 
-    let output = format_queue_next(&state);
+    let output = format_queue_next(&state, None);
     assert!(output.starts_with("Next queue task:\n"));
     assert!(output.contains("id: task_1"));
     assert!(output.contains("status: ready"));
@@ -630,7 +740,7 @@ fn queue_start_next_marks_selected_task_running() {
         ],
     };
 
-    let output = start_next_queue_task(&mut state, updated_time);
+    let output = start_next_queue_task(&mut state, updated_time, None);
 
     assert!(output.started);
     assert!(output.message.starts_with("Started queue task:\n"));
@@ -670,7 +780,7 @@ fn queue_start_next_uses_priority_and_age_ordering() {
         ],
     };
 
-    let output = start_next_queue_task(&mut state, updated_time);
+    let output = start_next_queue_task(&mut state, updated_time, None);
 
     assert!(output.started);
     assert!(output.message.contains("id: high_older"));
@@ -692,10 +802,72 @@ fn queue_start_next_does_not_modify_when_no_actionable_task_exists() {
     };
     let before = state.clone();
 
-    let output = start_next_queue_task(&mut state, test_time("2026-06-20T13:00:00Z"));
+    let output = start_next_queue_task(&mut state, test_time("2026-06-20T13:00:00Z"), None);
 
     assert!(!output.started);
     assert_eq!(output.message, "No actionable queue tasks found.");
+    assert_eq!(state, before);
+}
+
+#[test]
+fn queue_start_next_worker_filter_marks_selected_task_running() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                original_time,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "research_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Low,
+                original_time,
+                Some("researcher"),
+            ),
+        ],
+    };
+
+    let output = start_next_queue_task(&mut state, updated_time, Some("researcher"));
+
+    assert!(output.started);
+    assert!(output.message.contains("id: research_ready"));
+    assert!(output.message.contains("status: running"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+    assert_eq!(state.tasks[0].updated_at, original_time);
+    assert_eq!(state.tasks[1].status, crate::queue::TaskStatus::Running);
+    assert_eq!(state.tasks[1].updated_at, updated_time);
+}
+
+#[test]
+fn queue_start_next_worker_filter_reports_no_match_without_modifying_state() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "coder_ready",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            original_time,
+            Some("coder"),
+        )],
+    };
+    let before = state.clone();
+
+    let output = start_next_queue_task(
+        &mut state,
+        test_time("2026-06-20T13:00:00Z"),
+        Some("researcher"),
+    );
+
+    assert!(!output.started);
+    assert_eq!(
+        output.message,
+        "No actionable queue tasks found for worker_profile 'researcher'."
+    );
     assert_eq!(state, before);
 }
 
@@ -871,6 +1043,18 @@ fn test_queue_task(
         created_at,
         updated_at: created_at,
     }
+}
+
+fn test_queue_task_with_worker(
+    id: &str,
+    status: crate::queue::TaskStatus,
+    priority: crate::queue::TaskPriority,
+    created_at: chrono::DateTime<chrono::Utc>,
+    worker_profile: Option<&str>,
+) -> crate::queue::Task {
+    let mut task = test_queue_task(id, status, priority, created_at);
+    task.worker_profile = worker_profile.map(ToOwned::to_owned);
+    task
 }
 
 struct CurrentDirGuard {

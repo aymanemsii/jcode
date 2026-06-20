@@ -807,10 +807,18 @@ pub(crate) enum QueueCommand {
     },
 
     /// Show the next actionable task
-    Next,
+    Next {
+        /// Only consider tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+    },
 
     /// Mark the next actionable task as running
-    StartNext,
+    StartNext {
+        /// Only consider tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+    },
 
     /// Mark a running task as ready for review or done
     Finish {

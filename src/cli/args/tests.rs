@@ -486,13 +486,41 @@ fn queue_subcommands_parse() {
 
     let args = Args::try_parse_from(["jcode", "queue", "next"]).unwrap();
     match args.command {
-        Some(Command::Queue(QueueCommand::Next)) => {}
+        Some(Command::Queue(QueueCommand::Next { worker_profile })) => {
+            assert!(worker_profile.is_none());
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args =
+        Args::try_parse_from(["jcode", "queue", "next", "--worker-profile", "researcher"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Next { worker_profile })) => {
+            assert_eq!(worker_profile.as_deref(), Some("researcher"));
+        }
         other => panic!("unexpected command: {:?}", other),
     }
 
     let args = Args::try_parse_from(["jcode", "queue", "start-next"]).unwrap();
     match args.command {
-        Some(Command::Queue(QueueCommand::StartNext)) => {}
+        Some(Command::Queue(QueueCommand::StartNext { worker_profile })) => {
+            assert!(worker_profile.is_none());
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
+        "start-next",
+        "--worker-profile",
+        "researcher",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::StartNext { worker_profile })) => {
+            assert_eq!(worker_profile.as_deref(), Some("researcher"));
+        }
         other => panic!("unexpected command: {:?}", other),
     }
 

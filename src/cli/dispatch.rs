@@ -258,8 +258,12 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             QueueCommand::List => commands::run_queue_list_command()?,
             QueueCommand::Workers => commands::run_queue_workers_command()?,
             QueueCommand::Worker { name } => commands::run_queue_worker_command(&name)?,
-            QueueCommand::Next => commands::run_queue_next_command()?,
-            QueueCommand::StartNext => commands::run_queue_start_next_command()?,
+            QueueCommand::Next { worker_profile } => {
+                commands::run_queue_next_command(worker_profile.as_deref())?
+            }
+            QueueCommand::StartNext { worker_profile } => {
+                commands::run_queue_start_next_command(worker_profile.as_deref())?
+            }
             QueueCommand::Finish {
                 task_id,
                 done,

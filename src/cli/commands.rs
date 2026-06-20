@@ -1535,15 +1535,19 @@ pub fn run_queue_worker_command(name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn run_queue_next_command() -> Result<()> {
+pub fn run_queue_next_command(worker_profile: Option<&str>) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
     let state = crate::queue::load()?;
-    println!("{}", format_queue_next(&state));
+    println!("{}", format_queue_next(&state, worker_profile));
     Ok(())
 }
 
-pub fn run_queue_start_next_command() -> Result<()> {
+pub fn run_queue_start_next_command(worker_profile: Option<&str>) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
     let mut state = crate::queue::load()?;
-    let output = start_next_queue_task(&mut state, chrono::Utc::now());
+    let output = start_next_queue_task(&mut state, chrono::Utc::now(), worker_profile);
     if output.started {
         crate::queue::save(&state)?;
     }
@@ -1651,6 +1655,10 @@ fn parse_queue_priority(raw: Option<&str>) -> Result<crate::queue::TaskPriority>
     }
 }
 
+fn normalize_worker_profile_arg(raw: Option<&str>) -> Option<&str> {
+    raw.map(str::trim).filter(|value| !value.is_empty())
+}
+
 fn format_queue_list(state: &crate::queue::QueueState) -> String {
     if state.tasks.is_empty() {
         return "Queue is empty.".to_string();
@@ -1691,9 +1699,18 @@ fn format_queue_list(state: &crate::queue::QueueState) -> String {
         .join("\n\n")
 }
 
-fn format_queue_next(state: &crate::queue::QueueState) -> String {
-    match next_queue_task(state) {
+fn format_queue_next(state: &crate::queue::QueueState, worker_profile: Option<&str>) -> String {
+    match next_queue_task(state, worker_profile) {
         Some(task) => format!("Next queue task:\n{}", format_queue_task(task)),
+        None => no_actionable_queue_tasks_message(worker_profile),
+    }
+}
+
+fn no_actionable_queue_tasks_message(worker_profile: Option<&str>) -> String {
+    match worker_profile {
+        Some(worker_profile) => {
+            format!("No actionable queue tasks found for worker_profile '{worker_profile}'.")
+        }
         None => "No actionable queue tasks found.".to_string(),
     }
 }
@@ -1802,11 +1819,12 @@ struct QueueStartNextOutput {
 fn start_next_queue_task(
     state: &mut crate::queue::QueueState,
     updated_at: chrono::DateTime<chrono::Utc>,
+    worker_profile: Option<&str>,
 ) -> QueueStartNextOutput {
-    let Some(index) = next_queue_task_index(state) else {
+    let Some(index) = next_queue_task_index(state, worker_profile) else {
         return QueueStartNextOutput {
             started: false,
-            message: "No actionable queue tasks found.".to_string(),
+            message: no_actionable_queue_tasks_message(worker_profile),
         };
     };
 
@@ -1876,16 +1894,25 @@ fn format_queue_status(state: &crate::queue::QueueState) -> String {
     lines.join("\n")
 }
 
-fn next_queue_task(state: &crate::queue::QueueState) -> Option<&crate::queue::Task> {
-    next_queue_task_index(state).map(|index| &state.tasks[index])
+fn next_queue_task<'a>(
+    state: &'a crate::queue::QueueState,
+    worker_profile: Option<&str>,
+) -> Option<&'a crate::queue::Task> {
+    next_queue_task_index(state, worker_profile).map(|index| &state.tasks[index])
 }
 
-fn next_queue_task_index(state: &crate::queue::QueueState) -> Option<usize> {
+fn next_queue_task_index(
+    state: &crate::queue::QueueState,
+    worker_profile: Option<&str>,
+) -> Option<usize> {
     state
         .tasks
         .iter()
         .enumerate()
         .filter(|(_, task)| queue_actionable_status_rank(task.status).is_some())
+        .filter(|(_, task)| {
+            worker_profile.is_none_or(|profile| task.worker_profile.as_deref() == Some(profile))
+        })
         .min_by_key(|(_, task)| {
             (
                 queue_actionable_status_rank(task.status).unwrap_or(u8::MAX),
