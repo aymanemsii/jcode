@@ -73,6 +73,7 @@ pub struct QueueState {
 pub struct WorkerProfile {
     pub name: String,
     pub description: Option<String>,
+    pub command: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -84,6 +85,7 @@ struct WorkerProfilesFile {
 #[derive(Debug, Default, Deserialize)]
 struct WorkerProfileConfig {
     description: Option<String>,
+    command: Option<String>,
 }
 
 pub fn default_queue_state() -> QueueState {
@@ -124,6 +126,7 @@ pub fn load_worker_profiles_from_path(path: PathBuf) -> Result<Vec<WorkerProfile
         .map(|(name, profile)| WorkerProfile {
             name,
             description: profile.description,
+            command: profile.command,
         })
         .collect())
 }
@@ -235,9 +238,11 @@ mod tests {
             r#"
 [workers.researcher]
 description = "Researches sources and produces structured notes"
+command = "opencode run <handoff_file>"
 
 [workers.coder]
 description = "Implements code changes"
+command = "codex exec <handoff_file>"
 
 [workers.reviewer]
 description = "Reviews outputs and checks quality"
@@ -253,16 +258,19 @@ description = "Reviews outputs and checks quality"
                 WorkerProfile {
                     name: "coder".to_string(),
                     description: Some("Implements code changes".to_string()),
+                    command: Some("codex exec <handoff_file>".to_string()),
                 },
                 WorkerProfile {
                     name: "researcher".to_string(),
                     description: Some(
                         "Researches sources and produces structured notes".to_string()
                     ),
+                    command: Some("opencode run <handoff_file>".to_string()),
                 },
                 WorkerProfile {
                     name: "reviewer".to_string(),
                     description: Some("Reviews outputs and checks quality".to_string()),
+                    command: None,
                 },
             ]
         );

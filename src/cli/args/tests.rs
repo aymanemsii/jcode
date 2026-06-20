@@ -588,6 +588,26 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "run-next",
+        "--worker-profile",
+        "researcher",
+        "--dry-run",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::RunNext {
+            worker_profile,
+            dry_run,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("researcher"));
+            assert!(dry_run);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "add",
         "Fix docs",
         "--description",

@@ -855,6 +855,17 @@ pub(crate) enum QueueCommand {
         write: bool,
     },
 
+    /// Prepare the next worker task command without executing it
+    RunNext {
+        /// Worker profile name
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Print the command that would run without executing it
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID

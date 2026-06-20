@@ -1584,6 +1584,47 @@ pub fn run_queue_handoff_next_command(worker_profile: Option<&str>, write: bool)
     emit_queue_handoff(task, write)
 }
 
+pub fn run_queue_run_next_command(worker_profile: Option<&str>, dry_run: bool) -> Result<()> {
+    if !dry_run {
+        anyhow::bail!(
+            "Real queue execution is not implemented yet. Use --dry-run to preview the command."
+        );
+    }
+    let Some(worker_profile) = normalize_worker_profile_arg(worker_profile) else {
+        anyhow::bail!("queue run-next requires --worker-profile <name>.");
+    };
+
+    let profiles = crate::queue::load_worker_profiles()?;
+    let profile = find_worker_profile(&profiles, worker_profile)?;
+    let Some(command) = profile
+        .command
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        anyhow::bail!(
+            "Worker profile '{worker_profile}' has no command configured in .jcode/workers.toml."
+        );
+    };
+
+    let state = crate::queue::load()?;
+    let Some(task) = next_queue_task(&state, Some(worker_profile)) else {
+        println!(
+            "{}",
+            no_actionable_queue_tasks_message(Some(worker_profile))
+        );
+        return Ok(());
+    };
+    let brief = format_queue_handoff(task);
+    let handoff_path = write_queue_handoff(task, &brief)?;
+    let rendered_command = render_worker_command(command, task, &handoff_path);
+
+    println!("Selected task: {}  {}", task.id, task.title);
+    println!("Handoff file: {}", handoff_path.display());
+    println!("Command: {rendered_command}");
+    Ok(())
+}
+
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
     let state = crate::queue::load()?;
     let task = find_queue_task(&state, task_id)?;
@@ -1851,7 +1892,27 @@ fn format_worker_profile(profile: &crate::queue::WorkerProfile) -> String {
     {
         lines.push(format!("description: {description}"));
     }
+    if let Some(command) = profile
+        .command
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("command: {command}"));
+    } else {
+        lines.push("command: not configured".to_string());
+    }
     lines.join("\n")
+}
+
+fn render_worker_command(
+    command: &str,
+    task: &crate::queue::Task,
+    handoff_path: &std::path::Path,
+) -> String {
+    command
+        .replace("<handoff_file>", &handoff_path.display().to_string())
+        .replace("<task_id>", &task.id)
 }
 
 fn find_worker_profile<'a>(

@@ -474,10 +474,12 @@ fn queue_workers_format_handles_empty_and_profiles() {
         crate::queue::WorkerProfile {
             name: "coder".to_string(),
             description: Some("Implements code changes".to_string()),
+            command: Some("codex exec <handoff_file>".to_string()),
         },
         crate::queue::WorkerProfile {
             name: "reviewer".to_string(),
             description: None,
+            command: None,
         },
     ];
 
@@ -491,12 +493,28 @@ fn queue_worker_format_prints_one_profile() {
     let profile = crate::queue::WorkerProfile {
         name: "researcher".to_string(),
         description: Some("Researches sources and produces structured notes".to_string()),
+        command: Some("opencode run <handoff_file>".to_string()),
     };
 
     let output = format_worker_profile(&profile);
 
     assert!(output.contains("name: researcher"));
     assert!(output.contains("description: Researches sources and produces structured notes"));
+    assert!(output.contains("command: opencode run <handoff_file>"));
+}
+
+#[test]
+fn queue_worker_format_reports_missing_command() {
+    let profile = crate::queue::WorkerProfile {
+        name: "reviewer".to_string(),
+        description: None,
+        command: None,
+    };
+
+    let output = format_worker_profile(&profile);
+
+    assert!(output.contains("name: reviewer"));
+    assert!(output.contains("command: not configured"));
 }
 
 #[test]
@@ -504,6 +522,7 @@ fn queue_worker_lookup_reports_missing_profile() {
     let profiles = vec![crate::queue::WorkerProfile {
         name: "coder".to_string(),
         description: None,
+        command: None,
     }];
 
     let err = find_worker_profile(&profiles, "reviewer").expect_err("missing profile");
@@ -511,6 +530,128 @@ fn queue_worker_lookup_reports_missing_profile() {
     assert!(
         err.to_string()
             .contains("Worker profile 'reviewer' was not found in .jcode/workers.toml")
+    );
+}
+
+#[test]
+fn queue_run_next_requires_worker_profile() {
+    let err = run_queue_run_next_command(None, true).expect_err("missing worker profile");
+
+    assert!(
+        err.to_string()
+            .contains("queue run-next requires --worker-profile <name>")
+    );
+}
+
+#[test]
+fn queue_run_next_requires_dry_run() {
+    let err = run_queue_run_next_command(Some("coder"), false).expect_err("missing dry run");
+
+    assert!(
+        err.to_string()
+            .contains("Real queue execution is not implemented yet")
+    );
+    assert!(err.to_string().contains("--dry-run"));
+}
+
+#[test]
+fn queue_run_next_missing_worker_command_returns_helpful_error() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ndescription = \"Implements code changes\"\n",
+    )
+    .unwrap();
+
+    let err = run_queue_run_next_command(Some("coder"), true).expect_err("missing worker command");
+
+    assert!(
+        err.to_string()
+            .contains("Worker profile 'coder' has no command configured")
+    );
+}
+
+#[test]
+fn queue_run_next_dry_run_selects_worker_task_and_writes_handoff() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ndescription = \"Implements code changes\"\ncommand = \"codex exec <handoff_file> --task <task_id>\"\n",
+    )
+    .unwrap();
+
+    let older = test_time("2026-06-20T10:00:00Z");
+    let newer = test_time("2026-06-20T11:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "other_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("researcher"),
+            ),
+            test_queue_task_with_worker(
+                "coder_newer",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                newer,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "coder_older",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                older,
+                Some("coder"),
+            ),
+        ],
+    };
+    crate::queue::save(&state).expect("save queue state");
+
+    run_queue_run_next_command(Some("coder"), true).expect("dry run");
+
+    let handoff_path = project
+        .path()
+        .join(".jcode")
+        .join("queue")
+        .join("handoffs")
+        .join("coder_older.md");
+    let handoff = std::fs::read_to_string(handoff_path).expect("handoff written");
+    assert!(handoff.contains("- Task ID: coder_older"));
+
+    let reloaded = crate::queue::load().expect("reload queue");
+    assert_eq!(reloaded.tasks[2].status, crate::queue::TaskStatus::Ready);
+}
+
+#[test]
+fn queue_run_next_placeholder_replacement_uses_handoff_file_and_task_id() {
+    let task = test_queue_task(
+        "task_1",
+        crate::queue::TaskStatus::Ready,
+        crate::queue::TaskPriority::High,
+        test_time("2026-06-20T12:00:00Z"),
+    );
+    let handoff_path = std::path::Path::new(".jcode/queue/handoffs/task_1.md");
+
+    let rendered = render_worker_command(
+        "codex exec <handoff_file> --task <task_id>",
+        &task,
+        handoff_path,
+    );
+
+    assert_eq!(
+        rendered,
+        "codex exec .jcode/queue/handoffs/task_1.md --task task_1"
     );
 }
 
