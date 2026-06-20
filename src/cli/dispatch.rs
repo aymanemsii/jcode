@@ -279,7 +279,8 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             QueueCommand::RunNext {
                 worker_profile,
                 dry_run,
-            } => commands::run_queue_run_next_command(worker_profile.as_deref(), dry_run)?,
+                execute,
+            } => commands::run_queue_run_next_command(worker_profile.as_deref(), dry_run, execute)?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,

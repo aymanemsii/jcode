@@ -598,9 +598,33 @@ fn queue_subcommands_parse() {
         Some(Command::Queue(QueueCommand::RunNext {
             worker_profile,
             dry_run,
+            execute,
         })) => {
             assert_eq!(worker_profile.as_deref(), Some("researcher"));
             assert!(dry_run);
+            assert!(!execute);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
+        "run-next",
+        "--worker-profile",
+        "researcher",
+        "--execute",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::RunNext {
+            worker_profile,
+            dry_run,
+            execute,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("researcher"));
+            assert!(!dry_run);
+            assert!(execute);
         }
         other => panic!("unexpected command: {:?}", other),
     }

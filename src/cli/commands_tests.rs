@@ -535,7 +535,7 @@ fn queue_worker_lookup_reports_missing_profile() {
 
 #[test]
 fn queue_run_next_requires_worker_profile() {
-    let err = run_queue_run_next_command(None, true).expect_err("missing worker profile");
+    let err = run_queue_run_next_command(None, true, false).expect_err("missing worker profile");
 
     assert!(
         err.to_string()
@@ -545,13 +545,25 @@ fn queue_run_next_requires_worker_profile() {
 
 #[test]
 fn queue_run_next_requires_dry_run() {
-    let err = run_queue_run_next_command(Some("coder"), false).expect_err("missing dry run");
+    let err =
+        run_queue_run_next_command(Some("coder"), false, false).expect_err("missing run mode");
 
     assert!(
         err.to_string()
-            .contains("Real queue execution is not implemented yet")
+            .contains("requires either --dry-run or --execute")
     );
     assert!(err.to_string().contains("--dry-run"));
+    assert!(err.to_string().contains("--execute"));
+}
+
+#[test]
+fn queue_run_next_rejects_dry_run_and_execute_together() {
+    let err = run_queue_run_next_command(Some("coder"), true, true).expect_err("both run modes");
+
+    assert!(
+        err.to_string()
+            .contains("cannot use --dry-run and --execute together")
+    );
 }
 
 #[test]
@@ -566,7 +578,8 @@ fn queue_run_next_missing_worker_command_returns_helpful_error() {
     )
     .unwrap();
 
-    let err = run_queue_run_next_command(Some("coder"), true).expect_err("missing worker command");
+    let err =
+        run_queue_run_next_command(Some("coder"), true, false).expect_err("missing worker command");
 
     assert!(
         err.to_string()
@@ -618,7 +631,7 @@ fn queue_run_next_dry_run_selects_worker_task_and_writes_handoff() {
     };
     crate::queue::save(&state).expect("save queue state");
 
-    run_queue_run_next_command(Some("coder"), true).expect("dry run");
+    run_queue_run_next_command(Some("coder"), true, false).expect("dry run");
 
     let handoff_path = project
         .path()
@@ -631,6 +644,112 @@ fn queue_run_next_dry_run_selects_worker_task_and_writes_handoff() {
 
     let reloaded = crate::queue::load().expect("reload queue");
     assert_eq!(reloaded.tasks[2].status, crate::queue::TaskStatus::Ready);
+}
+
+#[test]
+fn queue_run_next_execute_marks_running_before_command_and_review_after_success() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ncommand = \"test-worker <handoff_file> --task <task_id>\"\n",
+    )
+    .unwrap();
+
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "task_success",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            created_at,
+            Some("coder"),
+        )],
+    };
+    crate::queue::save(&state).expect("save queue state");
+
+    let mut saw_running = false;
+    let executor = |_: &str| {
+        let state = crate::queue::load().expect("load queue while command runs");
+        saw_running = state.tasks[0].status == crate::queue::TaskStatus::Running;
+        Ok(QueueRunCommandOutput {
+            stdout: "ok\n".to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+        })
+    };
+
+    let output = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
+        .expect("execute success")
+        .expect("selected task");
+
+    assert!(saw_running);
+    assert_eq!(output.task_id, "task_success");
+    assert!(
+        output
+            .run_dir
+            .parent()
+            .is_some_and(|path| path.ends_with("task_success"))
+    );
+    assert!(output.run_dir.join("command.txt").exists());
+    assert!(output.run_dir.join("stdout.txt").exists());
+    assert!(output.run_dir.join("stderr.txt").exists());
+    assert!(output.run_dir.join("run.json").exists());
+
+    let reloaded = crate::queue::load().expect("reload queue");
+    assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Review);
+    assert!(reloaded.tasks[0].updated_at > created_at);
+}
+
+#[test]
+fn queue_run_next_execute_marks_blocked_after_failure() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ncommand = \"test-worker <handoff_file> --task <task_id>\"\n",
+    )
+    .unwrap();
+
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "task_failure",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            test_time("2026-06-20T10:00:00Z"),
+            Some("coder"),
+        )],
+    };
+    crate::queue::save(&state).expect("save queue state");
+
+    let executor = |_: &str| {
+        Ok(QueueRunCommandOutput {
+            stdout: String::new(),
+            stderr: "failed\n".to_string(),
+            exit_code: 23,
+        })
+    };
+
+    let output = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
+        .expect("execute failure is recorded")
+        .expect("selected task");
+
+    assert_eq!(output.task_id, "task_failure");
+    let run_json = std::fs::read_to_string(output.run_dir.join("run.json")).expect("run json");
+    assert!(run_json.contains("\"exit_code\": 23"));
+
+    let reloaded = crate::queue::load().expect("reload queue");
+    assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Blocked);
 }
 
 #[test]

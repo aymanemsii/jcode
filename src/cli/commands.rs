@@ -1584,11 +1584,31 @@ pub fn run_queue_handoff_next_command(worker_profile: Option<&str>, write: bool)
     emit_queue_handoff(task, write)
 }
 
-pub fn run_queue_run_next_command(worker_profile: Option<&str>, dry_run: bool) -> Result<()> {
-    if !dry_run {
-        anyhow::bail!(
-            "Real queue execution is not implemented yet. Use --dry-run to preview the command."
-        );
+pub fn run_queue_run_next_command(
+    worker_profile: Option<&str>,
+    dry_run: bool,
+    execute: bool,
+) -> Result<()> {
+    run_queue_run_next_command_with_executor(
+        worker_profile,
+        dry_run,
+        execute,
+        execute_rendered_worker_command,
+    )
+    .map(|_| ())
+}
+
+fn run_queue_run_next_command_with_executor(
+    worker_profile: Option<&str>,
+    dry_run: bool,
+    execute: bool,
+    mut executor: impl FnMut(&str) -> Result<QueueRunCommandOutput>,
+) -> Result<Option<QueueRunNextOutput>> {
+    if dry_run && execute {
+        anyhow::bail!("queue run-next cannot use --dry-run and --execute together.");
+    }
+    if !dry_run && !execute {
+        anyhow::bail!("queue run-next requires either --dry-run or --execute.");
     }
     let Some(worker_profile) = normalize_worker_profile_arg(worker_profile) else {
         anyhow::bail!("queue run-next requires --worker-profile <name>.");
@@ -1607,22 +1627,91 @@ pub fn run_queue_run_next_command(worker_profile: Option<&str>, dry_run: bool) -
         );
     };
 
-    let state = crate::queue::load()?;
-    let Some(task) = next_queue_task(&state, Some(worker_profile)) else {
+    let mut state = crate::queue::load()?;
+    let Some(index) = next_queue_task_index(&state, Some(worker_profile)) else {
         println!(
             "{}",
             no_actionable_queue_tasks_message(Some(worker_profile))
         );
-        return Ok(());
+        return Ok(None);
     };
-    let brief = format_queue_handoff(task);
-    let handoff_path = write_queue_handoff(task, &brief)?;
-    let rendered_command = render_worker_command(command, task, &handoff_path);
+    let task = state.tasks[index].clone();
+    let brief = format_queue_handoff(&task);
+    let handoff_path = write_queue_handoff(&task, &brief)?;
+    let rendered_command = render_worker_command(command, &task, &handoff_path);
 
-    println!("Selected task: {}  {}", task.id, task.title);
-    println!("Handoff file: {}", handoff_path.display());
-    println!("Command: {rendered_command}");
-    Ok(())
+    if dry_run {
+        println!("Selected task: {}  {}", task.id, task.title);
+        println!("Handoff file: {}", handoff_path.display());
+        println!("Command: {rendered_command}");
+        return Ok(Some(QueueRunNextOutput {
+            task_id: task.id,
+            run_dir: PathBuf::new(),
+        }));
+    }
+
+    let running_at = chrono::Utc::now();
+    state.tasks[index].status = crate::queue::TaskStatus::Running;
+    state.tasks[index].updated_at = running_at;
+    crate::queue::save(&state)?;
+
+    let started_at = chrono::Utc::now();
+    let command_output = match executor(&rendered_command) {
+        Ok(output) => output,
+        Err(err) => {
+            mark_queue_task_after_run(
+                &mut state,
+                index,
+                crate::queue::TaskStatus::Blocked,
+                chrono::Utc::now(),
+            );
+            crate::queue::save(&state)?;
+            anyhow::bail!(
+                "Failed to launch worker command for task '{}': {err}",
+                task.id
+            );
+        }
+    };
+    let ended_at = chrono::Utc::now();
+
+    let run_dir = write_queue_run_artifacts(QueueRunArtifacts {
+        task_id: &task.id,
+        worker_profile,
+        command: &rendered_command,
+        stdout: &command_output.stdout,
+        stderr: &command_output.stderr,
+        exit_code: command_output.exit_code,
+        started_at,
+        ended_at,
+    })?;
+
+    let final_status = if command_output.exit_code == 0 {
+        crate::queue::TaskStatus::Review
+    } else {
+        crate::queue::TaskStatus::Blocked
+    };
+    mark_queue_task_after_run(&mut state, index, final_status, chrono::Utc::now());
+    crate::queue::save(&state)?;
+
+    if command_output.exit_code == 0 {
+        println!(
+            "Queue task '{}' completed successfully and is ready for review. Run artifacts: {}",
+            task.id,
+            run_dir.display()
+        );
+    } else {
+        println!(
+            "Queue task '{}' failed with exit code {} and was marked blocked. Run artifacts: {}",
+            task.id,
+            command_output.exit_code,
+            run_dir.display()
+        );
+    }
+
+    Ok(Some(QueueRunNextOutput {
+        task_id: task.id,
+        run_dir,
+    }))
 }
 
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
@@ -1913,6 +2002,103 @@ fn render_worker_command(
     command
         .replace("<handoff_file>", &handoff_path.display().to_string())
         .replace("<task_id>", &task.id)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueRunCommandOutput {
+    stdout: String,
+    stderr: String,
+    exit_code: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueRunNextOutput {
+    task_id: String,
+    run_dir: PathBuf,
+}
+
+#[derive(Serialize)]
+struct QueueRunMetadata<'a> {
+    task_id: &'a str,
+    worker_profile: &'a str,
+    command: &'a str,
+    exit_code: i32,
+    started_at: String,
+    ended_at: String,
+}
+
+struct QueueRunArtifacts<'a> {
+    task_id: &'a str,
+    worker_profile: &'a str,
+    command: &'a str,
+    stdout: &'a str,
+    stderr: &'a str,
+    exit_code: i32,
+    started_at: chrono::DateTime<chrono::Utc>,
+    ended_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn execute_rendered_worker_command(command: &str) -> Result<QueueRunCommandOutput> {
+    #[cfg(windows)]
+    let output = ProcessCommand::new("cmd").args(["/C", command]).output();
+
+    #[cfg(not(windows))]
+    let output = ProcessCommand::new("sh").args(["-c", command]).output();
+
+    let output = output?;
+    Ok(QueueRunCommandOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        exit_code: output.status.code().unwrap_or(-1),
+    })
+}
+
+fn queue_run_dir_path(task_id: &str, started_at: chrono::DateTime<chrono::Utc>) -> Result<PathBuf> {
+    let timestamp = started_at.format("%Y%m%dT%H%M%S%.fZ").to_string();
+    Ok(std::env::current_dir()?
+        .join(".jcode")
+        .join("queue")
+        .join("runs")
+        .join(task_id)
+        .join(timestamp))
+}
+
+fn write_queue_run_artifacts(artifacts: QueueRunArtifacts<'_>) -> Result<PathBuf> {
+    let run_dir = queue_run_dir_path(artifacts.task_id, artifacts.started_at)?;
+    std::fs::create_dir_all(&run_dir)
+        .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", run_dir.display()))?;
+
+    write_queue_run_artifact(&run_dir.join("command.txt"), artifacts.command)?;
+    write_queue_run_artifact(&run_dir.join("stdout.txt"), artifacts.stdout)?;
+    write_queue_run_artifact(&run_dir.join("stderr.txt"), artifacts.stderr)?;
+
+    let metadata = QueueRunMetadata {
+        task_id: artifacts.task_id,
+        worker_profile: artifacts.worker_profile,
+        command: artifacts.command,
+        exit_code: artifacts.exit_code,
+        started_at: artifacts.started_at.to_rfc3339(),
+        ended_at: artifacts.ended_at.to_rfc3339(),
+    };
+    let metadata_json = serde_json::to_string_pretty(&metadata)?;
+    write_queue_run_artifact(&run_dir.join("run.json"), &metadata_json)?;
+
+    Ok(run_dir)
+}
+
+fn write_queue_run_artifact(path: &Path, content: &str) -> Result<()> {
+    std::fs::write(path, content)
+        .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", path.display()))
+}
+
+fn mark_queue_task_after_run(
+    state: &mut crate::queue::QueueState,
+    index: usize,
+    status: crate::queue::TaskStatus,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) {
+    state.tasks[index].status = status;
+    state.tasks[index].updated_at = updated_at;
 }
 
 fn find_worker_profile<'a>(

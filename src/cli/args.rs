@@ -855,7 +855,7 @@ pub(crate) enum QueueCommand {
         write: bool,
     },
 
-    /// Prepare the next worker task command without executing it
+    /// Prepare or run the next worker task command
     RunNext {
         /// Worker profile name
         #[arg(long)]
@@ -864,6 +864,10 @@ pub(crate) enum QueueCommand {
         /// Print the command that would run without executing it
         #[arg(long)]
         dry_run: bool,
+
+        /// Execute the rendered command synchronously
+        #[arg(long)]
+        execute: bool,
     },
 
     /// Show full details for one queued task
