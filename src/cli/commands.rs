@@ -1522,6 +1522,13 @@ pub fn run_queue_list_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_show_command(task_id: &str) -> Result<()> {
+    let state = crate::queue::load()?;
+    let task = find_queue_task(&state, task_id)?;
+    println!("{}", format_queue_task(task));
+    Ok(())
+}
+
 pub(crate) fn run_queue_add_command(options: QueueAddOptions) -> Result<()> {
     let priority = parse_queue_priority(options.priority.as_deref())?;
     let mut state = crate::queue::load()?;
@@ -1545,6 +1552,45 @@ pub fn run_queue_status_command() -> Result<()> {
     let state = crate::queue::load()?;
     println!("{}", format_queue_status(&state));
     Ok(())
+}
+
+pub fn run_queue_set_status_command(task_id: &str, status: &str) -> Result<()> {
+    let status = parse_queue_status(status)?;
+    let mut state = crate::queue::load()?;
+    update_queue_task_status(&mut state, task_id, status, chrono::Utc::now())?;
+    crate::queue::save(&state)?;
+    println!(
+        "Updated queue task {task_id}: status set to {}",
+        task_status_label(status)
+    );
+    Ok(())
+}
+
+pub fn run_queue_set_priority_command(task_id: &str, priority: &str) -> Result<()> {
+    let priority = parse_queue_priority(Some(priority))?;
+    let mut state = crate::queue::load()?;
+    update_queue_task_priority(&mut state, task_id, priority, chrono::Utc::now())?;
+    crate::queue::save(&state)?;
+    println!(
+        "Updated queue task {task_id}: priority set to {}",
+        task_priority_label(priority)
+    );
+    Ok(())
+}
+
+fn parse_queue_status(raw: &str) -> Result<crate::queue::TaskStatus> {
+    match raw.trim() {
+        "backlog" => Ok(crate::queue::TaskStatus::Backlog),
+        "ready" => Ok(crate::queue::TaskStatus::Ready),
+        "running" => Ok(crate::queue::TaskStatus::Running),
+        "review" => Ok(crate::queue::TaskStatus::Review),
+        "done" => Ok(crate::queue::TaskStatus::Done),
+        "blocked" => Ok(crate::queue::TaskStatus::Blocked),
+        "cancelled" => Ok(crate::queue::TaskStatus::Cancelled),
+        other => anyhow::bail!(
+            "Invalid queue status '{other}'. Expected one of: backlog, ready, running, review, done, blocked, cancelled."
+        ),
+    }
 }
 
 fn parse_queue_priority(raw: Option<&str>) -> Result<crate::queue::TaskPriority> {
@@ -1602,6 +1648,38 @@ fn format_queue_list(state: &crate::queue::QueueState) -> String {
         .join("\n\n")
 }
 
+fn format_queue_task(task: &crate::queue::Task) -> String {
+    let mut lines = vec![
+        format!("id: {}", task.id),
+        format!("title: {}", task.title),
+        format!("status: {}", task_status_label(task.status)),
+        format!("priority: {}", task_priority_label(task.priority)),
+        format!("created_at: {}", task.created_at.to_rfc3339()),
+        format!("updated_at: {}", task.updated_at.to_rfc3339()),
+    ];
+    if !task.description.trim().is_empty() {
+        lines.push(format!("description: {}", task.description));
+    }
+    if let Some(project) = task.project.as_deref().filter(|value| !value.is_empty()) {
+        lines.push(format!("project: {project}"));
+    }
+    if let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("worker_profile: {worker_profile}"));
+    }
+    if let Some(output_path) = task
+        .output_path
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("output_path: {output_path}"));
+    }
+    lines.join("\n")
+}
+
 fn format_queue_status(state: &crate::queue::QueueState) -> String {
     let statuses = [
         crate::queue::TaskStatus::Backlog,
@@ -1623,6 +1701,52 @@ fn format_queue_status(state: &crate::queue::QueueState) -> String {
     }
     lines.push(format!("total: {}", state.tasks.len()));
     lines.join("\n")
+}
+
+fn find_queue_task<'a>(
+    state: &'a crate::queue::QueueState,
+    task_id: &str,
+) -> Result<&'a crate::queue::Task> {
+    state
+        .tasks
+        .iter()
+        .find(|task| task.id == task_id)
+        .ok_or_else(|| anyhow::anyhow!("Queue task '{task_id}' was not found."))
+}
+
+fn find_queue_task_mut<'a>(
+    state: &'a mut crate::queue::QueueState,
+    task_id: &str,
+) -> Result<&'a mut crate::queue::Task> {
+    state
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == task_id)
+        .ok_or_else(|| anyhow::anyhow!("Queue task '{task_id}' was not found."))
+}
+
+fn update_queue_task_status(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    status: crate::queue::TaskStatus,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<()> {
+    let task = find_queue_task_mut(state, task_id)?;
+    task.status = status;
+    task.updated_at = updated_at;
+    Ok(())
+}
+
+fn update_queue_task_priority(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    priority: crate::queue::TaskPriority,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<()> {
+    let task = find_queue_task_mut(state, task_id)?;
+    task.priority = priority;
+    task.updated_at = updated_at;
+    Ok(())
 }
 
 fn task_status_label(status: crate::queue::TaskStatus) -> &'static str {

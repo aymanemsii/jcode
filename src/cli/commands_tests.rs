@@ -246,10 +246,52 @@ fn queue_priority_parser_accepts_supported_values() {
 }
 
 #[test]
+fn queue_status_parser_accepts_supported_values() {
+    assert_eq!(
+        parse_queue_status("backlog").unwrap(),
+        crate::queue::TaskStatus::Backlog
+    );
+    assert_eq!(
+        parse_queue_status("ready").unwrap(),
+        crate::queue::TaskStatus::Ready
+    );
+    assert_eq!(
+        parse_queue_status("running").unwrap(),
+        crate::queue::TaskStatus::Running
+    );
+    assert_eq!(
+        parse_queue_status("review").unwrap(),
+        crate::queue::TaskStatus::Review
+    );
+    assert_eq!(
+        parse_queue_status("done").unwrap(),
+        crate::queue::TaskStatus::Done
+    );
+    assert_eq!(
+        parse_queue_status("blocked").unwrap(),
+        crate::queue::TaskStatus::Blocked
+    );
+    assert_eq!(
+        parse_queue_status("cancelled").unwrap(),
+        crate::queue::TaskStatus::Cancelled
+    );
+}
+
+#[test]
 fn queue_priority_parser_rejects_invalid_values() {
     let err = parse_queue_priority(Some("medium")).expect_err("invalid priority");
     assert!(err.to_string().contains("Invalid queue priority"));
     assert!(err.to_string().contains("low, normal, high, urgent"));
+}
+
+#[test]
+fn queue_status_parser_rejects_invalid_values() {
+    let err = parse_queue_status("waiting").expect_err("invalid status");
+    assert!(err.to_string().contains("Invalid queue status"));
+    assert!(
+        err.to_string()
+            .contains("backlog, ready, running, review, done, blocked, cancelled")
+    );
 }
 
 #[test]
@@ -279,6 +321,38 @@ fn queue_list_format_handles_empty_and_tasks() {
     assert!(output.contains("Fix docs"));
     assert!(output.contains("status: backlog"));
     assert!(output.contains("priority: high"));
+    assert!(output.contains("project: jcode"));
+    assert!(output.contains("worker_profile: default"));
+    assert!(output.contains("output_path: out.md"));
+}
+
+#[test]
+fn queue_show_format_prints_full_task_details() {
+    let task = crate::queue::Task {
+        id: "task_1".to_string(),
+        title: "Fix docs".to_string(),
+        description: "Update queue docs".to_string(),
+        project: Some("jcode".to_string()),
+        status: crate::queue::TaskStatus::Ready,
+        priority: crate::queue::TaskPriority::Urgent,
+        worker_profile: Some("default".to_string()),
+        output_path: Some("out.md".to_string()),
+        created_at: chrono::DateTime::parse_from_rfc3339("2026-06-20T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        updated_at: chrono::DateTime::parse_from_rfc3339("2026-06-20T13:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    };
+
+    let output = format_queue_task(&task);
+    assert!(output.contains("id: task_1"));
+    assert!(output.contains("title: Fix docs"));
+    assert!(output.contains("status: ready"));
+    assert!(output.contains("priority: urgent"));
+    assert!(output.contains("created_at: 2026-06-20T12:00:00+00:00"));
+    assert!(output.contains("updated_at: 2026-06-20T13:00:00+00:00"));
+    assert!(output.contains("description: Update queue docs"));
     assert!(output.contains("project: jcode"));
     assert!(output.contains("worker_profile: default"));
     assert!(output.contains("output_path: out.md"));
@@ -316,6 +390,67 @@ fn queue_status_format_counts_all_statuses() {
     assert!(output.contains("blocked: 0"));
     assert!(output.contains("cancelled: 0"));
     assert!(output.contains("total: 4"));
+}
+
+#[test]
+fn queue_task_mutators_update_requested_field_and_timestamp() {
+    let original_time = chrono::DateTime::parse_from_rfc3339("2026-06-20T12:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let updated_time = chrono::DateTime::parse_from_rfc3339("2026-06-20T13:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let task = crate::queue::Task {
+        id: "task_1".to_string(),
+        title: "Fix docs".to_string(),
+        description: String::new(),
+        project: None,
+        status: crate::queue::TaskStatus::Backlog,
+        priority: crate::queue::TaskPriority::Normal,
+        worker_profile: None,
+        output_path: None,
+        created_at: original_time,
+        updated_at: original_time,
+    };
+    let mut state = crate::queue::QueueState { tasks: vec![task] };
+
+    update_queue_task_status(
+        &mut state,
+        "task_1",
+        crate::queue::TaskStatus::Review,
+        updated_time,
+    )
+    .unwrap();
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+    assert_eq!(state.tasks[0].priority, crate::queue::TaskPriority::Normal);
+    assert_eq!(state.tasks[0].updated_at, updated_time);
+
+    update_queue_task_priority(
+        &mut state,
+        "task_1",
+        crate::queue::TaskPriority::High,
+        original_time,
+    )
+    .unwrap();
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+    assert_eq!(state.tasks[0].priority, crate::queue::TaskPriority::High);
+    assert_eq!(state.tasks[0].updated_at, original_time);
+}
+
+#[test]
+fn queue_task_mutators_report_missing_task() {
+    let mut state = crate::queue::QueueState { tasks: Vec::new() };
+    let err = update_queue_task_status(
+        &mut state,
+        "missing",
+        crate::queue::TaskStatus::Done,
+        chrono::Utc::now(),
+    )
+    .expect_err("missing task");
+    assert!(
+        err.to_string()
+            .contains("Queue task 'missing' was not found")
+    );
 }
 
 fn test_route(model: &str, provider: &str, api_method: &str) -> ModelRoute {

@@ -511,6 +511,33 @@ fn queue_subcommands_parse() {
         Some(Command::Queue(QueueCommand::Status)) => {}
         other => panic!("unexpected command: {:?}", other),
     }
+
+    let args = Args::try_parse_from(["jcode", "queue", "show", "task_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Show { task_id })) => {
+            assert_eq!(task_id, "task_1");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "set-status", "task_1", "review"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::SetStatus { task_id, status })) => {
+            assert_eq!(task_id, "task_1");
+            assert_eq!(status, "review");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args =
+        Args::try_parse_from(["jcode", "queue", "set-priority", "task_1", "urgent"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::SetPriority { task_id, priority })) => {
+            assert_eq!(task_id, "task_1");
+            assert_eq!(priority, "urgent");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
 }
 
 #[test]

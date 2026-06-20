@@ -797,6 +797,12 @@ pub(crate) enum QueueCommand {
     /// List queued tasks
     List,
 
+    /// Show full details for one queued task
+    Show {
+        /// Task ID
+        task_id: String,
+    },
+
     /// Add a task to the queue
     Add {
         /// Task title
@@ -825,6 +831,24 @@ pub(crate) enum QueueCommand {
 
     /// Show task counts by status
     Status,
+
+    /// Update a queued task's status
+    SetStatus {
+        /// Task ID
+        task_id: String,
+
+        /// Task status: backlog, ready, running, review, done, blocked, cancelled
+        status: String,
+    },
+
+    /// Update a queued task's priority
+    SetPriority {
+        /// Task ID
+        task_id: String,
+
+        /// Task priority: low, normal, high, urgent
+        priority: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

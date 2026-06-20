@@ -256,6 +256,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         },
         Some(Command::Queue(subcmd)) => match subcmd {
             QueueCommand::List => commands::run_queue_list_command()?,
+            QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,
                 description,
@@ -272,6 +273,12 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 output_path,
             })?,
             QueueCommand::Status => commands::run_queue_status_command()?,
+            QueueCommand::SetStatus { task_id, status } => {
+                commands::run_queue_set_status_command(&task_id, &status)?
+            }
+            QueueCommand::SetPriority { task_id, priority } => {
+                commands::run_queue_set_priority_command(&task_id, &priority)?
+            }
         },
         Some(Command::Ambient(subcmd)) => {
             commands::run_ambient_command(map_ambient_subcommand(subcmd)).await?;
