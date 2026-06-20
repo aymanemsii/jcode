@@ -1538,6 +1538,18 @@ pub fn run_queue_start_next_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_finish_command(
+    task_id: &str,
+    done: bool,
+    output_path: Option<String>,
+) -> Result<()> {
+    let mut state = crate::queue::load()?;
+    let message = finish_queue_task(&mut state, task_id, done, output_path, chrono::Utc::now())?;
+    crate::queue::save(&state)?;
+    println!("{message}");
+    Ok(())
+}
+
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
     let state = crate::queue::load()?;
     let task = find_queue_task(&state, task_id)?;
@@ -1732,6 +1744,34 @@ fn start_next_queue_task(
             format_queue_task(&state.tasks[index])
         ),
     }
+}
+
+fn finish_queue_task(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    done: bool,
+    output_path: Option<String>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<String> {
+    let task = find_queue_task_mut(state, task_id)?;
+    if task.status != crate::queue::TaskStatus::Running {
+        anyhow::bail!(
+            "Queue task '{task_id}' is '{}' and cannot be finished. Expected status: running.",
+            task_status_label(task.status)
+        );
+    }
+
+    task.status = if done {
+        crate::queue::TaskStatus::Done
+    } else {
+        crate::queue::TaskStatus::Review
+    };
+    if let Some(output_path) = non_empty(output_path) {
+        task.output_path = Some(output_path);
+    }
+    task.updated_at = updated_at;
+
+    Ok(format!("Finished queue task:\n{}", format_queue_task(task)))
 }
 
 fn format_queue_status(state: &crate::queue::QueueState) -> String {

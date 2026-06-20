@@ -258,6 +258,11 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             QueueCommand::List => commands::run_queue_list_command()?,
             QueueCommand::Next => commands::run_queue_next_command()?,
             QueueCommand::StartNext => commands::run_queue_start_next_command()?,
+            QueueCommand::Finish {
+                task_id,
+                done,
+                output_path,
+            } => commands::run_queue_finish_command(&task_id, done, output_path)?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,

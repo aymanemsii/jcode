@@ -586,6 +586,120 @@ fn queue_start_next_does_not_modify_when_no_actionable_task_exists() {
 }
 
 #[test]
+fn queue_finish_running_task_to_review() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::High,
+            original_time,
+        )],
+    };
+
+    let output = finish_queue_task(&mut state, "task_1", false, None, updated_time).unwrap();
+
+    assert!(output.starts_with("Finished queue task:\n"));
+    assert!(output.contains("id: task_1"));
+    assert!(output.contains("status: review"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+    assert_eq!(state.tasks[0].updated_at, updated_time);
+}
+
+#[test]
+fn queue_finish_running_task_to_done() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::High,
+            original_time,
+        )],
+    };
+
+    let output = finish_queue_task(&mut state, "task_1", true, None, updated_time).unwrap();
+
+    assert!(output.contains("status: done"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Done);
+    assert_eq!(state.tasks[0].updated_at, updated_time);
+}
+
+#[test]
+fn queue_finish_updates_output_path() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T13:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::High,
+            original_time,
+        )],
+    };
+
+    let output = finish_queue_task(
+        &mut state,
+        "task_1",
+        false,
+        Some("out.md".to_string()),
+        updated_time,
+    )
+    .unwrap();
+
+    assert!(output.contains("output_path: out.md"));
+    assert_eq!(state.tasks[0].output_path.as_deref(), Some("out.md"));
+    assert_eq!(state.tasks[0].updated_at, updated_time);
+}
+
+#[test]
+fn queue_finish_reports_missing_task() {
+    let mut state = crate::queue::QueueState { tasks: Vec::new() };
+    let err = finish_queue_task(
+        &mut state,
+        "missing",
+        false,
+        None,
+        test_time("2026-06-20T13:00:00Z"),
+    )
+    .expect_err("missing task");
+
+    assert!(
+        err.to_string()
+            .contains("Queue task 'missing' was not found")
+    );
+}
+
+#[test]
+fn queue_finish_rejects_not_running_task() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::High,
+            original_time,
+        )],
+    };
+    let before = state.clone();
+
+    let err = finish_queue_task(
+        &mut state,
+        "task_1",
+        false,
+        None,
+        test_time("2026-06-20T13:00:00Z"),
+    )
+    .expect_err("not running");
+
+    assert!(err.to_string().contains("Queue task 'task_1' is 'ready'"));
+    assert!(err.to_string().contains("Expected status: running"));
+    assert_eq!(state, before);
+}
+
+#[test]
 fn queue_status_format_counts_all_statuses() {
     let make_task = |status| crate::queue::Task {
         id: crate::id::new_id("task"),

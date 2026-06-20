@@ -485,6 +485,29 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "finish",
+        "task_1",
+        "--done",
+        "--output-path",
+        "out.md",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Finish {
+            task_id,
+            done,
+            output_path,
+        })) => {
+            assert_eq!(task_id, "task_1");
+            assert!(done);
+            assert_eq!(output_path.as_deref(), Some("out.md"));
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "add",
         "Fix docs",
         "--description",

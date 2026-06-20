@@ -803,6 +803,20 @@ pub(crate) enum QueueCommand {
     /// Mark the next actionable task as running
     StartNext,
 
+    /// Mark a running task as ready for review or done
+    Finish {
+        /// Task ID
+        task_id: String,
+
+        /// Mark the task done instead of review
+        #[arg(long)]
+        done: bool,
+
+        /// Output path to record with the task
+        #[arg(long)]
+        output_path: Option<String>,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID
