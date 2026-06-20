@@ -1522,6 +1522,12 @@ pub fn run_queue_list_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_next_command() -> Result<()> {
+    let state = crate::queue::load()?;
+    println!("{}", format_queue_next(&state));
+    Ok(())
+}
+
 pub fn run_queue_show_command(task_id: &str) -> Result<()> {
     let state = crate::queue::load()?;
     let task = find_queue_task(&state, task_id)?;
@@ -1648,6 +1654,13 @@ fn format_queue_list(state: &crate::queue::QueueState) -> String {
         .join("\n\n")
 }
 
+fn format_queue_next(state: &crate::queue::QueueState) -> String {
+    match next_queue_task(state) {
+        Some(task) => format!("Next queue task:\n{}", format_queue_task(task)),
+        None => "No actionable queue tasks found.".to_string(),
+    }
+}
+
 fn format_queue_task(task: &crate::queue::Task) -> String {
     let mut lines = vec![
         format!("id: {}", task.id),
@@ -1701,6 +1714,41 @@ fn format_queue_status(state: &crate::queue::QueueState) -> String {
     }
     lines.push(format!("total: {}", state.tasks.len()));
     lines.join("\n")
+}
+
+fn next_queue_task(state: &crate::queue::QueueState) -> Option<&crate::queue::Task> {
+    state
+        .tasks
+        .iter()
+        .filter(|task| queue_actionable_status_rank(task.status).is_some())
+        .min_by_key(|task| {
+            (
+                queue_actionable_status_rank(task.status).unwrap_or(u8::MAX),
+                queue_priority_rank(task.priority),
+                task.created_at,
+            )
+        })
+}
+
+fn queue_actionable_status_rank(status: crate::queue::TaskStatus) -> Option<u8> {
+    match status {
+        crate::queue::TaskStatus::Ready => Some(0),
+        crate::queue::TaskStatus::Backlog => Some(1),
+        crate::queue::TaskStatus::Running
+        | crate::queue::TaskStatus::Review
+        | crate::queue::TaskStatus::Done
+        | crate::queue::TaskStatus::Blocked
+        | crate::queue::TaskStatus::Cancelled => None,
+    }
+}
+
+fn queue_priority_rank(priority: crate::queue::TaskPriority) -> u8 {
+    match priority {
+        crate::queue::TaskPriority::Urgent => 0,
+        crate::queue::TaskPriority::High => 1,
+        crate::queue::TaskPriority::Normal => 2,
+        crate::queue::TaskPriority::Low => 3,
+    }
 }
 
 fn find_queue_task<'a>(

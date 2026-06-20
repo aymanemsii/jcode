@@ -797,6 +797,9 @@ pub(crate) enum QueueCommand {
     /// List queued tasks
     List,
 
+    /// Show the next actionable task
+    Next,
+
     /// Show full details for one queued task
     Show {
         /// Task ID

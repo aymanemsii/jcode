@@ -359,6 +359,143 @@ fn queue_show_format_prints_full_task_details() {
 }
 
 #[test]
+fn queue_next_prefers_ready_over_backlog() {
+    let newer = test_time("2026-06-20T13:00:00Z");
+    let older = test_time("2026-06-20T12:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "backlog_urgent",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Urgent,
+                older,
+            ),
+            test_queue_task(
+                "ready_low",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Low,
+                newer,
+            ),
+        ],
+    };
+
+    assert_eq!(next_queue_task(&state).unwrap().id, "ready_low");
+}
+
+#[test]
+fn queue_next_sorts_priorities_then_created_at() {
+    let oldest = test_time("2026-06-20T10:00:00Z");
+    let middle = test_time("2026-06-20T11:00:00Z");
+    let newest = test_time("2026-06-20T12:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "normal_oldest",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Normal,
+                oldest,
+            ),
+            test_queue_task(
+                "high_newest",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                newest,
+            ),
+            test_queue_task(
+                "urgent_middle",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                middle,
+            ),
+        ],
+    };
+
+    assert_eq!(next_queue_task(&state).unwrap().id, "urgent_middle");
+
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "high_newer",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                newest,
+            ),
+            test_queue_task(
+                "high_older",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                oldest,
+            ),
+        ],
+    };
+
+    assert_eq!(next_queue_task(&state).unwrap().id, "high_older");
+}
+
+#[test]
+fn queue_next_ignores_non_actionable_statuses() {
+    let created_at = test_time("2026-06-20T12:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "running",
+                crate::queue::TaskStatus::Running,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+            test_queue_task(
+                "review",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+            test_queue_task(
+                "done",
+                crate::queue::TaskStatus::Done,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+            test_queue_task(
+                "blocked",
+                crate::queue::TaskStatus::Blocked,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+            test_queue_task(
+                "cancelled",
+                crate::queue::TaskStatus::Cancelled,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+        ],
+    };
+
+    assert!(next_queue_task(&state).is_none());
+    assert_eq!(
+        format_queue_next(&state),
+        "No actionable queue tasks found."
+    );
+}
+
+#[test]
+fn queue_next_format_prints_selected_task() {
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::High,
+            test_time("2026-06-20T12:00:00Z"),
+        )],
+    };
+
+    let output = format_queue_next(&state);
+    assert!(output.starts_with("Next queue task:\n"));
+    assert!(output.contains("id: task_1"));
+    assert!(output.contains("status: ready"));
+    assert!(output.contains("priority: high"));
+}
+
+#[test]
 fn queue_status_format_counts_all_statuses() {
     let make_task = |status| crate::queue::Task {
         id: crate::id::new_id("task"),
@@ -390,6 +527,32 @@ fn queue_status_format_counts_all_statuses() {
     assert!(output.contains("blocked: 0"));
     assert!(output.contains("cancelled: 0"));
     assert!(output.contains("total: 4"));
+}
+
+fn test_time(raw: &str) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+}
+
+fn test_queue_task(
+    id: &str,
+    status: crate::queue::TaskStatus,
+    priority: crate::queue::TaskPriority,
+    created_at: chrono::DateTime<chrono::Utc>,
+) -> crate::queue::Task {
+    crate::queue::Task {
+        id: id.to_string(),
+        title: id.to_string(),
+        description: String::new(),
+        project: None,
+        status,
+        priority,
+        worker_profile: None,
+        output_path: None,
+        created_at,
+        updated_at: created_at,
+    }
 }
 
 #[test]

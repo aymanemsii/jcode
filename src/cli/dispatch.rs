@@ -256,6 +256,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         },
         Some(Command::Queue(subcmd)) => match subcmd {
             QueueCommand::List => commands::run_queue_list_command()?,
+            QueueCommand::Next => commands::run_queue_next_command()?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,
