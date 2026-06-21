@@ -826,6 +826,28 @@ fn queue_runs_lists_existing_runs_from_test_directories() {
 }
 
 #[test]
+fn queue_runs_lists_run_directories_without_metadata_as_unknown() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let run_dir = project
+        .path()
+        .join(".jcode")
+        .join("queue")
+        .join("runs")
+        .join("task_without_json")
+        .join("20260620T100000Z");
+    std::fs::create_dir_all(&run_dir).expect("create run dir");
+
+    let runs = list_queue_runs(&queue_runs_dir_path().unwrap(), None).expect("list runs");
+    let output = format_queue_runs(&runs, 10);
+
+    assert!(output.contains("task_without_json  20260620T100000Z"));
+    assert!(output.contains("worker_profile: unknown"));
+    assert!(output.contains("exit_code: unknown"));
+}
+
+#[test]
 fn queue_runs_filters_by_task_id_and_applies_limit() {
     let _lock = crate::storage::lock_test_env();
     let project = tempfile::tempdir().expect("project tempdir");

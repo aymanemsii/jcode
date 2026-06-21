@@ -877,7 +877,7 @@ pub(crate) enum QueueCommand {
         task_id: Option<String>,
 
         /// Maximum number of runs to list
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = 20, value_parser = parse_positive_usize)]
         limit: usize,
     },
 
@@ -1126,6 +1126,16 @@ pub(crate) enum MemoryCommand {
 
     /// Clear test memory storage (used by debug sessions)
     ClearTest,
+}
+
+fn parse_positive_usize(raw: &str) -> Result<usize, String> {
+    let value = raw
+        .parse::<usize>()
+        .map_err(|err| format!("invalid positive integer: {err}"))?;
+    if value == 0 {
+        return Err("value must be greater than 0".to_string());
+    }
+    Ok(value)
 }
 
 #[cfg(test)]

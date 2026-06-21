@@ -647,6 +647,10 @@ fn queue_subcommands_parse() {
         other => panic!("unexpected command: {:?}", other),
     }
 
+    let err = Args::try_parse_from(["jcode", "queue", "runs", "--limit", "0"])
+        .expect_err("zero run limit should be rejected");
+    assert!(err.to_string().contains("value must be greater than 0"));
+
     let args = Args::try_parse_from([
         "jcode",
         "queue",
