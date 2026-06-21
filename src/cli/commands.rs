@@ -1643,6 +1643,14 @@ pub fn run_queue_reopen_command(task_id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_dashboard_command(worker_profile: Option<&str>, limit: usize) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
+    let state = crate::queue::load()?;
+    println!("{}", format_queue_dashboard(&state, worker_profile, limit));
+    Ok(())
+}
+
 fn run_queue_run_next_command_with_executor(
     worker_profile: Option<&str>,
     dry_run: bool,
@@ -1949,6 +1957,150 @@ fn format_queue_review(
         lines.push(format!("  updated_at: {}", task.updated_at.to_rfc3339()));
     }
     lines.join("\n")
+}
+
+fn format_queue_dashboard(
+    state: &crate::queue::QueueState,
+    worker_profile: Option<&str>,
+    limit: usize,
+) -> String {
+    let tasks = state
+        .tasks
+        .iter()
+        .filter(|task| {
+            worker_profile.is_none_or(|profile| task.worker_profile.as_deref() == Some(profile))
+        })
+        .collect::<Vec<_>>();
+
+    if tasks.is_empty() {
+        return match worker_profile {
+            Some(worker_profile) => {
+                format!("No queue tasks found for worker_profile '{worker_profile}'.")
+            }
+            None => "Queue is empty. No tasks to show.".to_string(),
+        };
+    }
+
+    let mut lines = match worker_profile {
+        Some(worker_profile) => vec![
+            "Queue dashboard".to_string(),
+            format!("worker_profile: {worker_profile}"),
+        ],
+        None => vec!["Queue dashboard".to_string()],
+    };
+    lines.push(format!("total: {}", tasks.len()));
+    lines.push(String::new());
+    lines.push("Status counts:".to_string());
+    append_queue_dashboard_status_counts(&mut lines, &tasks);
+
+    lines.push(String::new());
+    lines.push("Next actionable task:".to_string());
+    match next_queue_task(state, worker_profile) {
+        Some(task) => append_queue_dashboard_task(&mut lines, task, true, false),
+        None => lines.push("  none".to_string()),
+    }
+
+    append_queue_dashboard_section(
+        &mut lines,
+        "Running tasks:",
+        &tasks,
+        crate::queue::TaskStatus::Running,
+        limit,
+        false,
+    );
+    append_queue_dashboard_section(
+        &mut lines,
+        "Review tasks:",
+        &tasks,
+        crate::queue::TaskStatus::Review,
+        limit,
+        true,
+    );
+    append_queue_dashboard_section(
+        &mut lines,
+        "Blocked tasks:",
+        &tasks,
+        crate::queue::TaskStatus::Blocked,
+        limit,
+        false,
+    );
+
+    lines.join("\n")
+}
+
+fn append_queue_dashboard_status_counts(lines: &mut Vec<String>, tasks: &[&crate::queue::Task]) {
+    let statuses = [
+        crate::queue::TaskStatus::Backlog,
+        crate::queue::TaskStatus::Ready,
+        crate::queue::TaskStatus::Running,
+        crate::queue::TaskStatus::Review,
+        crate::queue::TaskStatus::Done,
+        crate::queue::TaskStatus::Blocked,
+        crate::queue::TaskStatus::Cancelled,
+    ];
+    for status in statuses {
+        let count = tasks.iter().filter(|task| task.status == status).count();
+        lines.push(format!("  {}: {count}", task_status_label(status)));
+    }
+}
+
+fn append_queue_dashboard_section(
+    lines: &mut Vec<String>,
+    title: &str,
+    tasks: &[&crate::queue::Task],
+    status: crate::queue::TaskStatus,
+    limit: usize,
+    include_output_path: bool,
+) {
+    let mut matching = tasks
+        .iter()
+        .copied()
+        .filter(|task| task.status == status)
+        .collect::<Vec<_>>();
+    matching.sort_by_key(|task| (std::cmp::Reverse(task.updated_at), task.id.as_str()));
+
+    lines.push(String::new());
+    lines.push(title.to_string());
+    if matching.is_empty() {
+        lines.push("  none".to_string());
+        return;
+    }
+
+    for task in matching.into_iter().take(limit) {
+        append_queue_dashboard_task(lines, task, false, include_output_path);
+    }
+}
+
+fn append_queue_dashboard_task(
+    lines: &mut Vec<String>,
+    task: &crate::queue::Task,
+    include_priority: bool,
+    include_output_path: bool,
+) {
+    lines.push(format!("  {}  {}", task.id, task.title));
+    if include_priority {
+        lines.push(format!(
+            "    priority: {}",
+            task_priority_label(task.priority)
+        ));
+    }
+    if let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("    worker_profile: {worker_profile}"));
+    }
+    if include_output_path {
+        if let Some(output_path) = task
+            .output_path
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("    output_path: {output_path}"));
+        }
+    }
+    lines.push(format!("    updated_at: {}", task.updated_at.to_rfc3339()));
 }
 
 fn no_actionable_queue_tasks_message(worker_profile: Option<&str>) -> String {

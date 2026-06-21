@@ -1493,6 +1493,207 @@ fn queue_review_mutators_report_missing_task() {
 }
 
 #[test]
+fn queue_dashboard_empty_queue_returns_clear_message() {
+    let state = crate::queue::QueueState { tasks: Vec::new() };
+
+    assert_eq!(
+        format_queue_dashboard(&state, None, 20),
+        "Queue is empty. No tasks to show."
+    );
+}
+
+#[test]
+fn queue_dashboard_prints_status_counts() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "backlog",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "running",
+                crate::queue::TaskStatus::Running,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "review",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "done",
+                crate::queue::TaskStatus::Done,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "blocked",
+                crate::queue::TaskStatus::Blocked,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "cancelled",
+                crate::queue::TaskStatus::Cancelled,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+        ],
+    };
+
+    let output = format_queue_dashboard(&state, None, 20);
+
+    assert!(output.contains("Queue dashboard"));
+    assert!(output.contains("total: 7"));
+    assert!(output.contains("backlog: 1"));
+    assert!(output.contains("ready: 1"));
+    assert!(output.contains("running: 1"));
+    assert!(output.contains("review: 1"));
+    assert!(output.contains("done: 1"));
+    assert!(output.contains("blocked: 1"));
+    assert!(output.contains("cancelled: 1"));
+}
+
+#[test]
+fn queue_dashboard_includes_next_actionable_task() {
+    let older = test_time("2026-06-20T10:00:00Z");
+    let newer = test_time("2026-06-20T11:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "backlog_urgent",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Urgent,
+                older,
+            ),
+            test_queue_task(
+                "ready_low",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Low,
+                newer,
+            ),
+        ],
+    };
+
+    let output = format_queue_dashboard(&state, None, 20);
+
+    assert!(output.contains("Next actionable task:"));
+    assert!(output.contains("ready_low  ready_low"));
+    assert!(output.contains("priority: low"));
+    assert!(!output.contains("backlog_urgent  backlog_urgent"));
+}
+
+#[test]
+fn queue_dashboard_includes_running_review_and_blocked_sections() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let updated_at = test_time("2026-06-20T12:00:00Z");
+    let mut running = test_queue_task_with_worker(
+        "running_task",
+        crate::queue::TaskStatus::Running,
+        crate::queue::TaskPriority::High,
+        created_at,
+        Some("coder"),
+    );
+    running.title = "Worker is active".to_string();
+    running.updated_at = updated_at;
+
+    let mut review = test_queue_task_with_worker(
+        "review_task",
+        crate::queue::TaskStatus::Review,
+        crate::queue::TaskPriority::Normal,
+        created_at,
+        Some("reviewer"),
+    );
+    review.title = "Needs approval".to_string();
+    review.output_path = Some("out.md".to_string());
+    review.updated_at = updated_at;
+
+    let mut blocked = test_queue_task_with_worker(
+        "blocked_task",
+        crate::queue::TaskStatus::Blocked,
+        crate::queue::TaskPriority::Urgent,
+        created_at,
+        Some("coder"),
+    );
+    blocked.title = "Needs help".to_string();
+    blocked.updated_at = updated_at;
+
+    let state = crate::queue::QueueState {
+        tasks: vec![running, review, blocked],
+    };
+
+    let output = format_queue_dashboard(&state, None, 20);
+
+    assert!(output.contains("Running tasks:"));
+    assert!(output.contains("running_task  Worker is active"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("updated_at: 2026-06-20T12:00:00+00:00"));
+    assert!(output.contains("Review tasks:"));
+    assert!(output.contains("review_task  Needs approval"));
+    assert!(output.contains("worker_profile: reviewer"));
+    assert!(output.contains("output_path: out.md"));
+    assert!(output.contains("Blocked tasks:"));
+    assert!(output.contains("blocked_task  Needs help"));
+}
+
+#[test]
+fn queue_dashboard_filters_by_worker_profile_and_limit() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "reviewer_ready",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+                Some("reviewer"),
+            ),
+            test_queue_task_with_worker(
+                "coder_running_old",
+                crate::queue::TaskStatus::Running,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "coder_running_new",
+                crate::queue::TaskStatus::Running,
+                crate::queue::TaskPriority::Normal,
+                test_time("2026-06-20T11:00:00Z"),
+                Some("coder"),
+            ),
+        ],
+    };
+
+    let output = format_queue_dashboard(&state, Some("coder"), 1);
+
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("total: 3"));
+    assert!(output.contains("coder_ready  coder_ready"));
+    assert!(!output.contains("reviewer_ready"));
+    assert!(output.contains("coder_running_new"));
+    assert!(!output.contains("coder_running_old"));
+}
+
+#[test]
 fn queue_start_next_marks_selected_task_running() {
     let original_time = test_time("2026-06-20T10:00:00Z");
     let updated_time = test_time("2026-06-20T13:00:00Z");

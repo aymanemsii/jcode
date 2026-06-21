@@ -921,6 +921,17 @@ pub(crate) enum QueueCommand {
         task_id: String,
     },
 
+    /// Show a concise queue dashboard
+    Dashboard {
+        /// Only include tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Maximum number of tasks to show per section
+        #[arg(long, default_value_t = 20, value_parser = parse_positive_usize)]
+        limit: usize,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID
