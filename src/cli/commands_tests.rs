@@ -548,6 +548,14 @@ fn queue_init_creates_expected_directories() {
             .path()
             .join(".jcode")
             .join("queue")
+            .join("queue.json")
+            .is_file()
+    );
+    assert!(
+        project
+            .path()
+            .join(".jcode")
+            .join("queue")
             .join("handoffs")
             .is_dir()
     );
@@ -561,6 +569,30 @@ fn queue_init_creates_expected_directories() {
     );
     assert!(message.contains("Created .jcode/"));
     assert!(message.contains("Created .jcode/queue/"));
+    assert!(message.contains("Created .jcode/queue/queue.json"));
+}
+
+#[test]
+fn queue_init_creates_queue_state_at_load_save_path() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+
+    init_queue_project(false).expect("init queue");
+
+    let queue_path = crate::queue::queue_file_path().expect("queue path");
+    assert_eq!(
+        queue_path,
+        project
+            .path()
+            .join(".jcode")
+            .join("queue")
+            .join("queue.json")
+    );
+    assert!(queue_path.is_file());
+
+    let state = crate::queue::load().expect("load local queue");
+    assert!(state.tasks.is_empty());
 }
 
 #[test]

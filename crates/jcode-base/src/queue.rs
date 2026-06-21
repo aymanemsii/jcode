@@ -92,14 +92,44 @@ pub fn default_queue_state() -> QueueState {
     QueueState::default()
 }
 
+/// Resolve the current project's `.jcode` directory.
+pub fn project_jcode_dir_path() -> Result<PathBuf> {
+    Ok(std::env::current_dir()?.join(".jcode"))
+}
+
+/// Resolve the current project's Queue Mode root directory.
+pub fn queue_dir_path() -> Result<PathBuf> {
+    Ok(project_jcode_dir_path()?.join("queue"))
+}
+
 /// Resolve the path where the queue state JSON is persisted.
 pub fn queue_file_path() -> Result<PathBuf> {
-    Ok(jcode_storage::jcode_dir()?.join("queue").join("queue.json"))
+    Ok(queue_dir_path()?.join("queue.json"))
+}
+
+/// Resolve the current project's Queue Mode handoff directory.
+pub fn queue_handoffs_dir_path() -> Result<PathBuf> {
+    Ok(queue_dir_path()?.join("handoffs"))
+}
+
+/// Resolve the path for a task handoff file.
+pub fn queue_handoff_file_path(task_id: &str) -> Result<PathBuf> {
+    Ok(queue_handoffs_dir_path()?.join(format!("{task_id}.md")))
+}
+
+/// Resolve the current project's Queue Mode run artifacts directory.
+pub fn queue_runs_dir_path() -> Result<PathBuf> {
+    Ok(queue_dir_path()?.join("runs"))
+}
+
+/// Resolve the artifact directory for a specific queue task run.
+pub fn queue_run_artifact_dir_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_runs_dir_path()?.join(task_id).join(timestamp))
 }
 
 /// Resolve the project-local worker profile configuration path.
 pub fn worker_profiles_file_path() -> Result<PathBuf> {
-    Ok(std::env::current_dir()?.join(".jcode").join("workers.toml"))
+    Ok(project_jcode_dir_path()?.join("workers.toml"))
 }
 
 /// Load worker profiles from a project-local TOML file.
@@ -157,6 +187,85 @@ pub fn save(state: &QueueState) -> Result<()> {
 mod tests {
     use super::*;
 
+    struct CurrentDirGuard {
+        previous: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            let previous = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self { previous }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.previous).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_queue_file_path_is_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let path = queue_file_path().unwrap();
+
+        assert_eq!(
+            path,
+            project
+                .path()
+                .join(".jcode")
+                .join("queue")
+                .join("queue.json")
+        );
+    }
+
+    #[test]
+    fn test_worker_profiles_file_path_is_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let path = worker_profiles_file_path().unwrap();
+
+        assert_eq!(path, project.path().join(".jcode").join("workers.toml"));
+    }
+
+    #[test]
+    fn test_queue_handoff_path_is_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let dir = queue_handoffs_dir_path().unwrap();
+        let path = queue_handoff_file_path("task_1").unwrap();
+
+        assert_eq!(
+            dir,
+            project.path().join(".jcode").join("queue").join("handoffs")
+        );
+        assert_eq!(path, dir.join("task_1.md"));
+    }
+
+    #[test]
+    fn test_queue_run_artifact_path_is_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let runs_dir = queue_runs_dir_path().unwrap();
+        let path = queue_run_artifact_dir_path("task_1", "20260620T100000Z").unwrap();
+
+        assert_eq!(
+            runs_dir,
+            project.path().join(".jcode").join("queue").join("runs")
+        );
+        assert_eq!(path, runs_dir.join("task_1").join("20260620T100000Z"));
+    }
+
     #[test]
     fn test_task_status_serialization() {
         let statuses = vec![
@@ -181,9 +290,8 @@ mod tests {
     #[test]
     fn test_default_empty_queue_creation() {
         let _lock = crate::storage::lock_test_env();
-        let temp = tempfile::TempDir::new().unwrap();
-        let prev_home = std::env::var_os("JCODE_HOME");
-        crate::env::set_var("JCODE_HOME", temp.path());
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
 
         let initial_path = queue_file_path().unwrap();
         assert!(!initial_path.exists());
@@ -191,20 +299,13 @@ mod tests {
         let loaded_empty = load().unwrap();
         assert!(loaded_empty.tasks.is_empty());
         assert!(initial_path.exists());
-
-        if let Some(prev) = prev_home {
-            crate::env::set_var("JCODE_HOME", prev);
-        } else {
-            crate::env::remove_var("JCODE_HOME");
-        }
     }
 
     #[test]
     fn test_save_and_load_queue_state() {
         let _lock = crate::storage::lock_test_env();
-        let temp = tempfile::TempDir::new().unwrap();
-        let prev_home = std::env::var_os("JCODE_HOME");
-        crate::env::set_var("JCODE_HOME", temp.path());
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
 
         let mut state = default_queue_state();
         let task = Task::new(
@@ -221,12 +322,6 @@ mod tests {
 
         let reloaded = load().unwrap();
         assert_eq!(reloaded, state);
-
-        if let Some(prev) = prev_home {
-            crate::env::set_var("JCODE_HOME", prev);
-        } else {
-            crate::env::remove_var("JCODE_HOME");
-        }
     }
 
     #[test]

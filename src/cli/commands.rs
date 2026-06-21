@@ -1878,16 +1878,22 @@ command = "opencode run <handoff_file>"
 "#;
 
 fn init_queue_project(force: bool) -> Result<String> {
-    let project_dir = std::env::current_dir()?;
-    let jcode_dir = project_dir.join(".jcode");
-    let queue_dir = jcode_dir.join("queue");
-    let handoffs_dir = queue_dir.join("handoffs");
-    let runs_dir = queue_dir.join("runs");
+    let jcode_dir = crate::queue::project_jcode_dir_path()?;
+    let queue_dir = crate::queue::queue_dir_path()?;
+    let queue_file = crate::queue::queue_file_path()?;
+    let handoffs_dir = crate::queue::queue_handoffs_dir_path()?;
+    let runs_dir = crate::queue::queue_runs_dir_path()?;
     let workers_path = crate::queue::worker_profiles_file_path()?;
 
     let mut lines = vec!["Queue Mode project initialization:".to_string()];
     ensure_queue_init_dir(&mut lines, &jcode_dir, ".jcode/")?;
     ensure_queue_init_dir(&mut lines, &queue_dir, ".jcode/queue/")?;
+    if queue_file.exists() {
+        lines.push("Existing .jcode/queue/queue.json".to_string());
+    } else {
+        crate::queue::save(&crate::queue::default_queue_state())?;
+        lines.push("Created .jcode/queue/queue.json".to_string());
+    }
     ensure_queue_init_dir(&mut lines, &handoffs_dir, ".jcode/queue/handoffs/")?;
     ensure_queue_init_dir(&mut lines, &runs_dir, ".jcode/queue/runs/")?;
 
@@ -2188,11 +2194,7 @@ fn emit_queue_handoff(task: &crate::queue::Task, write: bool) -> Result<()> {
 }
 
 fn queue_handoff_file_path(task_id: &str) -> Result<std::path::PathBuf> {
-    Ok(std::env::current_dir()?
-        .join(".jcode")
-        .join("queue")
-        .join("handoffs")
-        .join(format!("{task_id}.md")))
+    crate::queue::queue_handoff_file_path(task_id)
 }
 
 fn write_queue_handoff(task: &crate::queue::Task, brief: &str) -> Result<std::path::PathBuf> {
@@ -2400,14 +2402,11 @@ fn queue_run_dir_path(task_id: &str, started_at: chrono::DateTime<chrono::Utc>) 
 }
 
 fn queue_runs_dir_path() -> Result<PathBuf> {
-    Ok(std::env::current_dir()?
-        .join(".jcode")
-        .join("queue")
-        .join("runs"))
+    crate::queue::queue_runs_dir_path()
 }
 
 fn queue_run_artifact_dir_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
-    Ok(queue_runs_dir_path()?.join(task_id).join(timestamp))
+    crate::queue::queue_run_artifact_dir_path(task_id, timestamp)
 }
 
 fn list_queue_runs(
