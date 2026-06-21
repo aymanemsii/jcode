@@ -679,6 +679,43 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "review",
+        "--worker-profile",
+        "coder",
+        "--limit",
+        "3",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Review {
+            worker_profile,
+            limit,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("coder"));
+            assert_eq!(limit, 3);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "approve", "task_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Approve { task_id })) => {
+            assert_eq!(task_id, "task_1");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "reopen", "task_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Reopen { task_id })) => {
+            assert_eq!(task_id, "task_1");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "add",
         "Fix docs",
         "--description",

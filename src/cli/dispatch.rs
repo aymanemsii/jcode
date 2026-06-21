@@ -290,6 +290,12 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 stdout,
                 stderr,
             } => commands::run_queue_run_command(&task_id, &timestamp, stdout, stderr)?,
+            QueueCommand::Review {
+                worker_profile,
+                limit,
+            } => commands::run_queue_review_command(worker_profile.as_deref(), limit)?,
+            QueueCommand::Approve { task_id } => commands::run_queue_approve_command(&task_id)?,
+            QueueCommand::Reopen { task_id } => commands::run_queue_reopen_command(&task_id)?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,

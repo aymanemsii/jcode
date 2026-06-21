@@ -1293,6 +1293,206 @@ fn queue_next_format_prints_selected_task() {
 }
 
 #[test]
+fn queue_review_lists_only_review_tasks() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let updated_at = test_time("2026-06-20T12:00:00Z");
+    let mut review_task = test_queue_task_with_worker(
+        "review_task",
+        crate::queue::TaskStatus::Review,
+        crate::queue::TaskPriority::High,
+        created_at,
+        Some("coder"),
+    );
+    review_task.title = "Review this change".to_string();
+    review_task.output_path = Some("out.md".to_string());
+    review_task.updated_at = updated_at;
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            review_task,
+            test_queue_task(
+                "ready_task",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+        ],
+    };
+
+    let output = format_queue_review(&state, None, 20);
+
+    assert!(output.contains("Review queue tasks:"));
+    assert!(output.contains("review_task  Review this change"));
+    assert!(output.contains("priority: high"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("output_path: out.md"));
+    assert!(output.contains("updated_at: 2026-06-20T12:00:00+00:00"));
+    assert!(!output.contains("ready_task"));
+}
+
+#[test]
+fn queue_review_filters_by_worker_profile_and_limit() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_old",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "reviewer",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+                Some("reviewer"),
+            ),
+            test_queue_task_with_worker(
+                "coder_new",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Normal,
+                test_time("2026-06-20T11:00:00Z"),
+                Some("coder"),
+            ),
+        ],
+    };
+
+    let output = format_queue_review(&state, Some("coder"), 1);
+
+    assert!(output.contains("coder_new"));
+    assert!(!output.contains("coder_old"));
+    assert!(!output.contains("reviewer"));
+}
+
+#[test]
+fn queue_review_empty_returns_clear_message() {
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "ready_task",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    assert_eq!(
+        format_queue_review(&state, None, 20),
+        "No queue tasks are waiting for review."
+    );
+    assert_eq!(
+        format_queue_review(&state, Some("coder"), 20),
+        "No queue tasks are waiting for review for worker_profile 'coder'."
+    );
+}
+
+#[test]
+fn queue_approve_moves_review_task_to_done() {
+    let original_time = test_time("2026-06-20T10:00:00Z");
+    let updated_time = test_time("2026-06-20T12:00:00Z");
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Review,
+            crate::queue::TaskPriority::Normal,
+            original_time,
+        )],
+    };
+
+    let message = approve_queue_task(&mut state, "task_1", updated_time).expect("approve task");
+
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Done);
+    assert_eq!(state.tasks[0].updated_at, updated_time);
+    assert!(message.contains("Approved queue task 'task_1'"));
+    assert!(message.contains("done"));
+}
+
+#[test]
+fn queue_approve_rejects_non_review_task() {
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let err = approve_queue_task(&mut state, "task_1", chrono::Utc::now())
+        .expect_err("non-review task should be rejected");
+
+    assert!(err.to_string().contains("cannot be approved"));
+    assert!(err.to_string().contains("Expected status: review"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+}
+
+#[test]
+fn queue_reopen_moves_review_done_and_blocked_tasks_to_ready() {
+    for status in [
+        crate::queue::TaskStatus::Review,
+        crate::queue::TaskStatus::Done,
+        crate::queue::TaskStatus::Blocked,
+    ] {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_queue_task(
+                "task_1",
+                status,
+                crate::queue::TaskPriority::Normal,
+                original_time,
+            )],
+        };
+
+        let message = reopen_queue_task(&mut state, "task_1", updated_time).expect("reopen task");
+
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+        assert_eq!(state.tasks[0].updated_at, updated_time);
+        assert!(message.contains("Reopened queue task 'task_1'"));
+        assert!(message.contains("ready"));
+    }
+}
+
+#[test]
+fn queue_reopen_rejects_running_task() {
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let err = reopen_queue_task(&mut state, "task_1", chrono::Utc::now())
+        .expect_err("running task should not reopen");
+
+    assert!(err.to_string().contains("cannot be reopened while running"));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Running);
+}
+
+#[test]
+fn queue_review_mutators_report_missing_task() {
+    let mut state = crate::queue::QueueState { tasks: Vec::new() };
+
+    let approve_err = approve_queue_task(&mut state, "missing", chrono::Utc::now())
+        .expect_err("missing approve task");
+    assert!(
+        approve_err
+            .to_string()
+            .contains("Queue task 'missing' was not found")
+    );
+
+    let reopen_err = reopen_queue_task(&mut state, "missing", chrono::Utc::now())
+        .expect_err("missing reopen task");
+    assert!(
+        reopen_err
+            .to_string()
+            .contains("Queue task 'missing' was not found")
+    );
+}
+
+#[test]
 fn queue_start_next_marks_selected_task_running() {
     let original_time = test_time("2026-06-20T10:00:00Z");
     let updated_time = test_time("2026-06-20T13:00:00Z");

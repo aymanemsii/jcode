@@ -898,6 +898,29 @@ pub(crate) enum QueueCommand {
         stderr: bool,
     },
 
+    /// List queue tasks waiting for review
+    Review {
+        /// Only list review tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Maximum number of review tasks to list
+        #[arg(long, default_value_t = 20, value_parser = parse_positive_usize)]
+        limit: usize,
+    },
+
+    /// Mark a review task as done
+    Approve {
+        /// Task ID
+        task_id: String,
+    },
+
+    /// Reopen a queue task for another worker pass
+    Reopen {
+        /// Task ID
+        task_id: String,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID

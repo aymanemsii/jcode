@@ -1619,6 +1619,30 @@ pub fn run_queue_run_command(
     Ok(())
 }
 
+pub fn run_queue_review_command(worker_profile: Option<&str>, limit: usize) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
+    let state = crate::queue::load()?;
+    println!("{}", format_queue_review(&state, worker_profile, limit));
+    Ok(())
+}
+
+pub fn run_queue_approve_command(task_id: &str) -> Result<()> {
+    let mut state = crate::queue::load()?;
+    let message = approve_queue_task(&mut state, task_id, chrono::Utc::now())?;
+    crate::queue::save(&state)?;
+    println!("{message}");
+    Ok(())
+}
+
+pub fn run_queue_reopen_command(task_id: &str) -> Result<()> {
+    let mut state = crate::queue::load()?;
+    let message = reopen_queue_task(&mut state, task_id, chrono::Utc::now())?;
+    crate::queue::save(&state)?;
+    println!("{message}");
+    Ok(())
+}
+
 fn run_queue_run_next_command_with_executor(
     worker_profile: Option<&str>,
     dry_run: bool,
@@ -1872,6 +1896,59 @@ fn format_queue_next(state: &crate::queue::QueueState, worker_profile: Option<&s
         Some(task) => format!("Next queue task:\n{}", format_queue_task(task)),
         None => no_actionable_queue_tasks_message(worker_profile),
     }
+}
+
+fn format_queue_review(
+    state: &crate::queue::QueueState,
+    worker_profile: Option<&str>,
+    limit: usize,
+) -> String {
+    let mut tasks = state
+        .tasks
+        .iter()
+        .filter(|task| task.status == crate::queue::TaskStatus::Review)
+        .filter(|task| {
+            worker_profile.is_none_or(|profile| task.worker_profile.as_deref() == Some(profile))
+        })
+        .collect::<Vec<_>>();
+
+    if tasks.is_empty() {
+        return match worker_profile {
+            Some(worker_profile) => {
+                format!(
+                    "No queue tasks are waiting for review for worker_profile '{worker_profile}'."
+                )
+            }
+            None => "No queue tasks are waiting for review.".to_string(),
+        };
+    }
+
+    tasks.sort_by_key(|task| (std::cmp::Reverse(task.updated_at), task.id.as_str()));
+
+    let mut lines = vec!["Review queue tasks:".to_string()];
+    for task in tasks.into_iter().take(limit) {
+        lines.push(format!("{}  {}", task.id, task.title));
+        lines.push(format!(
+            "  priority: {}",
+            task_priority_label(task.priority)
+        ));
+        if let Some(worker_profile) = task
+            .worker_profile
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("  worker_profile: {worker_profile}"));
+        }
+        if let Some(output_path) = task
+            .output_path
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("  output_path: {output_path}"));
+        }
+        lines.push(format!("  updated_at: {}", task.updated_at.to_rfc3339()));
+    }
+    lines.join("\n")
 }
 
 fn no_actionable_queue_tasks_message(worker_profile: Option<&str>) -> String {
@@ -2451,6 +2528,43 @@ fn finish_queue_task(
     task.updated_at = updated_at;
 
     Ok(format!("Finished queue task:\n{}", format_queue_task(task)))
+}
+
+fn approve_queue_task(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<String> {
+    let task = find_queue_task_mut(state, task_id)?;
+    if task.status != crate::queue::TaskStatus::Review {
+        anyhow::bail!(
+            "Queue task '{task_id}' is '{}' and cannot be approved. Expected status: review.",
+            task_status_label(task.status)
+        );
+    }
+
+    task.status = crate::queue::TaskStatus::Done;
+    task.updated_at = updated_at;
+    Ok(format!(
+        "Approved queue task '{task_id}': status set to done."
+    ))
+}
+
+fn reopen_queue_task(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<String> {
+    let task = find_queue_task_mut(state, task_id)?;
+    if task.status == crate::queue::TaskStatus::Running {
+        anyhow::bail!("Queue task '{task_id}' cannot be reopened while running.");
+    }
+
+    task.status = crate::queue::TaskStatus::Ready;
+    task.updated_at = updated_at;
+    Ok(format!(
+        "Reopened queue task '{task_id}': status set to ready."
+    ))
 }
 
 fn format_queue_status(state: &crate::queue::QueueState) -> String {
