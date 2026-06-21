@@ -794,6 +794,13 @@ pub(crate) enum SessionCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum QueueCommand {
+    /// Create local Queue Mode files and directories
+    Init {
+        /// Overwrite .jcode/workers.toml if it already exists
+        #[arg(long)]
+        force: bool,
+    },
+
     /// List queued tasks
     List,
 

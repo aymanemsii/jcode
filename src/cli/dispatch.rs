@@ -255,6 +255,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             } => commands::run_session_rename_command(&session, name.as_deref(), clear, json)?,
         },
         Some(Command::Queue(subcmd)) => match subcmd {
+            QueueCommand::Init { force } => commands::run_queue_init_command(force)?,
             QueueCommand::List => commands::run_queue_list_command()?,
             QueueCommand::Workers => commands::run_queue_workers_command()?,
             QueueCommand::Worker { name } => commands::run_queue_worker_command(&name)?,

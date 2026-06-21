@@ -1516,6 +1516,11 @@ pub(crate) struct QueueAddOptions {
     pub(crate) output_path: Option<String>,
 }
 
+pub fn run_queue_init_command(force: bool) -> Result<()> {
+    println!("{}", init_queue_project(force)?);
+    Ok(())
+}
+
 pub fn run_queue_list_command() -> Result<()> {
     let state = crate::queue::load()?;
     println!("{}", format_queue_list(&state));
@@ -1857,6 +1862,65 @@ fn parse_queue_priority(raw: Option<&str>) -> Result<crate::queue::TaskPriority>
 
 fn normalize_worker_profile_arg(raw: Option<&str>) -> Option<&str> {
     raw.map(str::trim).filter(|value| !value.is_empty())
+}
+
+const DEFAULT_WORKERS_TOML: &str = r#"[workers.coder]
+description = "Implements code changes from queue handoffs"
+command = "codex exec <handoff_file>"
+
+[workers.reviewer]
+description = "Reviews task outputs and suggests fixes"
+command = "codex exec <handoff_file>"
+
+[workers.researcher]
+description = "Researches sources and produces structured notes"
+command = "opencode run <handoff_file>"
+"#;
+
+fn init_queue_project(force: bool) -> Result<String> {
+    let project_dir = std::env::current_dir()?;
+    let jcode_dir = project_dir.join(".jcode");
+    let queue_dir = jcode_dir.join("queue");
+    let handoffs_dir = queue_dir.join("handoffs");
+    let runs_dir = queue_dir.join("runs");
+    let workers_path = crate::queue::worker_profiles_file_path()?;
+
+    let mut lines = vec!["Queue Mode project initialization:".to_string()];
+    ensure_queue_init_dir(&mut lines, &jcode_dir, ".jcode/")?;
+    ensure_queue_init_dir(&mut lines, &queue_dir, ".jcode/queue/")?;
+    ensure_queue_init_dir(&mut lines, &handoffs_dir, ".jcode/queue/handoffs/")?;
+    ensure_queue_init_dir(&mut lines, &runs_dir, ".jcode/queue/runs/")?;
+
+    let workers_existed = workers_path.exists();
+    if workers_existed && !force {
+        lines.push("Existing .jcode/workers.toml left unchanged.".to_string());
+    } else {
+        if let Some(parent) = workers_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", parent.display()))?;
+        }
+        std::fs::write(&workers_path, DEFAULT_WORKERS_TOML)
+            .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", workers_path.display()))?;
+        if force && workers_existed {
+            lines.push("Overwrote .jcode/workers.toml.".to_string());
+        } else {
+            lines.push("Created .jcode/workers.toml.".to_string());
+        }
+    }
+
+    Ok(lines.join("\n"))
+}
+
+fn ensure_queue_init_dir(lines: &mut Vec<String>, path: &Path, label: &str) -> Result<()> {
+    if path.exists() {
+        lines.push(format!("Existing {label}"));
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(path)
+        .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", path.display()))?;
+    lines.push(format!("Created {label}"));
+    Ok(())
 }
 
 fn format_queue_list(state: &crate::queue::QueueState) -> String {

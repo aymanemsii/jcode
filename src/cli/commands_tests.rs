@@ -534,6 +534,91 @@ fn queue_worker_lookup_reports_missing_profile() {
 }
 
 #[test]
+fn queue_init_creates_expected_directories() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+
+    let message = init_queue_project(false).expect("init queue");
+
+    assert!(project.path().join(".jcode").is_dir());
+    assert!(project.path().join(".jcode").join("queue").is_dir());
+    assert!(
+        project
+            .path()
+            .join(".jcode")
+            .join("queue")
+            .join("handoffs")
+            .is_dir()
+    );
+    assert!(
+        project
+            .path()
+            .join(".jcode")
+            .join("queue")
+            .join("runs")
+            .is_dir()
+    );
+    assert!(message.contains("Created .jcode/"));
+    assert!(message.contains("Created .jcode/queue/"));
+}
+
+#[test]
+fn queue_init_creates_workers_toml_when_missing() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+
+    let message = init_queue_project(false).expect("init queue");
+    let workers = std::fs::read_to_string(project.path().join(".jcode").join("workers.toml"))
+        .expect("workers.toml");
+
+    assert!(workers.contains("[workers.coder]"));
+    assert!(workers.contains("command = \"codex exec <handoff_file>\""));
+    assert!(workers.contains("[workers.reviewer]"));
+    assert!(workers.contains("[workers.researcher]"));
+    assert!(workers.contains("command = \"opencode run <handoff_file>\""));
+    assert!(message.contains("Created .jcode/workers.toml"));
+}
+
+#[test]
+fn queue_init_does_not_overwrite_workers_toml_by_default() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let jcode_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&jcode_dir).expect("create .jcode");
+    let workers_path = jcode_dir.join("workers.toml");
+    std::fs::write(&workers_path, "[workers.custom]\ncommand = \"custom\"\n")
+        .expect("write custom workers");
+
+    let message = init_queue_project(false).expect("init queue");
+    let workers = std::fs::read_to_string(workers_path).expect("workers.toml");
+
+    assert_eq!(workers, "[workers.custom]\ncommand = \"custom\"\n");
+    assert!(message.contains("Existing .jcode/workers.toml left unchanged"));
+}
+
+#[test]
+fn queue_init_force_overwrites_workers_toml() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let jcode_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&jcode_dir).expect("create .jcode");
+    let workers_path = jcode_dir.join("workers.toml");
+    std::fs::write(&workers_path, "[workers.custom]\ncommand = \"custom\"\n")
+        .expect("write custom workers");
+
+    let message = init_queue_project(true).expect("init queue");
+    let workers = std::fs::read_to_string(workers_path).expect("workers.toml");
+
+    assert!(workers.contains("[workers.coder]"));
+    assert!(!workers.contains("[workers.custom]"));
+    assert!(message.contains("Overwrote .jcode/workers.toml"));
+}
+
+#[test]
 fn queue_run_next_requires_worker_profile() {
     let err = run_queue_run_next_command(None, true, false).expect_err("missing worker profile");
 
