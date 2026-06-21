@@ -775,6 +775,192 @@ fn queue_run_next_placeholder_replacement_uses_handoff_file_and_task_id() {
 }
 
 #[test]
+fn queue_runs_empty_directory_returns_clear_message() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+
+    let runs = list_queue_runs(&queue_runs_dir_path().unwrap(), None).expect("list runs");
+    let output = format_queue_runs(&runs, 20);
+
+    assert_eq!(output, "No queue runs found in .jcode/queue/runs.");
+}
+
+#[test]
+fn queue_runs_lists_existing_runs_from_test_directories() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    write_queue_run_fixture(
+        project.path(),
+        "task_old",
+        "20260620T100000Z",
+        "coder",
+        0,
+        "old command",
+        "old stdout",
+        "",
+    );
+    write_queue_run_fixture(
+        project.path(),
+        "task_new",
+        "20260620T110000Z",
+        "reviewer",
+        17,
+        "new command",
+        "new stdout",
+        "new stderr",
+    );
+
+    let runs = list_queue_runs(&queue_runs_dir_path().unwrap(), None).expect("list runs");
+    let output = format_queue_runs(&runs, 10);
+
+    assert!(output.contains("Recent queue runs:"));
+    assert!(output.contains("task_new  20260620T110000Z"));
+    assert!(output.contains("worker_profile: reviewer"));
+    assert!(output.contains("exit_code: 17"));
+    assert!(output.contains("task_old  20260620T100000Z"));
+    assert!(
+        output.find("task_new").expect("new listed") < output.find("task_old").expect("old listed")
+    );
+}
+
+#[test]
+fn queue_runs_filters_by_task_id_and_applies_limit() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    write_queue_run_fixture(
+        project.path(),
+        "task_1",
+        "20260620T100000Z",
+        "coder",
+        0,
+        "command 1",
+        "",
+        "",
+    );
+    write_queue_run_fixture(
+        project.path(),
+        "task_1",
+        "20260620T110000Z",
+        "coder",
+        0,
+        "command 2",
+        "",
+        "",
+    );
+    write_queue_run_fixture(
+        project.path(),
+        "task_2",
+        "20260620T120000Z",
+        "coder",
+        0,
+        "command 3",
+        "",
+        "",
+    );
+
+    let runs = list_queue_runs(&queue_runs_dir_path().unwrap(), Some("task_1")).expect("list runs");
+    let output = format_queue_runs(&runs, 1);
+
+    assert!(output.contains("task_1  20260620T110000Z"));
+    assert!(!output.contains("task_1  20260620T100000Z"));
+    assert!(!output.contains("task_2"));
+}
+
+#[test]
+fn queue_run_reads_summary_and_short_previews() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let long_stdout = format!("{}tail", "x".repeat(2_100));
+    write_queue_run_fixture(
+        project.path(),
+        "task_1",
+        "20260620T100000Z",
+        "coder",
+        0,
+        "codex exec .jcode/queue/handoffs/task_1.md --task task_1",
+        &long_stdout,
+        "stderr line",
+    );
+
+    let run = read_queue_run("task_1", "20260620T100000Z").expect("read run");
+    let output = format_queue_run_summary(&run, false, false).expect("format summary");
+
+    assert!(output.contains("task_id: task_1"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("command: codex exec .jcode/queue/handoffs/task_1.md --task task_1"));
+    assert!(output.contains("exit_code: 0"));
+    assert!(output.contains("started_at: 2026-06-20T10:00:00+00:00"));
+    assert!(output.contains("ended_at: 2026-06-20T10:00:01+00:00"));
+    assert!(output.contains("stdout_path:"));
+    assert!(output.contains("stderr_path:"));
+    assert!(output.contains("stdout:"));
+    assert!(output.contains("stderr line"));
+    assert!(output.contains("truncated; pass --stdout or --stderr"));
+    assert!(!output.contains("tail"));
+}
+
+#[test]
+fn queue_run_full_stdout_and_stderr_flags_print_full_streams() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    write_queue_run_fixture(
+        project.path(),
+        "task_1",
+        "20260620T100000Z",
+        "coder",
+        1,
+        "worker command",
+        "full stdout",
+        "full stderr",
+    );
+
+    let run = read_queue_run("task_1", "20260620T100000Z").expect("read run");
+    let output = format_queue_run_summary(&run, true, true).expect("format summary");
+
+    assert!(output.contains("full stdout"));
+    assert!(output.contains("full stderr"));
+    assert!(!output.contains("truncated; pass --stdout or --stderr"));
+}
+
+#[test]
+fn queue_run_missing_run_returns_helpful_error() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+
+    let err = read_queue_run("missing", "20260620T100000Z").expect_err("missing run");
+
+    assert!(err.to_string().contains("Queue run 'missing'"));
+    assert!(err.to_string().contains("was not found"));
+    assert!(err.to_string().contains(".jcode"));
+}
+
+#[test]
+fn queue_run_missing_metadata_returns_helpful_error() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let run_dir = project
+        .path()
+        .join(".jcode")
+        .join("queue")
+        .join("runs")
+        .join("task_1")
+        .join("20260620T100000Z");
+    std::fs::create_dir_all(&run_dir).expect("create run dir");
+
+    let err = read_queue_run("task_1", "20260620T100000Z").expect_err("missing metadata");
+
+    assert!(err.to_string().contains("Queue run metadata is missing"));
+    assert!(err.to_string().contains("run.json"));
+}
+
+#[test]
 fn queue_add_accepts_existing_worker_profile() {
     let _lock = crate::storage::lock_test_env();
     let _saved = SavedEnv::capture(&["JCODE_HOME"]);
@@ -1420,6 +1606,42 @@ fn test_queue_task_with_worker(
     let mut task = test_queue_task(id, status, priority, created_at);
     task.worker_profile = worker_profile.map(ToOwned::to_owned);
     task
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_queue_run_fixture(
+    project: &std::path::Path,
+    task_id: &str,
+    timestamp: &str,
+    worker_profile: &str,
+    exit_code: i32,
+    command: &str,
+    stdout: &str,
+    stderr: &str,
+) {
+    let run_dir = project
+        .join(".jcode")
+        .join("queue")
+        .join("runs")
+        .join(task_id)
+        .join(timestamp);
+    std::fs::create_dir_all(&run_dir).expect("create run dir");
+    std::fs::write(run_dir.join("stdout.txt"), stdout).expect("write stdout");
+    std::fs::write(run_dir.join("stderr.txt"), stderr).expect("write stderr");
+    std::fs::write(run_dir.join("command.txt"), command).expect("write command");
+    let metadata = serde_json::json!({
+        "task_id": task_id,
+        "worker_profile": worker_profile,
+        "command": command,
+        "exit_code": exit_code,
+        "started_at": "2026-06-20T10:00:00+00:00",
+        "ended_at": "2026-06-20T10:00:01+00:00"
+    });
+    std::fs::write(
+        run_dir.join("run.json"),
+        serde_json::to_string_pretty(&metadata).expect("serialize metadata"),
+    )
+    .expect("write run metadata");
 }
 
 struct CurrentDirGuard {

@@ -1598,6 +1598,27 @@ pub fn run_queue_run_next_command(
     .map(|_| ())
 }
 
+pub fn run_queue_runs_command(task_id: Option<&str>, limit: usize) -> Result<()> {
+    let runs_dir = queue_runs_dir_path()?;
+    let runs = list_queue_runs(&runs_dir, task_id)?;
+    println!("{}", format_queue_runs(&runs, limit));
+    Ok(())
+}
+
+pub fn run_queue_run_command(
+    task_id: &str,
+    timestamp: &str,
+    full_stdout: bool,
+    full_stderr: bool,
+) -> Result<()> {
+    let run = read_queue_run(task_id, timestamp)?;
+    println!(
+        "{}",
+        format_queue_run_summary(&run, full_stdout, full_stderr)?
+    );
+    Ok(())
+}
+
 fn run_queue_run_next_command_with_executor(
     worker_profile: Option<&str>,
     dry_run: bool,
@@ -2027,6 +2048,33 @@ struct QueueRunMetadata<'a> {
     ended_at: String,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct QueueRunMetadataOwned {
+    task_id: String,
+    worker_profile: String,
+    command: String,
+    exit_code: i32,
+    started_at: String,
+    ended_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueRunListEntry {
+    task_id: String,
+    timestamp: String,
+    run_dir: PathBuf,
+    metadata: Option<QueueRunMetadataOwned>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueRunDetails {
+    timestamp: String,
+    run_dir: PathBuf,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+    metadata: QueueRunMetadataOwned,
+}
+
 struct QueueRunArtifacts<'a> {
     task_id: &'a str,
     worker_profile: &'a str,
@@ -2055,12 +2103,197 @@ fn execute_rendered_worker_command(command: &str) -> Result<QueueRunCommandOutpu
 
 fn queue_run_dir_path(task_id: &str, started_at: chrono::DateTime<chrono::Utc>) -> Result<PathBuf> {
     let timestamp = started_at.format("%Y%m%dT%H%M%S%.fZ").to_string();
+    queue_run_artifact_dir_path(task_id, &timestamp)
+}
+
+fn queue_runs_dir_path() -> Result<PathBuf> {
     Ok(std::env::current_dir()?
         .join(".jcode")
         .join("queue")
-        .join("runs")
-        .join(task_id)
-        .join(timestamp))
+        .join("runs"))
+}
+
+fn queue_run_artifact_dir_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_runs_dir_path()?.join(task_id).join(timestamp))
+}
+
+fn list_queue_runs(
+    runs_dir: &Path,
+    task_id_filter: Option<&str>,
+) -> Result<Vec<QueueRunListEntry>> {
+    if !runs_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+    for task_entry in std::fs::read_dir(runs_dir)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", runs_dir.display()))?
+    {
+        let task_entry = task_entry?;
+        if !task_entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let task_id = task_entry.file_name().to_string_lossy().into_owned();
+        if task_id_filter.is_some_and(|filter| filter != task_id.as_str()) {
+            continue;
+        }
+
+        for run_entry in std::fs::read_dir(task_entry.path()).map_err(|err| {
+            anyhow::anyhow!("failed to read {}: {err}", task_entry.path().display())
+        })? {
+            let run_entry = run_entry?;
+            if !run_entry.file_type()?.is_dir() {
+                continue;
+            }
+
+            let timestamp = run_entry.file_name().to_string_lossy().into_owned();
+            let run_dir = run_entry.path();
+            let metadata = read_queue_run_metadata_optional(&run_dir)?;
+            entries.push(QueueRunListEntry {
+                task_id: metadata
+                    .as_ref()
+                    .map(|metadata| metadata.task_id.clone())
+                    .unwrap_or_else(|| task_id.clone()),
+                timestamp,
+                run_dir,
+                metadata,
+            });
+        }
+    }
+
+    entries.sort_by(|left, right| {
+        right
+            .timestamp
+            .cmp(&left.timestamp)
+            .then_with(|| right.task_id.cmp(&left.task_id))
+    });
+    Ok(entries)
+}
+
+fn read_queue_run(task_id: &str, timestamp: &str) -> Result<QueueRunDetails> {
+    let run_dir = queue_run_artifact_dir_path(task_id, timestamp)?;
+    if !run_dir.exists() {
+        anyhow::bail!(
+            "Queue run '{}' '{}' was not found at {}.",
+            task_id,
+            timestamp,
+            run_dir.display()
+        );
+    }
+
+    let metadata_path = run_dir.join("run.json");
+    if !metadata_path.exists() {
+        anyhow::bail!(
+            "Queue run metadata is missing: {}.",
+            metadata_path.display()
+        );
+    }
+
+    let metadata = read_queue_run_metadata(&metadata_path)?;
+    Ok(QueueRunDetails {
+        timestamp: timestamp.to_string(),
+        stdout_path: run_dir.join("stdout.txt"),
+        stderr_path: run_dir.join("stderr.txt"),
+        run_dir,
+        metadata,
+    })
+}
+
+fn read_queue_run_metadata_optional(run_dir: &Path) -> Result<Option<QueueRunMetadataOwned>> {
+    let metadata_path = run_dir.join("run.json");
+    if !metadata_path.exists() {
+        return Ok(None);
+    }
+
+    Ok(Some(read_queue_run_metadata(&metadata_path)?))
+}
+
+fn read_queue_run_metadata(path: &Path) -> Result<QueueRunMetadataOwned> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    serde_json::from_str(&content)
+        .map_err(|err| anyhow::anyhow!("failed to parse {}: {err}", path.display()))
+}
+
+fn format_queue_runs(runs: &[QueueRunListEntry], limit: usize) -> String {
+    if runs.is_empty() {
+        return "No queue runs found in .jcode/queue/runs.".to_string();
+    }
+
+    let mut lines = vec!["Recent queue runs:".to_string()];
+    for run in runs.iter().take(limit) {
+        lines.push(format!("{}  {}", run.task_id, run.timestamp));
+        match run.metadata.as_ref() {
+            Some(metadata) => {
+                lines.push(format!("  worker_profile: {}", metadata.worker_profile));
+                lines.push(format!("  exit_code: {}", metadata.exit_code));
+            }
+            None => {
+                lines.push("  worker_profile: unknown".to_string());
+                lines.push("  exit_code: unknown".to_string());
+            }
+        }
+        lines.push(format!("  run_dir: {}", run.run_dir.display()));
+    }
+    lines.join("\n")
+}
+
+fn format_queue_run_summary(
+    run: &QueueRunDetails,
+    full_stdout: bool,
+    full_stderr: bool,
+) -> Result<String> {
+    let mut lines = vec![
+        format!("task_id: {}", run.metadata.task_id),
+        format!("worker_profile: {}", run.metadata.worker_profile),
+        format!("command: {}", run.metadata.command),
+        format!("exit_code: {}", run.metadata.exit_code),
+        format!("started_at: {}", run.metadata.started_at),
+        format!("ended_at: {}", run.metadata.ended_at),
+        format!("timestamp: {}", run.timestamp),
+        format!("run_dir: {}", run.run_dir.display()),
+        format!("stdout_path: {}", run.stdout_path.display()),
+        format!("stderr_path: {}", run.stderr_path.display()),
+    ];
+
+    append_queue_run_stream(&mut lines, "stdout", &run.stdout_path, full_stdout)?;
+    append_queue_run_stream(&mut lines, "stderr", &run.stderr_path, full_stderr)?;
+    Ok(lines.join("\n"))
+}
+
+fn append_queue_run_stream(
+    lines: &mut Vec<String>,
+    label: &str,
+    path: &Path,
+    full: bool,
+) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    lines.push(String::new());
+    lines.push(format!("{label}:"));
+    if full {
+        lines.push(
+            std::fs::read_to_string(path)
+                .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?,
+        );
+    } else {
+        lines.push(preview_queue_run_file(path)?);
+    }
+    Ok(())
+}
+
+fn preview_queue_run_file(path: &Path) -> Result<String> {
+    const MAX_PREVIEW_CHARS: usize = 2_000;
+    let content = std::fs::read_to_string(path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    let mut preview: String = content.chars().take(MAX_PREVIEW_CHARS).collect();
+    if content.chars().count() > MAX_PREVIEW_CHARS {
+        preview.push_str("\n... truncated; pass --stdout or --stderr to print the full file.");
+    }
+    Ok(preview)
 }
 
 fn write_queue_run_artifacts(artifacts: QueueRunArtifacts<'_>) -> Result<PathBuf> {

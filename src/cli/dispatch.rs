@@ -281,6 +281,15 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 dry_run,
                 execute,
             } => commands::run_queue_run_next_command(worker_profile.as_deref(), dry_run, execute)?,
+            QueueCommand::Runs { task_id, limit } => {
+                commands::run_queue_runs_command(task_id.as_deref(), limit)?
+            }
+            QueueCommand::Run {
+                task_id,
+                timestamp,
+                stdout,
+                stderr,
+            } => commands::run_queue_run_command(&task_id, &timestamp, stdout, stderr)?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,

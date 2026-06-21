@@ -870,6 +870,34 @@ pub(crate) enum QueueCommand {
         execute: bool,
     },
 
+    /// List recent queue worker run artifacts
+    Runs {
+        /// Only list runs for this task ID
+        #[arg(long)]
+        task_id: Option<String>,
+
+        /// Maximum number of runs to list
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+
+    /// Inspect one queue worker run artifact
+    Run {
+        /// Task ID
+        task_id: String,
+
+        /// Run timestamp directory name
+        timestamp: String,
+
+        /// Print full stdout instead of a short preview
+        #[arg(long)]
+        stdout: bool,
+
+        /// Print full stderr instead of a short preview
+        #[arg(long)]
+        stderr: bool,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID
