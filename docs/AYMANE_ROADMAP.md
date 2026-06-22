@@ -32,7 +32,18 @@ Implemented:
 Background-run workflow:
 ```bash
 jcode queue init
+```
+
+Configure `.jcode/workers.toml`:
+```toml
+[workers.smoke]
+description = "Safe smoke-test worker"
+command = "echo smoke worker ran task=<task_id> handoff=<handoff_file>"
+```
+
+```bash
 jcode queue add "Smoke test background queue" --worker-profile smoke
+jcode queue run-next --worker-profile smoke --dry-run
 jcode queue run-next --worker-profile smoke --background
 jcode queue active
 jcode queue logs <run-id>
@@ -49,6 +60,36 @@ jcode queue cancel-run <run-id>
 jcode queue run-status <run-id>
 jcode queue dashboard
 ```
+
+Current Queue Mode commands:
+- `jcode queue init`
+- `jcode queue add`
+- `jcode queue list`
+- `jcode queue status`
+- `jcode queue show`
+- `jcode queue set-status`
+- `jcode queue set-priority`
+- `jcode queue next`
+- `jcode queue start-next`
+- `jcode queue finish`
+- `jcode queue workers`
+- `jcode queue worker`
+- `jcode queue handoff`
+- `jcode queue handoff-next`
+- `jcode queue run-next --worker-profile <name> --dry-run`
+- `jcode queue run-next --worker-profile <name> --execute`
+- `jcode queue run-next --worker-profile <name> --background`
+- `jcode queue runs`
+- `jcode queue run`
+- `jcode queue active`
+- `jcode queue run-status <run-id>`
+- `jcode queue logs <run-id>`
+- `jcode queue refresh-runs`
+- `jcode queue cancel-run <run-id>`
+- `jcode queue review`
+- `jcode queue approve`
+- `jcode queue reopen`
+- `jcode queue dashboard`
 
 Current limitations:
 - No daemon.

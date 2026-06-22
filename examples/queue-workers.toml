@@ -12,4 +12,6 @@ command = "opencode run <handoff_file>"
 
 [workers.smoke]
 description = "Safe smoke-test worker"
+# Useful for `jcode queue run-next --worker-profile smoke --dry-run`,
+# `--execute`, and `--background` without launching a real agent.
 command = "echo smoke worker ran task=<task_id> handoff=<handoff_file>"
