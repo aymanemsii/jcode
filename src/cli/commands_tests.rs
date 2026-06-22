@@ -1757,6 +1757,64 @@ fn queue_logs_reads_stderr_preview() {
 }
 
 #[test]
+fn queue_logs_displays_stdout_with_invalid_utf8_bytes() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let stdout_path = temp.path().join("stdout.txt");
+    let stderr_path = temp.path().join("stderr.txt");
+    std::fs::write(&stdout_path, b"stdout before \x80\xff after\n").expect("write stdout");
+    std::fs::write(&stderr_path, b"stderr line\n").expect("write stderr");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = stdout_path.display().to_string();
+    run.stderr_path = stderr_path.display().to_string();
+    let options = QueueRunLogOptions {
+        stdout: true,
+        stderr: false,
+        full: false,
+    };
+
+    let output = format_queue_run_logs(&run, options).expect("format logs");
+
+    assert!(output.contains("stdout:"));
+    assert!(output.contains("stdout before"));
+    assert!(output.contains("after"));
+    assert!(output.contains("\u{fffd}"));
+}
+
+#[test]
+fn queue_logs_displays_stderr_with_invalid_utf8_bytes() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let stdout_path = temp.path().join("stdout.txt");
+    let stderr_path = temp.path().join("stderr.txt");
+    std::fs::write(&stdout_path, b"stdout line\n").expect("write stdout");
+    std::fs::write(&stderr_path, b"stderr before \x80\xff after\n").expect("write stderr");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = stdout_path.display().to_string();
+    run.stderr_path = stderr_path.display().to_string();
+    let options = QueueRunLogOptions {
+        stdout: false,
+        stderr: true,
+        full: true,
+    };
+
+    let output = format_queue_run_logs(&run, options).expect("format logs");
+
+    assert!(output.contains("stderr:"));
+    assert!(output.contains("stderr before"));
+    assert!(output.contains("after"));
+    assert!(output.contains("\u{fffd}"));
+}
+
+#[test]
 fn queue_logs_handles_missing_log_files_gracefully() {
     let temp = tempfile::tempdir().expect("tempdir");
     let mut run = test_queue_run_state(

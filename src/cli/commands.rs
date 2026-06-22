@@ -3160,10 +3160,7 @@ fn append_queue_log_section(
     }
 
     if full {
-        lines.push(
-            std::fs::read_to_string(path)
-                .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?,
-        );
+        lines.push(read_queue_log_file_lossy(path)?);
     } else {
         lines.push(preview_queue_log_file(path)?);
     }
@@ -3172,8 +3169,7 @@ fn append_queue_log_section(
 
 fn preview_queue_log_file(path: &Path) -> Result<String> {
     const MAX_PREVIEW_LINES: usize = 40;
-    let content = std::fs::read_to_string(path)
-        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    let content = read_queue_log_file_lossy(path)?;
     let mut lines = content.lines();
     let mut preview = lines
         .by_ref()
@@ -3187,6 +3183,12 @@ fn preview_queue_log_file(path: &Path) -> Result<String> {
         preview.push_str("... truncated; pass --full to print the full selected log.");
     }
     Ok(preview)
+}
+
+fn read_queue_log_file_lossy(path: &Path) -> Result<String> {
+    let bytes = std::fs::read(path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn run_status_label(status: crate::queue::RunStatus) -> &'static str {
