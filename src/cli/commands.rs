@@ -1643,6 +1643,23 @@ pub fn run_queue_run_status_command(run_id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_cancel_run_command(run_id: &str, requeue: bool) -> Result<()> {
+    let mut index = crate::queue::load_run_index()?;
+    let mut state = crate::queue::load()?;
+    let message = cancel_queue_run_with_terminator(
+        &mut index,
+        &mut state,
+        run_id,
+        requeue,
+        chrono::Utc::now(),
+        terminate_queue_run_process,
+    )?;
+    crate::queue::save_run_index(&index)?;
+    crate::queue::save(&state)?;
+    println!("{message}");
+    Ok(())
+}
+
 pub fn run_queue_logs_command(run_id: &str, stdout: bool, stderr: bool, full: bool) -> Result<()> {
     let index = crate::queue::load_run_index()?;
     let options = QueueRunLogOptions {
@@ -2836,6 +2853,82 @@ fn find_queue_run_status<'a>(
     index.find(run_id).ok_or_else(|| {
         anyhow::anyhow!("Queue run '{run_id}' was not found in .jcode/queue/runs/index.json.")
     })
+}
+
+fn cancel_queue_run_with_terminator(
+    index: &mut crate::queue::RunIndex,
+    state: &mut crate::queue::QueueState,
+    run_id: &str,
+    requeue: bool,
+    ended_at: chrono::DateTime<chrono::Utc>,
+    mut terminator: impl FnMut(u32) -> Result<()>,
+) -> Result<String> {
+    let Some(position) = index.runs.iter().position(|run| run.run_id == run_id) else {
+        anyhow::bail!("Queue run '{run_id}' was not found in .jcode/queue/runs/index.json.");
+    };
+
+    if index.runs[position].status != crate::queue::RunStatus::Running {
+        anyhow::bail!(
+            "Queue run '{run_id}' is not running; current status is {}.",
+            run_status_label(index.runs[position].status)
+        );
+    }
+
+    let pid = index.runs[position].pid.ok_or_else(|| {
+        anyhow::anyhow!("Queue run '{run_id}' has no PID and cannot be cancelled automatically.")
+    })?;
+
+    terminator(pid).map_err(|err| {
+        anyhow::anyhow!("Failed to terminate queue run '{run_id}' (pid {pid}): {err}")
+    })?;
+
+    let task_id = index.runs[position].task_id.clone();
+    index.runs[position].status = crate::queue::RunStatus::Cancelled;
+    index.runs[position].ended_at = Some(ended_at);
+
+    let task_status = if requeue {
+        crate::queue::TaskStatus::Ready
+    } else {
+        crate::queue::TaskStatus::Blocked
+    };
+    let task_status_label = task_status_label(task_status);
+    mark_queue_task_by_id(state, &task_id, task_status, ended_at);
+
+    Ok(format!(
+        "Cancelled queue run {run_id} (pid {pid}); task {task_id} moved to {task_status_label}."
+    ))
+}
+
+fn terminate_queue_run_process(pid: u32) -> Result<()> {
+    let mut command = if cfg!(windows) {
+        let mut command = ProcessCommand::new("taskkill");
+        command.args(["/PID", &pid.to_string(), "/T"]);
+        command
+    } else {
+        let mut command = ProcessCommand::new("kill");
+        command.arg(pid.to_string());
+        command
+    };
+
+    let output = command
+        .output()
+        .map_err(|err| anyhow::anyhow!("failed to start process terminator: {err}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let detail = stderr.trim();
+    let detail = if detail.is_empty() {
+        stdout.trim()
+    } else {
+        detail
+    };
+    if detail.is_empty() {
+        anyhow::bail!("terminator exited with status {}", output.status);
+    }
+    anyhow::bail!("{detail}");
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

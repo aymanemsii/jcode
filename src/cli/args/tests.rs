@@ -722,6 +722,25 @@ fn queue_subcommands_parse() {
         other => panic!("unexpected command: {:?}", other),
     }
 
+    let args = Args::try_parse_from(["jcode", "queue", "cancel-run", "run_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::CancelRun { run_id, requeue })) => {
+            assert_eq!(run_id, "run_1");
+            assert!(!requeue);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args =
+        Args::try_parse_from(["jcode", "queue", "cancel-run", "run_1", "--requeue"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::CancelRun { run_id, requeue })) => {
+            assert_eq!(run_id, "run_1");
+            assert!(requeue);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
     let args = Args::try_parse_from([
         "jcode", "queue", "logs", "run_1", "--stdout", "--stderr", "--full",
     ])

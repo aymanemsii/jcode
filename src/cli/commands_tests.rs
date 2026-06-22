@@ -1497,6 +1497,188 @@ fn queue_run_status_missing_run_returns_helpful_error() {
 }
 
 #[test]
+fn queue_cancel_missing_run_returns_helpful_error() {
+    let mut index = crate::queue::RunIndex::default();
+    let mut state = crate::queue::QueueState::default();
+
+    let err = cancel_queue_run_with_terminator(
+        &mut index,
+        &mut state,
+        "missing_run",
+        false,
+        test_time("2026-06-20T12:00:00Z"),
+        |_pid| Ok(()),
+    )
+    .expect_err("missing run");
+
+    assert!(
+        err.to_string()
+            .contains("Queue run 'missing_run' was not found in .jcode/queue/runs/index.json")
+    );
+}
+
+#[test]
+fn queue_cancel_non_running_run_returns_helpful_error() {
+    let mut index = crate::queue::RunIndex {
+        runs: vec![test_queue_run_state(
+            "run_done",
+            "task_1",
+            "coder",
+            crate::queue::RunStatus::Succeeded,
+        )],
+    };
+    let mut state = crate::queue::QueueState::default();
+
+    let err = cancel_queue_run_with_terminator(
+        &mut index,
+        &mut state,
+        "run_done",
+        false,
+        test_time("2026-06-20T12:00:00Z"),
+        |_pid| Ok(()),
+    )
+    .expect_err("non-running run");
+
+    assert!(
+        err.to_string()
+            .contains("Queue run 'run_done' is not running")
+    );
+    assert!(err.to_string().contains("status is succeeded"));
+}
+
+#[test]
+fn queue_cancel_missing_pid_returns_helpful_error() {
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.pid = None;
+    let mut index = crate::queue::RunIndex { runs: vec![run] };
+    let mut state = crate::queue::QueueState::default();
+
+    let err = cancel_queue_run_with_terminator(
+        &mut index,
+        &mut state,
+        "run_1",
+        false,
+        test_time("2026-06-20T12:00:00Z"),
+        |_pid| Ok(()),
+    )
+    .expect_err("missing pid");
+
+    assert!(err.to_string().contains("Queue run 'run_1' has no PID"));
+    assert!(
+        err.to_string()
+            .contains("cannot be cancelled automatically")
+    );
+}
+
+#[test]
+fn queue_cancel_success_marks_run_cancelled_and_task_blocked() {
+    let ended_at = test_time("2026-06-20T12:00:00Z");
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let mut index = crate::queue::RunIndex {
+        runs: vec![test_queue_run_state(
+            "run_1",
+            "task_1",
+            "coder",
+            crate::queue::RunStatus::Running,
+        )],
+    };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            created_at,
+        )],
+    };
+    let mut terminated_pid = None;
+
+    let message =
+        cancel_queue_run_with_terminator(&mut index, &mut state, "run_1", false, ended_at, |pid| {
+            terminated_pid = Some(pid);
+            Ok(())
+        })
+        .expect("cancel run");
+
+    assert_eq!(terminated_pid, Some(1234));
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Cancelled);
+    assert_eq!(index.runs[0].ended_at, Some(ended_at));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Blocked);
+    assert_eq!(state.tasks[0].updated_at, ended_at);
+    assert!(message.contains("Cancelled queue run run_1"));
+    assert!(message.contains("task task_1 moved to blocked"));
+}
+
+#[test]
+fn queue_cancel_requeue_moves_task_to_ready() {
+    let ended_at = test_time("2026-06-20T12:00:00Z");
+    let mut index = crate::queue::RunIndex {
+        runs: vec![test_queue_run_state(
+            "run_1",
+            "task_1",
+            "coder",
+            crate::queue::RunStatus::Running,
+        )],
+    };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let message =
+        cancel_queue_run_with_terminator(&mut index, &mut state, "run_1", true, ended_at, |_pid| {
+            Ok(())
+        })
+        .expect("cancel and requeue run");
+
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Cancelled);
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+    assert_eq!(state.tasks[0].updated_at, ended_at);
+    assert!(message.contains("task task_1 moved to ready"));
+}
+
+#[test]
+fn queue_cancel_failed_termination_does_not_mark_run_cancelled() {
+    let ended_at = test_time("2026-06-20T12:00:00Z");
+    let original_run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    let mut index = crate::queue::RunIndex {
+        runs: vec![original_run.clone()],
+    };
+    let original_task = test_queue_task(
+        "task_1",
+        crate::queue::TaskStatus::Running,
+        crate::queue::TaskPriority::Normal,
+        test_time("2026-06-20T10:00:00Z"),
+    );
+    let mut state = crate::queue::QueueState {
+        tasks: vec![original_task.clone()],
+    };
+
+    let err = cancel_queue_run_with_terminator(
+        &mut index,
+        &mut state,
+        "run_1",
+        false,
+        ended_at,
+        |_pid| anyhow::bail!("taskkill failed"),
+    )
+    .expect_err("termination failure");
+
+    assert!(
+        err.to_string()
+            .contains("Failed to terminate queue run 'run_1'")
+    );
+    assert!(err.to_string().contains("taskkill failed"));
+    assert_eq!(index.runs[0], original_run);
+    assert_eq!(state.tasks[0], original_task);
+}
+
+#[test]
 fn queue_logs_missing_run_returns_helpful_error() {
     let index = crate::queue::RunIndex::default();
     let options = QueueRunLogOptions {

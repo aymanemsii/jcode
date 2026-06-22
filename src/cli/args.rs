@@ -912,6 +912,16 @@ pub(crate) enum QueueCommand {
         run_id: String,
     },
 
+    /// Cancel a running background queue run
+    CancelRun {
+        /// Run ID
+        run_id: String,
+
+        /// Move the associated task back to ready instead of blocked
+        #[arg(long)]
+        requeue: bool,
+    },
+
     /// Show stdout and stderr logs for one queue run from the run index
     Logs {
         /// Run ID

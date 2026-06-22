@@ -297,6 +297,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             } => commands::run_queue_active_command(worker_profile.as_deref(), limit)?,
             QueueCommand::RefreshRuns => commands::run_queue_refresh_runs_command()?,
             QueueCommand::RunStatus { run_id } => commands::run_queue_run_status_command(&run_id)?,
+            QueueCommand::CancelRun { run_id, requeue } => {
+                commands::run_queue_cancel_run_command(&run_id, requeue)?
+            }
             QueueCommand::Logs {
                 run_id,
                 stdout,
