@@ -2920,15 +2920,9 @@ fn cancel_queue_run_with_terminator(
 }
 
 fn terminate_queue_run_process(pid: u32) -> Result<()> {
-    let mut command = if cfg!(windows) {
-        let mut command = ProcessCommand::new("taskkill");
-        command.args(["/PID", &pid.to_string(), "/T"]);
-        command
-    } else {
-        let mut command = ProcessCommand::new("kill");
-        command.arg(pid.to_string());
-        command
-    };
+    let (program, args) = queue_run_terminator_command(pid);
+    let mut command = ProcessCommand::new(program);
+    command.args(args);
 
     let output = command
         .output()
@@ -2949,6 +2943,22 @@ fn terminate_queue_run_process(pid: u32) -> Result<()> {
         anyhow::bail!("terminator exited with status {}", output.status);
     }
     anyhow::bail!("{detail}");
+}
+
+fn queue_run_terminator_command(pid: u32) -> (&'static str, Vec<String>) {
+    if cfg!(windows) {
+        (
+            "taskkill",
+            vec![
+                "/PID".to_string(),
+                pid.to_string(),
+                "/T".to_string(),
+                "/F".to_string(),
+            ],
+        )
+    } else {
+        ("kill", vec![pid.to_string()])
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1628,6 +1628,15 @@ fn queue_cancel_missing_pid_returns_helpful_error() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn queue_cancel_windows_terminator_uses_force_process_tree() {
+    let (program, args) = queue_run_terminator_command(1234);
+
+    assert_eq!(program, "taskkill");
+    assert_eq!(args, vec!["/PID", "1234", "/T", "/F"]);
+}
+
 #[test]
 fn queue_cancel_success_marks_run_cancelled_and_task_blocked() {
     let ended_at = test_time("2026-06-20T12:00:00Z");
