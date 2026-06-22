@@ -905,6 +905,24 @@ pub(crate) enum QueueCommand {
         run_id: String,
     },
 
+    /// Show stdout and stderr logs for one queue run from the run index
+    Logs {
+        /// Run ID
+        run_id: String,
+
+        /// Print stdout only unless --stderr is also provided
+        #[arg(long)]
+        stdout: bool,
+
+        /// Print stderr only unless --stdout is also provided
+        #[arg(long)]
+        stderr: bool,
+
+        /// Print full selected logs instead of previews
+        #[arg(long)]
+        full: bool,
+    },
+
     /// Inspect one queue worker run artifact
     Run {
         /// Task ID

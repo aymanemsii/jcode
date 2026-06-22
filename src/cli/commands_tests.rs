@@ -1189,6 +1189,147 @@ fn queue_run_status_missing_run_returns_helpful_error() {
 }
 
 #[test]
+fn queue_logs_missing_run_returns_helpful_error() {
+    let index = crate::queue::RunIndex::default();
+    let options = QueueRunLogOptions {
+        stdout: false,
+        stderr: false,
+        full: false,
+    };
+
+    let err = format_queue_run_logs_from_index(&index, "missing_run", options)
+        .expect_err("missing run");
+
+    assert!(
+        err.to_string()
+            .contains("Queue run 'missing_run' was not found in .jcode/queue/runs/index.json")
+    );
+}
+
+#[test]
+fn queue_logs_reads_stdout_preview() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let stdout_path = temp.path().join("stdout.txt");
+    let stderr_path = temp.path().join("stderr.txt");
+    std::fs::write(&stdout_path, "stdout line 1\nstdout line 2\n").expect("write stdout");
+    std::fs::write(&stderr_path, "stderr line 1\n").expect("write stderr");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = stdout_path.display().to_string();
+    run.stderr_path = stderr_path.display().to_string();
+    let options = QueueRunLogOptions {
+        stdout: true,
+        stderr: false,
+        full: false,
+    };
+
+    let output = format_queue_run_logs(&run, options).expect("format logs");
+
+    assert!(output.contains("stdout:"));
+    assert!(output.contains("stdout line 1"));
+    assert!(output.contains("stdout line 2"));
+    assert!(!output.contains("stderr:"));
+    assert!(!output.contains("stderr line 1"));
+}
+
+#[test]
+fn queue_logs_reads_stderr_preview() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let stdout_path = temp.path().join("stdout.txt");
+    let stderr_path = temp.path().join("stderr.txt");
+    std::fs::write(&stdout_path, "stdout line 1\n").expect("write stdout");
+    std::fs::write(&stderr_path, "stderr line 1\nstderr line 2\n").expect("write stderr");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = stdout_path.display().to_string();
+    run.stderr_path = stderr_path.display().to_string();
+    let options = QueueRunLogOptions {
+        stdout: false,
+        stderr: true,
+        full: false,
+    };
+
+    let output = format_queue_run_logs(&run, options).expect("format logs");
+
+    assert!(!output.contains("stdout:"));
+    assert!(!output.contains("stdout line 1"));
+    assert!(output.contains("stderr:"));
+    assert!(output.contains("stderr line 1"));
+    assert!(output.contains("stderr line 2"));
+}
+
+#[test]
+fn queue_logs_handles_missing_log_files_gracefully() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = temp.path().join("missing-stdout.txt").display().to_string();
+    run.stderr_path = temp.path().join("missing-stderr.txt").display().to_string();
+    let options = QueueRunLogOptions {
+        stdout: false,
+        stderr: false,
+        full: false,
+    };
+
+    let output = format_queue_run_logs(&run, options).expect("format logs");
+
+    assert!(output.contains("stdout:"));
+    assert!(output.contains("missing log file:"));
+    assert!(output.contains("missing-stdout.txt"));
+    assert!(output.contains("stderr:"));
+    assert!(output.contains("missing-stderr.txt"));
+}
+
+#[test]
+fn queue_logs_preview_is_concise_unless_full_requested() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let stdout_path = temp.path().join("stdout.txt");
+    let content = (1..=60)
+        .map(|line| format!("stdout line {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&stdout_path, content).expect("write stdout");
+    let mut run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    run.stdout_path = stdout_path.display().to_string();
+    let preview_options = QueueRunLogOptions {
+        stdout: true,
+        stderr: false,
+        full: false,
+    };
+    let full_options = QueueRunLogOptions {
+        stdout: true,
+        stderr: false,
+        full: true,
+    };
+
+    let preview = format_queue_run_logs(&run, preview_options).expect("format preview");
+    let full = format_queue_run_logs(&run, full_options).expect("format full");
+
+    assert!(preview.contains("stdout line 40"));
+    assert!(!preview.contains("stdout line 41"));
+    assert!(preview.contains("truncated; pass --full"));
+    assert!(full.contains("stdout line 60"));
+    assert!(!full.contains("truncated; pass --full"));
+}
+
+#[test]
 fn queue_run_reads_summary_and_short_previews() {
     let _lock = crate::storage::lock_test_env();
     let project = tempfile::tempdir().expect("project tempdir");

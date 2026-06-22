@@ -1623,6 +1623,17 @@ pub fn run_queue_run_status_command(run_id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn run_queue_logs_command(run_id: &str, stdout: bool, stderr: bool, full: bool) -> Result<()> {
+    let index = crate::queue::load_run_index()?;
+    let options = QueueRunLogOptions {
+        stdout,
+        stderr,
+        full,
+    };
+    println!("{}", format_queue_run_logs_from_index(&index, run_id, options)?);
+    Ok(())
+}
+
 pub fn run_queue_run_command(
     task_id: &str,
     timestamp: &str,
@@ -2414,6 +2425,13 @@ struct QueueRunArtifacts<'a> {
     ended_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct QueueRunLogOptions {
+    stdout: bool,
+    stderr: bool,
+    full: bool,
+}
+
 fn create_queue_run_state(
     task_id: &str,
     worker_profile: &str,
@@ -2670,6 +2688,88 @@ fn format_queue_run_status(run: &crate::queue::RunState) -> String {
     lines.push(format!("stdout_path: {}", run.stdout_path));
     lines.push(format!("stderr_path: {}", run.stderr_path));
     lines.join("\n")
+}
+
+fn format_queue_run_logs_from_index(
+    index: &crate::queue::RunIndex,
+    run_id: &str,
+    options: QueueRunLogOptions,
+) -> Result<String> {
+    let run = find_queue_run_status(index, run_id)?;
+    format_queue_run_logs(run, options)
+}
+
+fn format_queue_run_logs(
+    run: &crate::queue::RunState,
+    options: QueueRunLogOptions,
+) -> Result<String> {
+    let show_stdout = options.stdout || !options.stderr;
+    let show_stderr = options.stderr || !options.stdout;
+    let mut lines = Vec::new();
+
+    if show_stdout {
+        append_queue_log_section(
+            &mut lines,
+            "stdout",
+            Path::new(&run.stdout_path),
+            options.full,
+        )?;
+    }
+    if show_stderr {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        append_queue_log_section(
+            &mut lines,
+            "stderr",
+            Path::new(&run.stderr_path),
+            options.full,
+        )?;
+    }
+
+    Ok(lines.join("\n"))
+}
+
+fn append_queue_log_section(
+    lines: &mut Vec<String>,
+    label: &str,
+    path: &Path,
+    full: bool,
+) -> Result<()> {
+    lines.push(format!("{label}:"));
+    if !path.exists() {
+        lines.push(format!("missing log file: {}", path.display()));
+        return Ok(());
+    }
+
+    if full {
+        lines.push(
+            std::fs::read_to_string(path)
+                .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?,
+        );
+    } else {
+        lines.push(preview_queue_log_file(path)?);
+    }
+    Ok(())
+}
+
+fn preview_queue_log_file(path: &Path) -> Result<String> {
+    const MAX_PREVIEW_LINES: usize = 40;
+    let content = std::fs::read_to_string(path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    let mut lines = content.lines();
+    let mut preview = lines
+        .by_ref()
+        .take(MAX_PREVIEW_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if lines.next().is_some() {
+        if !preview.is_empty() {
+            preview.push('\n');
+        }
+        preview.push_str("... truncated; pass --full to print the full selected log.");
+    }
+    Ok(preview)
 }
 
 fn run_status_label(status: crate::queue::RunStatus) -> &'static str {

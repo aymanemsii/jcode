@@ -691,6 +691,31 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "logs",
+        "run_1",
+        "--stdout",
+        "--stderr",
+        "--full",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Logs {
+            run_id,
+            stdout,
+            stderr,
+            full,
+        })) => {
+            assert_eq!(run_id, "run_1");
+            assert!(stdout);
+            assert!(stderr);
+            assert!(full);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "run",
         "task_1",
         "20260620T100000Z",
