@@ -4,16 +4,47 @@ Queue Mode is a project-local task queue for handing work to command-line worker
 
 The current MVP is CLI-only. It does not start a background daemon, run tasks in parallel, or provide a TUI queue board yet.
 
-## MVP Status
+## Phase 2 Checkpoint
 
-Queue Mode CLI MVP is implemented. Project-local storage was fixed and validated, and the smoke test passed for `queue init`, worker config, task add, dashboard, dry-run, execute, local `queue.json`, local handoffs/runs, review, and approve.
+Queue Mode now has a working Phase 2 background-runner control loop. Queue state, worker profiles, handoffs, run logs, and run indexes are stored project-locally under `.jcode/`. Background runs can be started, inspected, refreshed, cancelled, reviewed, and approved from the CLI.
 
 Current limitations:
 
-- Execution is synchronous foreground only.
-- No background daemon yet.
-- No parallel agents yet.
-- No TUI/Kanban yet.
+- No daemon.
+- No automatic refresh or polling; run completion is reconciled by manual `queue refresh-runs`.
+- No parallel/swarm scheduler.
+- No TUI.
+
+## Current Command List
+
+- `jcode queue init`
+- `jcode queue add`
+- `jcode queue list`
+- `jcode queue status`
+- `jcode queue show`
+- `jcode queue set-status`
+- `jcode queue set-priority`
+- `jcode queue next`
+- `jcode queue start-next`
+- `jcode queue finish`
+- `jcode queue workers`
+- `jcode queue worker`
+- `jcode queue handoff`
+- `jcode queue handoff-next`
+- `jcode queue run-next --worker-profile <name> --dry-run`
+- `jcode queue run-next --worker-profile <name> --execute`
+- `jcode queue run-next --worker-profile <name> --background`
+- `jcode queue runs`
+- `jcode queue run`
+- `jcode queue active`
+- `jcode queue run-status <run-id>`
+- `jcode queue logs <run-id>`
+- `jcode queue refresh-runs`
+- `jcode queue cancel-run <run-id>`
+- `jcode queue review`
+- `jcode queue approve`
+- `jcode queue reopen`
+- `jcode queue dashboard`
 
 ## Why It Exists
 
@@ -22,7 +53,7 @@ Queue Mode gives agent-heavy development a simple control loop:
 1. Capture work as explicit tasks.
 2. Assign tasks to worker profiles such as `coder`, `reviewer`, or `researcher`.
 3. Preview the exact worker command before it runs.
-4. Execute one foreground worker task at a time.
+4. Execute one worker task in the foreground or background.
 5. Inspect run artifacts.
 6. Approve finished work or reopen it for another pass.
 
@@ -39,12 +70,14 @@ This keeps queue state, worker configuration, generated handoffs, and run logs i
     queue.json
     handoffs/
     runs/
+      index.json
 ```
 
 - `.jcode/workers.toml` defines project-local worker profiles and the command each worker runs.
 - `.jcode/queue/queue.json` stores queue tasks, statuses, priorities, worker assignments, and timestamps.
 - `.jcode/queue/handoffs/` stores generated Markdown handoff files such as `.jcode/queue/handoffs/<task-id>.md`.
 - `.jcode/queue/runs/` stores run artifacts under `.jcode/queue/runs/<task-id>/<timestamp>/`.
+- `.jcode/queue/runs/index.json` stores the RunIndex used to find runs by run ID.
 
 Queue Mode resolves these paths relative to the directory where you run `jcode queue ...`.
 
@@ -100,6 +133,21 @@ Execute the worker command synchronously in the foreground:
 
 ```bash
 jcode queue run-next --worker-profile coder --execute
+```
+
+Start the worker command in the background:
+
+```bash
+jcode queue run-next --worker-profile coder --background
+```
+
+Inspect background activity and logs:
+
+```bash
+jcode queue active
+jcode queue run-status <run-id>
+jcode queue logs <run-id>
+jcode queue refresh-runs
 ```
 
 Inspect recorded runs:
@@ -188,11 +236,53 @@ jcode queue review --worker-profile smoke
 2. Assign each task to a worker profile with `--worker-profile`.
 3. Use `jcode queue dashboard` to inspect queue shape.
 4. Use `jcode queue run-next --worker-profile <name> --dry-run` before every real run.
-5. Use `jcode queue run-next --worker-profile <name> --execute` to run one selected task.
-6. Inspect artifacts with `jcode queue runs` and `jcode queue run <task-id> <timestamp>`.
-7. Review the inbox with `jcode queue review`.
-8. Approve good work with `jcode queue approve <task-id>`.
-9. Reopen incomplete work with `jcode queue reopen <task-id>`.
+5. Use `jcode queue run-next --worker-profile <name> --execute` for a foreground run or `--background` for a background run.
+6. Inspect artifacts with `jcode queue runs`, `jcode queue run <task-id> <timestamp>`, `jcode queue run-status <run-id>`, or `jcode queue logs <run-id>`.
+7. Run `jcode queue refresh-runs` to reconcile completed background runs.
+8. Review the inbox with `jcode queue review`.
+9. Approve good work with `jcode queue approve <task-id>`.
+10. Reopen incomplete work with `jcode queue reopen <task-id>`.
+
+## Minimal Background Workflow
+
+```bash
+jcode queue init
+```
+
+Configure `.jcode/workers.toml`:
+
+```toml
+[workers.smoke]
+description = "Safe smoke-test worker"
+command = "echo smoke worker ran task=<task_id> handoff=<handoff_file>"
+```
+
+Add and run a task:
+
+```bash
+jcode queue add "Smoke test background queue" --worker-profile smoke
+jcode queue run-next --worker-profile smoke --dry-run
+jcode queue run-next --worker-profile smoke --background
+jcode queue active
+jcode queue logs <run-id>
+jcode queue refresh-runs
+jcode queue review
+jcode queue approve <task-id>
+```
+
+Background runs start as `running`. They write stdout and stderr to run files and write `exit_code.txt` when the process completes. `refresh-runs` reads completed background runs and moves successful tasks to `review`; non-zero exits move tasks to `blocked`.
+
+## Cancellation Workflow
+
+```bash
+jcode queue run-next --worker-profile smoke --background
+jcode queue active
+jcode queue cancel-run <run-id>
+jcode queue run-status <run-id>
+jcode queue dashboard
+```
+
+`cancel-run` cancels running background runs and moves the task to `blocked` for review before retrying.
 
 ## Command Reference
 
@@ -353,9 +443,10 @@ Prepare or execute the next task for a worker profile.
 ```bash
 jcode queue run-next --worker-profile coder --dry-run
 jcode queue run-next --worker-profile coder --execute
+jcode queue run-next --worker-profile coder --background
 ```
 
-`run-next` requires `--worker-profile <name>` and exactly one of `--dry-run` or `--execute`.
+`run-next` requires `--worker-profile <name>` and exactly one of `--dry-run`, `--execute`, or `--background`.
 
 Dry-run behavior:
 
@@ -373,6 +464,61 @@ Execute behavior:
 - Writes run artifacts.
 - Marks the task `review` on exit code `0`.
 - Marks the task `blocked` on non-zero exit.
+
+Background behavior:
+
+- Selects the next actionable task for the worker profile.
+- Writes the handoff file.
+- Creates a run record and updates `.jcode/queue/runs/index.json`.
+- Marks the task `running`.
+- Starts the worker command in the background and returns immediately.
+- Redirects stdout and stderr to run files.
+- Writes `exit_code.txt` when the process completes.
+- Requires `jcode queue refresh-runs` to move completed runs to `review` or `blocked`.
+
+### `jcode queue active`
+
+List background runs currently recorded as active.
+
+```bash
+jcode queue active
+```
+
+### `jcode queue run-status`
+
+Show detailed state for one run ID.
+
+```bash
+jcode queue run-status <run-id>
+```
+
+### `jcode queue logs`
+
+Print recorded stdout and stderr for one run. Non-UTF-8 bytes are displayed lossily instead of failing.
+
+```bash
+jcode queue logs <run-id>
+```
+
+### `jcode queue refresh-runs`
+
+Reconcile completed background runs by reading their completion markers.
+
+```bash
+jcode queue refresh-runs
+```
+
+Exit code `0` marks the run `succeeded` and moves the task to `review`. A non-zero exit marks the run `failed` and moves the task to `blocked`.
+
+### `jcode queue cancel-run`
+
+Cancel a running background run.
+
+```bash
+jcode queue cancel-run <run-id>
+```
+
+On Windows, cancellation uses forced process-tree termination. Cancelled tasks move to `blocked`.
 
 ### `jcode queue runs`
 
@@ -437,10 +583,13 @@ jcode queue dashboard --limit 10
 ## Safety Notes
 
 - Worker commands are project-local and come from `.jcode/workers.toml`.
-- Always use `jcode queue run-next --worker-profile <name> --dry-run` before `--execute`.
-- `run-next --execute` runs synchronously in the foreground. It does not detach.
-- There is no background Queue Mode daemon yet.
-- There is no parallel Queue Mode execution yet.
-- There is no Queue Mode TUI board yet.
+- Always use `jcode queue run-next --worker-profile <name> --dry-run` before `--execute` or `--background`.
+- `run-next --execute` runs synchronously in the foreground. `run-next --background` detaches and writes logs to run files.
+- There is no background Queue Mode daemon.
+- There is no automatic refresh; run `jcode queue refresh-runs` manually.
+- There is no parallel Queue Mode scheduler.
+- There is no Queue Mode TUI board.
 - Worker commands run through the local shell (`sh -c` on Unix, `cmd /C` on Windows), so quote paths and arguments carefully when adding complex commands.
 - Queue Mode records process stdout, stderr, exit code, timestamps, and command metadata, but it does not validate the semantic quality of worker output. Keep human review in the loop.
+- On Windows, `queue cancel-run` uses forced process-tree termination.
+- `queue logs` may display lossy replacement characters for non-UTF-8 command output.
