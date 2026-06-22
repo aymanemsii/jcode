@@ -2746,6 +2746,157 @@ fn queue_dashboard_filters_by_worker_profile_and_limit() {
 }
 
 #[test]
+fn queue_board_empty_queue_returns_clear_message() {
+    let state = crate::queue::QueueState { tasks: Vec::new() };
+    let board = crate::queue::build_queue_board(&state, None, None);
+
+    assert_eq!(format_queue_board(&board), "Queue board is empty. No tasks to show.");
+}
+
+#[test]
+fn queue_board_output_groups_all_columns() {
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let mut ready = test_queue_task_with_worker(
+        "ready_task",
+        crate::queue::TaskStatus::Ready,
+        crate::queue::TaskPriority::High,
+        created_at,
+        Some("coder"),
+    );
+    ready.title = "Implement board".to_string();
+    ready.updated_at = test_time("2026-06-20T12:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task(
+                "backlog_task",
+                crate::queue::TaskStatus::Backlog,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            ready,
+            test_queue_task(
+                "running_task",
+                crate::queue::TaskStatus::Running,
+                crate::queue::TaskPriority::Urgent,
+                created_at,
+            ),
+            test_queue_task(
+                "review_task",
+                crate::queue::TaskStatus::Review,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "blocked_task",
+                crate::queue::TaskStatus::Blocked,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "done_task",
+                crate::queue::TaskStatus::Done,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+            test_queue_task(
+                "cancelled_task",
+                crate::queue::TaskStatus::Cancelled,
+                crate::queue::TaskPriority::Normal,
+                created_at,
+            ),
+        ],
+    };
+    let board = crate::queue::build_queue_board(&state, None, None);
+
+    let output = format_queue_board(&board);
+
+    assert!(output.contains("Queue board"));
+    assert!(output.contains("total: 7"));
+    assert!(output.contains("Backlog (1)"));
+    assert!(output.contains("Ready (1)"));
+    assert!(output.contains("Running (1)"));
+    assert!(output.contains("Review (1)"));
+    assert!(output.contains("Blocked (1)"));
+    assert!(output.contains("Done (1)"));
+    assert!(output.contains("Cancelled (1)"));
+    assert!(output.contains("ready_task  Implement board"));
+    assert!(output.contains("priority: high"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("updated_at: 2026-06-20T12:00:00+00:00"));
+}
+
+#[test]
+fn queue_board_output_uses_board_sorting_filter_and_limit() {
+    let state = crate::queue::QueueState {
+        tasks: vec![
+            test_queue_task_with_worker(
+                "coder_high_new",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                test_time("2026-06-20T12:00:00Z"),
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "coder_high_old",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::High,
+                test_time("2026-06-20T10:00:00Z"),
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "coder_low",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Low,
+                test_time("2026-06-20T09:00:00Z"),
+                Some("coder"),
+            ),
+            test_queue_task_with_worker(
+                "reviewer_urgent",
+                crate::queue::TaskStatus::Ready,
+                crate::queue::TaskPriority::Urgent,
+                test_time("2026-06-20T08:00:00Z"),
+                Some("reviewer"),
+            ),
+        ],
+    };
+    let board = crate::queue::build_queue_board(&state, Some("coder"), Some(2));
+
+    let output = format_queue_board(&board);
+
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("total: 3"));
+    assert!(output.contains("coder_high_old"));
+    assert!(output.contains("coder_high_new"));
+    assert!(!output.contains("coder_low"));
+    assert!(!output.contains("reviewer_urgent"));
+    assert!(
+        output.find("coder_high_old").expect("old task")
+            < output.find("coder_high_new").expect("new task")
+    );
+}
+
+#[test]
+fn queue_board_json_serializes_grouped_representation() {
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "task_1",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            test_time("2026-06-20T10:00:00Z"),
+            Some("coder"),
+        )],
+    };
+    let board = crate::queue::build_queue_board(&state, Some("coder"), None);
+
+    let json = format_queue_board_json(&board).expect("board json");
+
+    assert!(json.contains("\"worker_profile\": \"coder\""));
+    assert!(json.contains("\"status\": \"ready\""));
+    assert!(json.contains("\"priority\": \"urgent\""));
+    assert!(json.contains("\"id\": \"task_1\""));
+}
+
+#[test]
 fn queue_start_next_marks_selected_task_running() {
     let original_time = test_time("2026-06-20T10:00:00Z");
     let updated_time = test_time("2026-06-20T13:00:00Z");

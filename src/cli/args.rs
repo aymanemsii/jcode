@@ -991,6 +991,21 @@ pub(crate) enum QueueCommand {
         limit: usize,
     },
 
+    /// Show a grouped queue Kanban board
+    Board {
+        /// Only include tasks assigned to this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Maximum number of tasks to show per column
+        #[arg(long, default_value_t = 20, value_parser = parse_positive_usize)]
+        limit: usize,
+
+        /// Emit JSON instead of human-readable output
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Show full details for one queued task
     Show {
         /// Task ID

@@ -69,6 +69,30 @@ pub struct QueueState {
     pub tasks: Vec<Task>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct QueueBoard {
+    pub worker_profile: Option<String>,
+    pub total: usize,
+    pub columns: Vec<QueueBoardColumn>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct QueueBoardColumn {
+    pub status: TaskStatus,
+    pub label: String,
+    pub tasks: Vec<QueueBoardTask>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct QueueBoardTask {
+    pub id: String,
+    pub title: String,
+    pub priority: TaskPriority,
+    pub worker_profile: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RunStatus {
@@ -326,6 +350,94 @@ pub fn list_active_runs() -> Result<Vec<RunState>> {
         .collect())
 }
 
+pub fn build_queue_board(
+    state: &QueueState,
+    worker_profile: Option<&str>,
+    limit: Option<usize>,
+) -> QueueBoard {
+    let statuses = [
+        TaskStatus::Backlog,
+        TaskStatus::Ready,
+        TaskStatus::Running,
+        TaskStatus::Review,
+        TaskStatus::Blocked,
+        TaskStatus::Done,
+        TaskStatus::Cancelled,
+    ];
+    let filtered_tasks = state
+        .tasks
+        .iter()
+        .filter(|task| {
+            worker_profile.is_none_or(|profile| task.worker_profile.as_deref() == Some(profile))
+        })
+        .collect::<Vec<_>>();
+
+    let columns = statuses
+        .into_iter()
+        .map(|status| {
+            let mut tasks = filtered_tasks
+                .iter()
+                .copied()
+                .filter(|task| task.status == status)
+                .map(queue_board_task_from_task)
+                .collect::<Vec<_>>();
+            tasks.sort_by_key(|task| {
+                (
+                    task_priority_sort_rank(task.priority),
+                    task.created_at.clone(),
+                    task.id.clone(),
+                )
+            });
+            if let Some(limit) = limit {
+                tasks.truncate(limit);
+            }
+            QueueBoardColumn {
+                status,
+                label: queue_board_status_label(status).to_string(),
+                tasks,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    QueueBoard {
+        worker_profile: worker_profile.map(ToOwned::to_owned),
+        total: filtered_tasks.len(),
+        columns,
+    }
+}
+
+fn queue_board_task_from_task(task: &Task) -> QueueBoardTask {
+    QueueBoardTask {
+        id: task.id.clone(),
+        title: task.title.clone(),
+        priority: task.priority,
+        worker_profile: task.worker_profile.clone(),
+        created_at: task.created_at.clone(),
+        updated_at: task.updated_at.clone(),
+    }
+}
+
+fn task_priority_sort_rank(priority: TaskPriority) -> u8 {
+    match priority {
+        TaskPriority::Urgent => 0,
+        TaskPriority::High => 1,
+        TaskPriority::Normal => 2,
+        TaskPriority::Low => 3,
+    }
+}
+
+fn queue_board_status_label(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Backlog => "Backlog",
+        TaskStatus::Ready => "Ready",
+        TaskStatus::Running => "Running",
+        TaskStatus::Review => "Review",
+        TaskStatus::Blocked => "Blocked",
+        TaskStatus::Done => "Done",
+        TaskStatus::Cancelled => "Cancelled",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -573,6 +685,143 @@ mod tests {
     }
 
     #[test]
+    fn test_queue_board_groups_tasks_by_status() {
+        let created_at = test_time("2026-06-20T10:00:00Z");
+        let state = QueueState {
+            tasks: vec![
+                test_task("backlog", TaskStatus::Backlog, TaskPriority::Normal, created_at),
+                test_task("ready", TaskStatus::Ready, TaskPriority::Normal, created_at),
+                test_task("running", TaskStatus::Running, TaskPriority::Normal, created_at),
+                test_task("review", TaskStatus::Review, TaskPriority::Normal, created_at),
+                test_task("blocked", TaskStatus::Blocked, TaskPriority::Normal, created_at),
+                test_task("done", TaskStatus::Done, TaskPriority::Normal, created_at),
+                test_task(
+                    "cancelled",
+                    TaskStatus::Cancelled,
+                    TaskPriority::Normal,
+                    created_at,
+                ),
+            ],
+        };
+
+        let board = build_queue_board(&state, None, None);
+
+        assert_eq!(board.total, 7);
+        assert_eq!(
+            board
+                .columns
+                .iter()
+                .map(|column| (column.status, column.tasks[0].id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (TaskStatus::Backlog, "backlog"),
+                (TaskStatus::Ready, "ready"),
+                (TaskStatus::Running, "running"),
+                (TaskStatus::Review, "review"),
+                (TaskStatus::Blocked, "blocked"),
+                (TaskStatus::Done, "done"),
+                (TaskStatus::Cancelled, "cancelled"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_queue_board_sorts_by_priority_then_created_at() {
+        let state = QueueState {
+            tasks: vec![
+                test_task(
+                    "normal_old",
+                    TaskStatus::Ready,
+                    TaskPriority::Normal,
+                    test_time("2026-06-20T10:00:00Z"),
+                ),
+                test_task(
+                    "urgent_new",
+                    TaskStatus::Ready,
+                    TaskPriority::Urgent,
+                    test_time("2026-06-20T12:00:00Z"),
+                ),
+                test_task(
+                    "high_new",
+                    TaskStatus::Ready,
+                    TaskPriority::High,
+                    test_time("2026-06-20T13:00:00Z"),
+                ),
+                test_task(
+                    "high_old",
+                    TaskStatus::Ready,
+                    TaskPriority::High,
+                    test_time("2026-06-20T11:00:00Z"),
+                ),
+                test_task(
+                    "low_old",
+                    TaskStatus::Ready,
+                    TaskPriority::Low,
+                    test_time("2026-06-20T09:00:00Z"),
+                ),
+            ],
+        };
+
+        let board = build_queue_board(&state, None, None);
+        let ready = board
+            .columns
+            .iter()
+            .find(|column| column.status == TaskStatus::Ready)
+            .expect("ready column");
+
+        assert_eq!(
+            ready
+                .tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["urgent_new", "high_old", "high_new", "normal_old", "low_old"]
+        );
+    }
+
+    #[test]
+    fn test_queue_board_filters_worker_profile_and_limits_columns() {
+        let created_at = test_time("2026-06-20T10:00:00Z");
+        let state = QueueState {
+            tasks: vec![
+                test_task_with_worker(
+                    "coder_old",
+                    TaskStatus::Ready,
+                    TaskPriority::High,
+                    created_at,
+                    Some("coder"),
+                ),
+                test_task_with_worker(
+                    "coder_new",
+                    TaskStatus::Ready,
+                    TaskPriority::High,
+                    test_time("2026-06-20T11:00:00Z"),
+                    Some("coder"),
+                ),
+                test_task_with_worker(
+                    "reviewer",
+                    TaskStatus::Ready,
+                    TaskPriority::Urgent,
+                    created_at,
+                    Some("reviewer"),
+                ),
+            ],
+        };
+
+        let board = build_queue_board(&state, Some("coder"), Some(1));
+        let ready = board
+            .columns
+            .iter()
+            .find(|column| column.status == TaskStatus::Ready)
+            .expect("ready column");
+
+        assert_eq!(board.worker_profile.as_deref(), Some("coder"));
+        assert_eq!(board.total, 2);
+        assert_eq!(ready.tasks.len(), 1);
+        assert_eq!(ready.tasks[0].id, "coder_old");
+    }
+
+    #[test]
     fn test_task_status_serialization() {
         let statuses = vec![
             (TaskStatus::Backlog, "\"backlog\""),
@@ -720,6 +969,36 @@ description = "Reviews outputs and checks quality"
             run_dir: ".jcode/queue/runs/task_1/20260620T120000Z".to_string(),
             stdout_path: ".jcode/queue/runs/task_1/20260620T120000Z/stdout.log".to_string(),
             stderr_path: ".jcode/queue/runs/task_1/20260620T120000Z/stderr.log".to_string(),
+        }
+    }
+
+    fn test_task(
+        id: &str,
+        status: TaskStatus,
+        priority: TaskPriority,
+        created_at: DateTime<Utc>,
+    ) -> Task {
+        test_task_with_worker(id, status, priority, created_at, None)
+    }
+
+    fn test_task_with_worker(
+        id: &str,
+        status: TaskStatus,
+        priority: TaskPriority,
+        created_at: DateTime<Utc>,
+        worker_profile: Option<&str>,
+    ) -> Task {
+        Task {
+            id: id.to_string(),
+            title: id.to_string(),
+            description: String::new(),
+            project: None,
+            status,
+            priority,
+            worker_profile: worker_profile.map(ToOwned::to_owned),
+            output_path: None,
+            created_at,
+            updated_at: created_at,
         }
     }
 }

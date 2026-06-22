@@ -846,6 +846,30 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "board",
+        "--worker-profile",
+        "coder",
+        "--limit",
+        "2",
+        "--json",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Board {
+            worker_profile,
+            limit,
+            json,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("coder"));
+            assert_eq!(limit, 2);
+            assert!(json);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "add",
         "Fix docs",
         "--description",

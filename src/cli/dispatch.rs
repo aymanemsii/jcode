@@ -322,6 +322,11 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 worker_profile,
                 limit,
             } => commands::run_queue_dashboard_command(worker_profile.as_deref(), limit)?,
+            QueueCommand::Board {
+                worker_profile,
+                limit,
+                json,
+            } => commands::run_queue_board_command(worker_profile.as_deref(), limit, json)?,
             QueueCommand::Show { task_id } => commands::run_queue_show_command(&task_id)?,
             QueueCommand::Add {
                 title,

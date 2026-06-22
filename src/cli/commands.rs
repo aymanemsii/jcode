@@ -1720,6 +1720,23 @@ pub fn run_queue_dashboard_command(worker_profile: Option<&str>, limit: usize) -
     Ok(())
 }
 
+pub fn run_queue_board_command(
+    worker_profile: Option<&str>,
+    limit: usize,
+    json: bool,
+) -> Result<()> {
+    let worker_profile = normalize_worker_profile_arg(worker_profile);
+    validate_queue_worker_profile(worker_profile)?;
+    let state = crate::queue::load()?;
+    let board = crate::queue::build_queue_board(&state, worker_profile, Some(limit));
+    if json {
+        println!("{}", format_queue_board_json(&board)?);
+    } else {
+        println!("{}", format_queue_board(&board));
+    }
+    Ok(())
+}
+
 fn run_queue_run_next_command_with_executor(
     worker_profile: Option<&str>,
     dry_run: bool,
@@ -2319,6 +2336,60 @@ fn append_queue_dashboard_task(
         }
     }
     lines.push(format!("    updated_at: {}", task.updated_at.to_rfc3339()));
+}
+
+fn format_queue_board(board: &crate::queue::QueueBoard) -> String {
+    if board.total == 0 {
+        return match board.worker_profile.as_deref() {
+            Some(worker_profile) => {
+                format!("Queue board is empty for worker_profile '{worker_profile}'.")
+            }
+            None => "Queue board is empty. No tasks to show.".to_string(),
+        };
+    }
+
+    let mut lines = match board.worker_profile.as_deref() {
+        Some(worker_profile) => vec![
+            "Queue board".to_string(),
+            format!("worker_profile: {worker_profile}"),
+        ],
+        None => vec!["Queue board".to_string()],
+    };
+    lines.push(format!("total: {}", board.total));
+
+    for column in &board.columns {
+        lines.push(String::new());
+        lines.push(format!("{} ({})", column.label, column.tasks.len()));
+        if column.tasks.is_empty() {
+            lines.push("  none".to_string());
+            continue;
+        }
+        for task in &column.tasks {
+            append_queue_board_task(&mut lines, task);
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn append_queue_board_task(lines: &mut Vec<String>, task: &crate::queue::QueueBoardTask) {
+    lines.push(format!("  {}  {}", task.id, task.title));
+    lines.push(format!(
+        "    priority: {}",
+        task_priority_label(task.priority)
+    ));
+    if let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("    worker_profile: {worker_profile}"));
+    }
+    lines.push(format!("    updated_at: {}", task.updated_at.to_rfc3339()));
+}
+
+fn format_queue_board_json(board: &crate::queue::QueueBoard) -> Result<String> {
+    Ok(serde_json::to_string_pretty(board)?)
 }
 
 fn no_actionable_queue_tasks_message(worker_profile: Option<&str>) -> String {
