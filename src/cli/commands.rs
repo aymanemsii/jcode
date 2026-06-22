@@ -1610,6 +1610,19 @@ pub fn run_queue_runs_command(task_id: Option<&str>, limit: usize) -> Result<()>
     Ok(())
 }
 
+pub fn run_queue_active_command(worker_profile: Option<&str>, limit: usize) -> Result<()> {
+    let index = crate::queue::load_run_index()?;
+    println!("{}", format_queue_active_runs(&index, worker_profile, limit));
+    Ok(())
+}
+
+pub fn run_queue_run_status_command(run_id: &str) -> Result<()> {
+    let index = crate::queue::load_run_index()?;
+    let run = find_queue_run_status(&index, run_id)?;
+    println!("{}", format_queue_run_status(&run));
+    Ok(())
+}
+
 pub fn run_queue_run_command(
     task_id: &str,
     timestamp: &str,
@@ -2587,6 +2600,86 @@ fn format_queue_runs(runs: &[QueueRunListEntry], limit: usize) -> String {
         lines.push(format!("  run_dir: {}", run.run_dir.display()));
     }
     lines.join("\n")
+}
+
+fn format_queue_active_runs(
+    index: &crate::queue::RunIndex,
+    worker_profile: Option<&str>,
+    limit: usize,
+) -> String {
+    let runs = index
+        .running_runs()
+        .into_iter()
+        .filter(|run| {
+            worker_profile.is_none_or(|profile| run.worker_profile.as_str() == profile)
+        })
+        .take(limit)
+        .collect::<Vec<_>>();
+
+    if runs.is_empty() {
+        return match worker_profile {
+            Some(worker_profile) => {
+                format!("No active queue runs found for worker_profile '{worker_profile}'.")
+            }
+            None => "No active queue runs found.".to_string(),
+        };
+    }
+
+    let mut lines = vec!["Active queue runs:".to_string()];
+    for run in runs {
+        lines.push(run.run_id.clone());
+        lines.push(format!("  task_id: {}", run.task_id));
+        lines.push(format!("  worker_profile: {}", run.worker_profile));
+        if let Some(pid) = run.pid {
+            lines.push(format!("  pid: {pid}"));
+        }
+        lines.push(format!("  started_at: {}", run.started_at.to_rfc3339()));
+        lines.push(format!("  run_dir: {}", run.run_dir));
+    }
+    lines.join("\n")
+}
+
+fn find_queue_run_status<'a>(
+    index: &'a crate::queue::RunIndex,
+    run_id: &str,
+) -> Result<&'a crate::queue::RunState> {
+    index.find(run_id).ok_or_else(|| {
+        anyhow::anyhow!("Queue run '{run_id}' was not found in .jcode/queue/runs/index.json.")
+    })
+}
+
+fn format_queue_run_status(run: &crate::queue::RunState) -> String {
+    let mut lines = vec![
+        format!("run_id: {}", run.run_id),
+        format!("task_id: {}", run.task_id),
+        format!("worker_profile: {}", run.worker_profile),
+        format!("command: {}", run.command),
+    ];
+    if let Some(pid) = run.pid {
+        lines.push(format!("pid: {pid}"));
+    }
+    lines.push(format!("status: {}", run_status_label(run.status)));
+    lines.push(format!("started_at: {}", run.started_at.to_rfc3339()));
+    if let Some(ended_at) = run.ended_at {
+        lines.push(format!("ended_at: {}", ended_at.to_rfc3339()));
+    }
+    if let Some(exit_code) = run.exit_code {
+        lines.push(format!("exit_code: {exit_code}"));
+    }
+    lines.push(format!("run_dir: {}", run.run_dir));
+    lines.push(format!("stdout_path: {}", run.stdout_path));
+    lines.push(format!("stderr_path: {}", run.stderr_path));
+    lines.join("\n")
+}
+
+fn run_status_label(status: crate::queue::RunStatus) -> &'static str {
+    match status {
+        crate::queue::RunStatus::Running => "running",
+        crate::queue::RunStatus::Succeeded => "succeeded",
+        crate::queue::RunStatus::Failed => "failed",
+        crate::queue::RunStatus::Cancelled => "cancelled",
+        crate::queue::RunStatus::Unknown => "unknown",
+    }
 }
 
 fn format_queue_run_summary(

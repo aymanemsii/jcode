@@ -662,6 +662,35 @@ fn queue_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",
         "queue",
+        "active",
+        "--worker-profile",
+        "coder",
+        "--limit",
+        "5",
+    ])
+    .unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Active {
+            worker_profile,
+            limit,
+        })) => {
+            assert_eq!(worker_profile.as_deref(), Some("coder"));
+            assert_eq!(limit, 5);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "run-status", "run_1"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::RunStatus { run_id })) => {
+            assert_eq!(run_id, "run_1");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from([
+        "jcode",
+        "queue",
         "run",
         "task_1",
         "20260620T100000Z",

@@ -888,6 +888,23 @@ pub(crate) enum QueueCommand {
         limit: usize,
     },
 
+    /// List active queue runs from the run index
+    Active {
+        /// Only list runs for this worker profile
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Maximum number of active runs to list
+        #[arg(long, default_value_t = 20, value_parser = parse_positive_usize)]
+        limit: usize,
+    },
+
+    /// Inspect one queue run from the run index
+    RunStatus {
+        /// Run ID
+        run_id: String,
+    },
+
     /// Inspect one queue worker run artifact
     Run {
         /// Task ID

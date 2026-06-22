@@ -1106,6 +1106,89 @@ fn queue_runs_filters_by_task_id_and_applies_limit() {
 }
 
 #[test]
+fn queue_active_empty_state_message_is_clear() {
+    let index = crate::queue::RunIndex::default();
+
+    let output = format_queue_active_runs(&index, None, 20);
+
+    assert_eq!(output, "No active queue runs found.");
+}
+
+#[test]
+fn queue_active_lists_only_running_runs_and_filters_by_worker() {
+    let running_coder = test_queue_run_state(
+        "run_coder",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Running,
+    );
+    let running_reviewer = test_queue_run_state(
+        "run_reviewer",
+        "task_2",
+        "reviewer",
+        crate::queue::RunStatus::Running,
+    );
+    let succeeded_coder = test_queue_run_state(
+        "run_done",
+        "task_3",
+        "coder",
+        crate::queue::RunStatus::Succeeded,
+    );
+    let index = crate::queue::RunIndex {
+        runs: vec![running_coder, running_reviewer, succeeded_coder],
+    };
+
+    let output = format_queue_active_runs(&index, Some("coder"), 10);
+
+    assert!(output.contains("Active queue runs:"));
+    assert!(output.contains("run_coder"));
+    assert!(output.contains("task_id: task_1"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("pid: 1234"));
+    assert!(output.contains("started_at: 2026-06-20T10:00:00+00:00"));
+    assert!(output.contains("run_dir: .jcode/queue/runs/task_1/20260620T100000Z"));
+    assert!(!output.contains("run_reviewer"));
+    assert!(!output.contains("run_done"));
+}
+
+#[test]
+fn queue_run_status_displays_one_run() {
+    let run = test_queue_run_state(
+        "run_1",
+        "task_1",
+        "coder",
+        crate::queue::RunStatus::Failed,
+    );
+
+    let output = format_queue_run_status(&run);
+
+    assert!(output.contains("run_id: run_1"));
+    assert!(output.contains("task_id: task_1"));
+    assert!(output.contains("worker_profile: coder"));
+    assert!(output.contains("command: codex exec handoff.md"));
+    assert!(output.contains("pid: 1234"));
+    assert!(output.contains("status: failed"));
+    assert!(output.contains("started_at: 2026-06-20T10:00:00+00:00"));
+    assert!(output.contains("ended_at: 2026-06-20T10:00:01+00:00"));
+    assert!(output.contains("exit_code: 23"));
+    assert!(output.contains("run_dir: .jcode/queue/runs/task_1/20260620T100000Z"));
+    assert!(output.contains("stdout_path: .jcode/queue/runs/task_1/20260620T100000Z/stdout.txt"));
+    assert!(output.contains("stderr_path: .jcode/queue/runs/task_1/20260620T100000Z/stderr.txt"));
+}
+
+#[test]
+fn queue_run_status_missing_run_returns_helpful_error() {
+    let index = crate::queue::RunIndex::default();
+
+    let err = find_queue_run_status(&index, "missing_run").expect_err("missing run");
+
+    assert!(
+        err.to_string()
+            .contains("Queue run 'missing_run' was not found in .jcode/queue/runs/index.json")
+    );
+}
+
+#[test]
 fn queue_run_reads_summary_and_short_previews() {
     let _lock = crate::storage::lock_test_env();
     let project = tempfile::tempdir().expect("project tempdir");
@@ -2279,6 +2362,30 @@ fn write_queue_run_fixture(
         serde_json::to_string_pretty(&metadata).expect("serialize metadata"),
     )
     .expect("write run metadata");
+}
+
+fn test_queue_run_state(
+    run_id: &str,
+    task_id: &str,
+    worker_profile: &str,
+    status: crate::queue::RunStatus,
+) -> crate::queue::RunState {
+    let started_at = test_time("2026-06-20T10:00:00Z");
+    let completed = !matches!(status, crate::queue::RunStatus::Running);
+    crate::queue::RunState {
+        run_id: run_id.to_string(),
+        task_id: task_id.to_string(),
+        worker_profile: worker_profile.to_string(),
+        command: "codex exec handoff.md".to_string(),
+        pid: Some(1234),
+        status,
+        started_at,
+        ended_at: completed.then(|| test_time("2026-06-20T10:00:01Z")),
+        exit_code: completed.then_some(23),
+        run_dir: format!(".jcode/queue/runs/{task_id}/20260620T100000Z"),
+        stdout_path: format!(".jcode/queue/runs/{task_id}/20260620T100000Z/stdout.txt"),
+        stderr_path: format!(".jcode/queue/runs/{task_id}/20260620T100000Z/stderr.txt"),
+    }
 }
 
 struct CurrentDirGuard {

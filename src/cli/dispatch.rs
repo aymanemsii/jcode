@@ -285,6 +285,11 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             QueueCommand::Runs { task_id, limit } => {
                 commands::run_queue_runs_command(task_id.as_deref(), limit)?
             }
+            QueueCommand::Active {
+                worker_profile,
+                limit,
+            } => commands::run_queue_active_command(worker_profile.as_deref(), limit)?,
+            QueueCommand::RunStatus { run_id } => commands::run_queue_run_status_command(&run_id)?,
             QueueCommand::Run {
                 task_id,
                 timestamp,
