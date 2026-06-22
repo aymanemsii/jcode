@@ -1,0 +1,15 @@
+[workers.coder]
+description = "Implements code changes from queue handoffs"
+command = "codex exec <handoff_file>"
+
+[workers.reviewer]
+description = "Reviews task outputs and suggests fixes"
+command = "codex exec <handoff_file>"
+
+[workers.researcher]
+description = "Researches sources and produces structured notes"
+command = "opencode run <handoff_file>"
+
+[workers.smoke]
+description = "Safe smoke-test worker"
+command = "echo smoke worker ran task=<task_id> handoff=<handoff_file>"
