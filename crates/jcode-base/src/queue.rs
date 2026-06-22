@@ -69,6 +69,69 @@ pub struct QueueState {
     pub tasks: Vec<Task>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunState {
+    pub run_id: String,
+    pub task_id: String,
+    pub worker_profile: String,
+    pub command: String,
+    pub pid: Option<u32>,
+    pub status: RunStatus,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub exit_code: Option<i32>,
+    pub run_dir: String,
+    pub stdout_path: String,
+    pub stderr_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct RunIndex {
+    pub runs: Vec<RunState>,
+}
+
+impl RunIndex {
+    pub fn add_or_update(&mut self, run: RunState) {
+        if let Some(existing) = self
+            .runs
+            .iter_mut()
+            .find(|existing| existing.run_id == run.run_id)
+        {
+            *existing = run;
+        } else {
+            self.runs.push(run);
+        }
+    }
+
+    pub fn find(&self, run_id: &str) -> Option<&RunState> {
+        self.runs.iter().find(|run| run.run_id == run_id)
+    }
+
+    pub fn running_runs(&self) -> Vec<&RunState> {
+        self.runs
+            .iter()
+            .filter(|run| run.status == RunStatus::Running)
+            .collect()
+    }
+
+    pub fn active_runs(&self) -> Vec<&RunState> {
+        self.runs
+            .iter()
+            .filter(|run| matches!(run.status, RunStatus::Running | RunStatus::Unknown))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkerProfile {
     pub name: String,
@@ -122,9 +185,39 @@ pub fn queue_runs_dir_path() -> Result<PathBuf> {
     Ok(queue_dir_path()?.join("runs"))
 }
 
+/// Resolve the project-local Queue Mode run index path.
+pub fn queue_run_index_path() -> Result<PathBuf> {
+    Ok(queue_runs_dir_path()?.join("index.json"))
+}
+
 /// Resolve the artifact directory for a specific queue task run.
 pub fn queue_run_artifact_dir_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    queue_run_dir_path(task_id, timestamp)
+}
+
+/// Resolve the artifact directory for a specific queue run.
+pub fn queue_run_dir_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
     Ok(queue_runs_dir_path()?.join(task_id).join(timestamp))
+}
+
+/// Resolve the stdout log path for a specific queue run.
+pub fn queue_run_stdout_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_run_dir_path(task_id, timestamp)?.join("stdout.log"))
+}
+
+/// Resolve the stderr log path for a specific queue run.
+pub fn queue_run_stderr_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_run_dir_path(task_id, timestamp)?.join("stderr.log"))
+}
+
+/// Resolve the expanded command artifact path for a specific queue run.
+pub fn queue_run_command_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_run_dir_path(task_id, timestamp)?.join("command.txt"))
+}
+
+/// Resolve the metadata JSON path for a specific queue run.
+pub fn queue_run_metadata_path(task_id: &str, timestamp: &str) -> Result<PathBuf> {
+    Ok(queue_run_dir_path(task_id, timestamp)?.join("run.json"))
 }
 
 /// Resolve the project-local worker profile configuration path.
@@ -181,6 +274,56 @@ pub fn save(state: &QueueState) -> Result<()> {
     }
     jcode_storage::write_json(&path, state)?;
     Ok(())
+}
+
+/// Load the project-local Queue Mode run index, returning an empty index when missing.
+pub fn load_run_index() -> Result<RunIndex> {
+    let path = queue_run_index_path()?;
+    if !path.exists() {
+        return Ok(RunIndex::default());
+    }
+    Ok(jcode_storage::read_json(&path)?)
+}
+
+/// Persist the project-local Queue Mode run index.
+pub fn save_run_index(index: &RunIndex) -> Result<()> {
+    let path = queue_run_index_path()?;
+    if let Some(parent) = path.parent() {
+        jcode_storage::ensure_dir(parent)?;
+    }
+    jcode_storage::write_json(&path, index)?;
+    Ok(())
+}
+
+/// Add a run to the project-local index or replace the existing entry with the same run ID.
+pub fn add_or_update_run_state(run: RunState) -> Result<RunIndex> {
+    let mut index = load_run_index()?;
+    index.add_or_update(run);
+    save_run_index(&index)?;
+    Ok(index)
+}
+
+/// Find a run in the project-local index by run ID.
+pub fn find_run_by_id(run_id: &str) -> Result<Option<RunState>> {
+    Ok(load_run_index()?.find(run_id).cloned())
+}
+
+/// List project-local runs currently marked as running.
+pub fn list_running_runs() -> Result<Vec<RunState>> {
+    Ok(load_run_index()?
+        .running_runs()
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// List project-local runs that need active-run inspection.
+pub fn list_active_runs() -> Result<Vec<RunState>> {
+    Ok(load_run_index()?
+        .active_runs()
+        .into_iter()
+        .cloned()
+        .collect())
 }
 
 #[cfg(test)]
@@ -264,6 +407,169 @@ mod tests {
             project.path().join(".jcode").join("queue").join("runs")
         );
         assert_eq!(path, runs_dir.join("task_1").join("20260620T100000Z"));
+    }
+
+    #[test]
+    fn test_queue_run_index_path_is_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let path = queue_run_index_path().unwrap();
+
+        assert_eq!(
+            path,
+            project
+                .path()
+                .join(".jcode")
+                .join("queue")
+                .join("runs")
+                .join("index.json")
+        );
+    }
+
+    #[test]
+    fn test_queue_run_artifact_file_paths_are_project_local() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let dir = queue_run_dir_path("task_1", "20260620T100000Z").unwrap();
+
+        assert_eq!(
+            dir,
+            project
+                .path()
+                .join(".jcode")
+                .join("queue")
+                .join("runs")
+                .join("task_1")
+                .join("20260620T100000Z")
+        );
+        assert_eq!(
+            queue_run_stdout_path("task_1", "20260620T100000Z").unwrap(),
+            dir.join("stdout.log")
+        );
+        assert_eq!(
+            queue_run_stderr_path("task_1", "20260620T100000Z").unwrap(),
+            dir.join("stderr.log")
+        );
+        assert_eq!(
+            queue_run_command_path("task_1", "20260620T100000Z").unwrap(),
+            dir.join("command.txt")
+        );
+        assert_eq!(
+            queue_run_metadata_path("task_1", "20260620T100000Z").unwrap(),
+            dir.join("run.json")
+        );
+    }
+
+    #[test]
+    fn test_run_status_serialization() {
+        let statuses = vec![
+            (RunStatus::Running, "\"running\""),
+            (RunStatus::Succeeded, "\"succeeded\""),
+            (RunStatus::Failed, "\"failed\""),
+            (RunStatus::Cancelled, "\"cancelled\""),
+            (RunStatus::Unknown, "\"unknown\""),
+        ];
+
+        for (status, expected_json) in statuses {
+            let serialized = serde_json::to_string(&status).unwrap();
+            assert_eq!(serialized, expected_json);
+
+            let deserialized: RunStatus = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(deserialized, status);
+        }
+    }
+
+    #[test]
+    fn test_run_state_serialization() {
+        let state = test_run_state("run_1", "task_1", RunStatus::Running);
+
+        let serialized = serde_json::to_string(&state).unwrap();
+        let deserialized: RunState = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized, state);
+    }
+
+    #[test]
+    fn test_missing_run_index_returns_empty_index() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+
+        let index = load_run_index().unwrap();
+
+        assert!(index.runs.is_empty());
+        assert!(!queue_run_index_path().unwrap().exists());
+    }
+
+    #[test]
+    fn test_save_and_load_run_index() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::TempDir::new().unwrap();
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        let state = test_run_state("run_1", "task_1", RunStatus::Running);
+        let index = RunIndex {
+            runs: vec![state.clone()],
+        };
+
+        save_run_index(&index).unwrap();
+
+        let loaded = load_run_index().unwrap();
+        assert_eq!(loaded.runs, vec![state]);
+    }
+
+    #[test]
+    fn test_add_or_update_run_state_replaces_existing_run() {
+        let mut index = RunIndex::default();
+        let running = test_run_state("run_1", "task_1", RunStatus::Running);
+        let mut failed = running.clone();
+        failed.status = RunStatus::Failed;
+        failed.exit_code = Some(1);
+        failed.ended_at = Some(test_time("2026-06-20T12:05:00Z"));
+
+        index.add_or_update(running);
+        index.add_or_update(failed.clone());
+
+        assert_eq!(index.runs, vec![failed]);
+    }
+
+    #[test]
+    fn test_find_run_by_run_id() {
+        let run_1 = test_run_state("run_1", "task_1", RunStatus::Running);
+        let run_2 = test_run_state("run_2", "task_2", RunStatus::Succeeded);
+        let index = RunIndex {
+            runs: vec![run_1, run_2.clone()],
+        };
+
+        assert_eq!(index.find("run_2"), Some(&run_2));
+        assert!(index.find("missing").is_none());
+    }
+
+    #[test]
+    fn test_list_running_runs() {
+        let running = test_run_state("run_running", "task_1", RunStatus::Running);
+        let unknown = test_run_state("run_unknown", "task_2", RunStatus::Unknown);
+        let succeeded = test_run_state("run_succeeded", "task_3", RunStatus::Succeeded);
+        let index = RunIndex {
+            runs: vec![running.clone(), unknown, succeeded],
+        };
+
+        assert_eq!(index.running_runs(), vec![&running]);
+    }
+
+    #[test]
+    fn test_list_active_runs_includes_running_and_unknown() {
+        let running = test_run_state("run_running", "task_1", RunStatus::Running);
+        let unknown = test_run_state("run_unknown", "task_2", RunStatus::Unknown);
+        let succeeded = test_run_state("run_succeeded", "task_3", RunStatus::Succeeded);
+        let index = RunIndex {
+            runs: vec![running.clone(), unknown.clone(), succeeded],
+        };
+
+        assert_eq!(index.active_runs(), vec![&running, &unknown]);
     }
 
     #[test]
@@ -392,5 +698,28 @@ description = "Reviews outputs and checks quality"
         let message = err.to_string();
         assert!(message.contains("failed to parse"));
         assert!(message.contains(&path.display().to_string()));
+    }
+
+    fn test_time(value: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn test_run_state(run_id: &str, task_id: &str, status: RunStatus) -> RunState {
+        RunState {
+            run_id: run_id.to_string(),
+            task_id: task_id.to_string(),
+            worker_profile: "coder".to_string(),
+            command: "codex exec .jcode/queue/handoffs/task_1.md".to_string(),
+            pid: Some(1234),
+            status,
+            started_at: test_time("2026-06-20T12:00:00Z"),
+            ended_at: None,
+            exit_code: None,
+            run_dir: ".jcode/queue/runs/task_1/20260620T120000Z".to_string(),
+            stdout_path: ".jcode/queue/runs/task_1/20260620T120000Z/stdout.log".to_string(),
+            stderr_path: ".jcode/queue/runs/task_1/20260620T120000Z/stderr.log".to_string(),
+        }
     }
 }
