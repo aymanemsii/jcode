@@ -2618,18 +2618,19 @@ fn start_rendered_worker_command_background(
         .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stdout_path.display()))?;
     let stderr = std::fs::File::create(stderr_path)
         .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stderr_path.display()))?;
-    let wrapped_command = background_completion_marker_command(command, run_dir);
+    let wrapper_path = write_background_completion_wrapper(command, run_dir)?;
 
     #[cfg(windows)]
     let child = ProcessCommand::new("cmd")
-        .args(["/V:ON", "/C", &wrapped_command])
+        .arg("/C")
+        .arg(&wrapper_path)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn();
 
     #[cfg(not(windows))]
     let child = ProcessCommand::new("sh")
-        .args(["-c", &wrapped_command])
+        .arg(&wrapper_path)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn();
@@ -2638,14 +2639,33 @@ fn start_rendered_worker_command_background(
     Ok(child.id())
 }
 
-fn background_completion_marker_command(command: &str, run_dir: &Path) -> String {
+fn write_background_completion_wrapper(command: &str, run_dir: &Path) -> Result<PathBuf> {
+    let wrapper_path = background_completion_wrapper_path(run_dir);
+    let wrapper = background_completion_wrapper_script(command, run_dir);
+    write_queue_run_artifact(&wrapper_path, &wrapper)?;
+    Ok(wrapper_path)
+}
+
+fn background_completion_wrapper_path(run_dir: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        run_dir.join("background-wrapper.cmd")
+    }
+
+    #[cfg(not(windows))]
+    {
+        run_dir.join("background-wrapper.sh")
+    }
+}
+
+fn background_completion_wrapper_script(command: &str, run_dir: &Path) -> String {
     let exit_code_path = run_dir.join("exit_code.txt");
     let ended_at_path = run_dir.join("ended_at.txt");
 
     #[cfg(windows)]
     {
         format!(
-            "{command}\r\nset JCODE_QUEUE_EXIT_CODE=!ERRORLEVEL!\r\n>\"{}\" echo !JCODE_QUEUE_EXIT_CODE!\r\n>\"{}\" echo %DATE% %TIME%\r\n",
+            "@echo off\r\nsetlocal EnableExtensions EnableDelayedExpansion\r\ncall {command}\r\nset \"JCODE_QUEUE_EXIT_CODE=!ERRORLEVEL!\"\r\n>\"{}\" echo(!JCODE_QUEUE_EXIT_CODE!\r\n>\"{}\" echo(!DATE! !TIME!\r\nexit /b !JCODE_QUEUE_EXIT_CODE!\r\n",
             escape_windows_cmd_path(&exit_code_path),
             escape_windows_cmd_path(&ended_at_path)
         )
@@ -2654,7 +2674,7 @@ fn background_completion_marker_command(command: &str, run_dir: &Path) -> String
     #[cfg(not(windows))]
     {
         format!(
-            "{command}\ncode=$?\nprintf '%s\\n' \"$code\" > {}\ndate -u +%Y-%m-%dT%H:%M:%SZ > {}\n",
+            "{command}\ncode=$?\nprintf '%s\\n' \"$code\" > {}\ndate -u +%Y-%m-%dT%H:%M:%SZ > {}\nexit \"$code\"\n",
             shell_single_quote_path(&exit_code_path),
             shell_single_quote_path(&ended_at_path)
         )

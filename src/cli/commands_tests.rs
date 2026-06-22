@@ -1093,6 +1093,63 @@ fn queue_run_next_background_marks_task_running_and_records_run_state() {
 }
 
 #[test]
+fn queue_background_wrapper_script_writes_completion_marker_paths() {
+    let run_dir = std::path::Path::new(".jcode/queue/runs/task_1/20260620T100000Z");
+
+    let wrapper = background_completion_wrapper_script("test-worker --ok", run_dir);
+
+    assert!(wrapper.contains("test-worker --ok"));
+    assert!(wrapper.contains("exit_code.txt"));
+    assert!(wrapper.contains("ended_at.txt"));
+
+    #[cfg(windows)]
+    {
+        assert!(wrapper.contains("set \"JCODE_QUEUE_EXIT_CODE=!ERRORLEVEL!\""));
+        assert!(wrapper.contains("echo(!JCODE_QUEUE_EXIT_CODE!"));
+        assert!(wrapper.contains("exit /b !JCODE_QUEUE_EXIT_CODE!"));
+    }
+
+    #[cfg(not(windows))]
+    {
+        assert!(wrapper.contains("code=$?"));
+        assert!(wrapper.contains("printf '%s\\n' \"$code\""));
+        assert!(wrapper.contains("exit \"$code\""));
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn queue_background_windows_wrapper_handles_spaces_and_apostrophes_in_marker_paths() {
+    let run_dir = std::path::Path::new(
+        r"C:\Users\Aymane's AI\AI-Lab\repos\jcode\.jcode\queue\runs\task 1\20260620T100000Z",
+    );
+
+    let wrapper = background_completion_wrapper_script("test-worker --ok", run_dir);
+
+    assert!(wrapper.contains(r#"call test-worker --ok"#));
+    assert!(wrapper.contains(
+        r#">"C:\Users\Aymane's AI\AI-Lab\repos\jcode\.jcode\queue\runs\task 1\20260620T100000Z\exit_code.txt" echo(!JCODE_QUEUE_EXIT_CODE!"#
+    ));
+    assert!(wrapper.contains(
+        r#">"C:\Users\Aymane's AI\AI-Lab\repos\jcode\.jcode\queue\runs\task 1\20260620T100000Z\ended_at.txt" echo(!DATE! !TIME!"#
+    ));
+}
+
+#[test]
+fn queue_background_completion_wrapper_is_written_in_run_dir() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    let wrapper_path =
+        write_background_completion_wrapper("test-worker --ok", temp.path()).expect("wrapper");
+
+    assert!(wrapper_path.starts_with(temp.path()));
+    assert!(wrapper_path.exists());
+    let wrapper = std::fs::read_to_string(wrapper_path).expect("read wrapper");
+    assert!(wrapper.contains("test-worker --ok"));
+    assert!(wrapper.contains("exit_code.txt"));
+}
+
+#[test]
 fn queue_run_next_placeholder_replacement_uses_handoff_file_and_task_id() {
     let task = test_queue_task(
         "task_1",
