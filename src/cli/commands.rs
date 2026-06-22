@@ -1593,12 +1593,15 @@ pub fn run_queue_run_next_command(
     worker_profile: Option<&str>,
     dry_run: bool,
     execute: bool,
+    background: bool,
 ) -> Result<()> {
     run_queue_run_next_command_with_executor(
         worker_profile,
         dry_run,
         execute,
+        background,
         execute_rendered_worker_command,
+        start_rendered_worker_command_background,
     )
     .map(|_| ())
 }
@@ -1684,13 +1687,18 @@ fn run_queue_run_next_command_with_executor(
     worker_profile: Option<&str>,
     dry_run: bool,
     execute: bool,
+    background: bool,
     mut executor: impl FnMut(&str) -> Result<QueueRunCommandOutput>,
+    mut background_starter: impl FnMut(&str, &Path, &Path, &Path) -> Result<u32>,
 ) -> Result<Option<QueueRunNextOutput>> {
-    if dry_run && execute {
-        anyhow::bail!("queue run-next cannot use --dry-run and --execute together.");
-    }
-    if !dry_run && !execute {
-        anyhow::bail!("queue run-next requires either --dry-run or --execute.");
+    let selected_modes = [dry_run, execute, background]
+        .into_iter()
+        .filter(|enabled| *enabled)
+        .count();
+    if selected_modes != 1 {
+        anyhow::bail!(
+            "queue run-next requires exactly one of --dry-run, --execute, or --background."
+        );
     }
     let Some(worker_profile) = normalize_worker_profile_arg(worker_profile) else {
         anyhow::bail!("queue run-next requires --worker-profile <name>.");
@@ -1728,7 +1736,64 @@ fn run_queue_run_next_command_with_executor(
         println!("Command: {rendered_command}");
         return Ok(Some(QueueRunNextOutput {
             task_id: task.id,
+            run_id: String::new(),
             run_dir: PathBuf::new(),
+            pid: None,
+        }));
+    }
+
+    if background {
+        let started_at = chrono::Utc::now();
+        let run_dir = write_queue_run_start_artifacts(QueueRunStartArtifacts {
+            task_id: &task.id,
+            worker_profile,
+            command: &rendered_command,
+            started_at,
+        })?;
+        let stdout_path = run_dir.join("stdout.txt");
+        let stderr_path = run_dir.join("stderr.txt");
+        let pid = match background_starter(&rendered_command, &run_dir, &stdout_path, &stderr_path)
+        {
+            Ok(pid) => pid,
+            Err(err) => {
+                mark_queue_task_after_run(
+                    &mut state,
+                    index,
+                    crate::queue::TaskStatus::Blocked,
+                    chrono::Utc::now(),
+                );
+                crate::queue::save(&state)?;
+                anyhow::bail!(
+                    "Failed to start background worker command for task '{}': {err}",
+                    task.id
+                );
+            }
+        };
+        let run_state = create_queue_run_state_with_pid(
+            &task.id,
+            worker_profile,
+            &rendered_command,
+            started_at,
+            Some(pid),
+        )?;
+        mark_queue_task_after_run(
+            &mut state,
+            index,
+            crate::queue::TaskStatus::Running,
+            chrono::Utc::now(),
+        );
+        crate::queue::save(&state)?;
+
+        println!(
+            "{}",
+            format_queue_background_started(&task, worker_profile, &run_state)
+        );
+
+        return Ok(Some(QueueRunNextOutput {
+            task_id: task.id,
+            run_id: run_state.run_id,
+            run_dir,
+            pid: Some(pid),
         }));
     }
 
@@ -1786,7 +1851,7 @@ fn run_queue_run_next_command_with_executor(
             crate::queue::TaskStatus::Blocked,
         )
     };
-    finalize_queue_run_state(
+    let run_state = finalize_queue_run_state(
         run_state,
         run_status,
         ended_at,
@@ -1812,7 +1877,9 @@ fn run_queue_run_next_command_with_executor(
 
     Ok(Some(QueueRunNextOutput {
         task_id: task.id,
+        run_id: run_state.run_id,
         run_dir,
+        pid: None,
     }))
 }
 
@@ -2374,7 +2441,9 @@ struct QueueRunCommandOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QueueRunNextOutput {
     task_id: String,
+    run_id: String,
     run_dir: PathBuf,
+    pid: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -2382,9 +2451,9 @@ struct QueueRunMetadata<'a> {
     task_id: &'a str,
     worker_profile: &'a str,
     command: &'a str,
-    exit_code: i32,
+    exit_code: Option<i32>,
     started_at: String,
-    ended_at: String,
+    ended_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -2392,9 +2461,9 @@ struct QueueRunMetadataOwned {
     task_id: String,
     worker_profile: String,
     command: String,
-    exit_code: i32,
+    exit_code: Option<i32>,
     started_at: String,
-    ended_at: String,
+    ended_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2425,6 +2494,13 @@ struct QueueRunArtifacts<'a> {
     ended_at: chrono::DateTime<chrono::Utc>,
 }
 
+struct QueueRunStartArtifacts<'a> {
+    task_id: &'a str,
+    worker_profile: &'a str,
+    command: &'a str,
+    started_at: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct QueueRunLogOptions {
     stdout: bool,
@@ -2438,13 +2514,23 @@ fn create_queue_run_state(
     command: &str,
     started_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<crate::queue::RunState> {
+    create_queue_run_state_with_pid(task_id, worker_profile, command, started_at, None)
+}
+
+fn create_queue_run_state_with_pid(
+    task_id: &str,
+    worker_profile: &str,
+    command: &str,
+    started_at: chrono::DateTime<chrono::Utc>,
+    pid: Option<u32>,
+) -> Result<crate::queue::RunState> {
     let run_dir = queue_run_dir_path(task_id, started_at)?;
     let run = crate::queue::RunState {
         run_id: crate::id::new_id("run"),
         task_id: task_id.to_string(),
         worker_profile: worker_profile.to_string(),
         command: command.to_string(),
-        pid: None,
+        pid,
         status: crate::queue::RunStatus::Running,
         started_at,
         ended_at: None,
@@ -2483,6 +2569,35 @@ fn execute_rendered_worker_command(command: &str) -> Result<QueueRunCommandOutpu
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         exit_code: output.status.code().unwrap_or(-1),
     })
+}
+
+fn start_rendered_worker_command_background(
+    command: &str,
+    _run_dir: &Path,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Result<u32> {
+    let stdout = std::fs::File::create(stdout_path)
+        .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stdout_path.display()))?;
+    let stderr = std::fs::File::create(stderr_path)
+        .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stderr_path.display()))?;
+
+    #[cfg(windows)]
+    let child = ProcessCommand::new("cmd")
+        .args(["/C", command])
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn();
+
+    #[cfg(not(windows))]
+    let child = ProcessCommand::new("sh")
+        .args(["-c", command])
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn();
+
+    let child = child?;
+    Ok(child.id())
 }
 
 fn queue_run_dir_path(task_id: &str, started_at: chrono::DateTime<chrono::Utc>) -> Result<PathBuf> {
@@ -2606,10 +2721,14 @@ fn format_queue_runs(runs: &[QueueRunListEntry], limit: usize) -> String {
     for run in runs.iter().take(limit) {
         lines.push(format!("{}  {}", run.task_id, run.timestamp));
         match run.metadata.as_ref() {
-            Some(metadata) => {
-                lines.push(format!("  worker_profile: {}", metadata.worker_profile));
-                lines.push(format!("  exit_code: {}", metadata.exit_code));
-            }
+                Some(metadata) => {
+                    lines.push(format!("  worker_profile: {}", metadata.worker_profile));
+                    let exit_code = metadata
+                        .exit_code
+                        .map(|exit_code| exit_code.to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    lines.push(format!("  exit_code: {exit_code}"));
+                }
             None => {
                 lines.push("  worker_profile: unknown".to_string());
                 lines.push("  exit_code: unknown".to_string());
@@ -2687,6 +2806,30 @@ fn format_queue_run_status(run: &crate::queue::RunState) -> String {
     lines.push(format!("run_dir: {}", run.run_dir));
     lines.push(format!("stdout_path: {}", run.stdout_path));
     lines.push(format!("stderr_path: {}", run.stderr_path));
+    lines.join("\n")
+}
+
+fn format_queue_background_started(
+    task: &crate::queue::Task,
+    worker_profile: &str,
+    run: &crate::queue::RunState,
+) -> String {
+    let mut lines = vec![
+        "Started background queue run.".to_string(),
+        format!("run_id: {}", run.run_id),
+        format!("task: {}  {}", task.id, task.title),
+        format!("worker_profile: {worker_profile}"),
+    ];
+    if let Some(pid) = run.pid {
+        lines.push(format!("pid: {pid}"));
+    }
+    lines.push(format!("run_dir: {}", run.run_dir));
+    lines.push(format!("stdout_path: {}", run.stdout_path));
+    lines.push(format!("stderr_path: {}", run.stderr_path));
+    lines.push(format!(
+        "Inspect with: jcode queue active; jcode queue run-status {}; jcode queue logs {}",
+        run.run_id, run.run_id
+    ));
     lines.join("\n")
 }
 
@@ -2791,9 +2934,21 @@ fn format_queue_run_summary(
         format!("task_id: {}", run.metadata.task_id),
         format!("worker_profile: {}", run.metadata.worker_profile),
         format!("command: {}", run.metadata.command),
-        format!("exit_code: {}", run.metadata.exit_code),
+        format!(
+            "exit_code: {}",
+            run.metadata
+                .exit_code
+                .map(|exit_code| exit_code.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        ),
         format!("started_at: {}", run.metadata.started_at),
-        format!("ended_at: {}", run.metadata.ended_at),
+        format!(
+            "ended_at: {}",
+            run.metadata
+                .ended_at
+                .as_deref()
+                .unwrap_or("unknown")
+        ),
         format!("timestamp: {}", run.timestamp),
         format!("run_dir: {}", run.run_dir.display()),
         format!("stdout_path: {}", run.stdout_path.display()),
@@ -2852,9 +3007,32 @@ fn write_queue_run_artifacts(artifacts: QueueRunArtifacts<'_>) -> Result<PathBuf
         task_id: artifacts.task_id,
         worker_profile: artifacts.worker_profile,
         command: artifacts.command,
-        exit_code: artifacts.exit_code,
+        exit_code: Some(artifacts.exit_code),
         started_at: artifacts.started_at.to_rfc3339(),
-        ended_at: artifacts.ended_at.to_rfc3339(),
+        ended_at: Some(artifacts.ended_at.to_rfc3339()),
+    };
+    let metadata_json = serde_json::to_string_pretty(&metadata)?;
+    write_queue_run_artifact(&run_dir.join("run.json"), &metadata_json)?;
+
+    Ok(run_dir)
+}
+
+fn write_queue_run_start_artifacts(artifacts: QueueRunStartArtifacts<'_>) -> Result<PathBuf> {
+    let run_dir = queue_run_dir_path(artifacts.task_id, artifacts.started_at)?;
+    std::fs::create_dir_all(&run_dir)
+        .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", run_dir.display()))?;
+
+    write_queue_run_artifact(&run_dir.join("command.txt"), artifacts.command)?;
+    write_queue_run_artifact(&run_dir.join("stdout.txt"), "")?;
+    write_queue_run_artifact(&run_dir.join("stderr.txt"), "")?;
+
+    let metadata = QueueRunMetadata {
+        task_id: artifacts.task_id,
+        worker_profile: artifacts.worker_profile,
+        command: artifacts.command,
+        exit_code: None,
+        started_at: artifacts.started_at.to_rfc3339(),
+        ended_at: None,
     };
     let metadata_json = serde_json::to_string_pretty(&metadata)?;
     write_queue_run_artifact(&run_dir.join("run.json"), &metadata_json)?;

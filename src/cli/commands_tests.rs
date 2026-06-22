@@ -652,7 +652,8 @@ fn queue_init_force_overwrites_workers_toml() {
 
 #[test]
 fn queue_run_next_requires_worker_profile() {
-    let err = run_queue_run_next_command(None, true, false).expect_err("missing worker profile");
+    let err =
+        run_queue_run_next_command(None, true, false, false).expect_err("missing worker profile");
 
     assert!(
         err.to_string()
@@ -662,24 +663,37 @@ fn queue_run_next_requires_worker_profile() {
 
 #[test]
 fn queue_run_next_requires_dry_run() {
-    let err =
-        run_queue_run_next_command(Some("coder"), false, false).expect_err("missing run mode");
+    let err = run_queue_run_next_command(Some("coder"), false, false, false)
+        .expect_err("missing run mode");
 
     assert!(
         err.to_string()
-            .contains("requires either --dry-run or --execute")
+            .contains("requires exactly one of --dry-run, --execute, or --background")
     );
     assert!(err.to_string().contains("--dry-run"));
     assert!(err.to_string().contains("--execute"));
+    assert!(err.to_string().contains("--background"));
 }
 
 #[test]
 fn queue_run_next_rejects_dry_run_and_execute_together() {
-    let err = run_queue_run_next_command(Some("coder"), true, true).expect_err("both run modes");
+    let err =
+        run_queue_run_next_command(Some("coder"), true, true, false).expect_err("both run modes");
 
     assert!(
         err.to_string()
-            .contains("cannot use --dry-run and --execute together")
+            .contains("requires exactly one of --dry-run, --execute, or --background")
+    );
+}
+
+#[test]
+fn queue_run_next_rejects_execute_and_background_together() {
+    let err =
+        run_queue_run_next_command(Some("coder"), false, true, true).expect_err("both run modes");
+
+    assert!(
+        err.to_string()
+            .contains("requires exactly one of --dry-run, --execute, or --background")
     );
 }
 
@@ -696,7 +710,8 @@ fn queue_run_next_missing_worker_command_returns_helpful_error() {
     .unwrap();
 
     let err =
-        run_queue_run_next_command(Some("coder"), true, false).expect_err("missing worker command");
+        run_queue_run_next_command(Some("coder"), true, false, false)
+            .expect_err("missing worker command");
 
     assert!(
         err.to_string()
@@ -748,7 +763,7 @@ fn queue_run_next_dry_run_selects_worker_task_and_writes_handoff() {
     };
     crate::queue::save(&state).expect("save queue state");
 
-    run_queue_run_next_command(Some("coder"), true, false).expect("dry run");
+    run_queue_run_next_command(Some("coder"), true, false, false).expect("dry run");
 
     let handoff_path = project
         .path()
@@ -814,9 +829,16 @@ fn queue_run_next_execute_marks_running_before_command_and_review_after_success(
         })
     };
 
-    let output = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
-        .expect("execute success")
-        .expect("selected task");
+    let output = run_queue_run_next_command_with_executor(
+        Some("coder"),
+        false,
+        true,
+        false,
+        executor,
+        |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("not background"),
+    )
+    .expect("execute success")
+    .expect("selected task");
 
     assert!(saw_running);
     assert_eq!(output.task_id, "task_success");
@@ -889,9 +911,16 @@ fn queue_run_next_execute_marks_blocked_after_failure() {
         })
     };
 
-    let output = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
-        .expect("execute failure is recorded")
-        .expect("selected task");
+    let output = run_queue_run_next_command_with_executor(
+        Some("coder"),
+        false,
+        true,
+        false,
+        executor,
+        |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("not background"),
+    )
+    .expect("execute failure is recorded")
+    .expect("selected task");
 
     assert_eq!(output.task_id, "task_failure");
     let run_json = std::fs::read_to_string(output.run_dir.join("run.json")).expect("run json");
@@ -948,8 +977,15 @@ fn queue_run_next_execute_marks_blocked_and_failed_run_state_after_launch_error(
 
     let executor = |_: &str| anyhow::bail!("spawn failed");
 
-    let err = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
-        .expect_err("launch error");
+    let err = run_queue_run_next_command_with_executor(
+        Some("coder"),
+        false,
+        true,
+        false,
+        executor,
+        |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("not background"),
+    )
+    .expect_err("launch error");
     assert!(err.to_string().contains("Failed to launch worker command"));
 
     let reloaded = crate::queue::load().expect("reload queue");
@@ -964,6 +1000,97 @@ fn queue_run_next_execute_marks_blocked_and_failed_run_state_after_launch_error(
     assert_eq!(run.status, crate::queue::RunStatus::Failed);
     assert_eq!(run.exit_code, None);
     assert!(run.ended_at.is_some());
+}
+
+#[test]
+fn queue_run_next_background_marks_task_running_and_records_run_state() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ncommand = \"test-worker <handoff_file> --task <task_id>\"\n",
+    )
+    .unwrap();
+
+    let created_at = test_time("2026-06-20T10:00:00Z");
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "task_background",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            created_at,
+            Some("coder"),
+        )],
+    };
+    crate::queue::save(&state).expect("save queue state");
+
+    let executor = |_: &str| unreachable!("not execute");
+    let mut saw_paths = false;
+    let starter = |command: &str,
+                   run_dir: &std::path::Path,
+                   stdout_path: &std::path::Path,
+                   stderr_path: &std::path::Path| {
+        saw_paths = true;
+        assert!(command.contains("--task task_background"));
+        assert!(
+            run_dir
+                .parent()
+                .is_some_and(|path| path.ends_with("task_background"))
+        );
+        assert_eq!(stdout_path, run_dir.join("stdout.txt"));
+        assert_eq!(stderr_path, run_dir.join("stderr.txt"));
+        Ok(4242)
+    };
+
+    let output = run_queue_run_next_command_with_executor(
+        Some("coder"),
+        false,
+        false,
+        true,
+        executor,
+        starter,
+    )
+    .expect("background start")
+    .expect("selected task");
+
+    assert!(saw_paths);
+    assert_eq!(output.task_id, "task_background");
+    assert!(output.run_id.starts_with("run_"));
+    assert_eq!(output.pid, Some(4242));
+    assert!(output.run_dir.join("command.txt").exists());
+    assert!(output.run_dir.join("stdout.txt").exists());
+    assert!(output.run_dir.join("stderr.txt").exists());
+    assert!(output.run_dir.join("run.json").exists());
+
+    let reloaded = crate::queue::load().expect("reload queue");
+    assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Running);
+    assert!(reloaded.tasks[0].updated_at > created_at);
+
+    let index = crate::queue::load_run_index().expect("load run index after background");
+    assert_eq!(index.runs.len(), 1);
+    let run = &index.runs[0];
+    assert_eq!(run.run_id, output.run_id);
+    assert_eq!(run.task_id, "task_background");
+    assert_eq!(run.worker_profile, "coder");
+    assert!(run.command.contains("--task task_background"));
+    assert_eq!(run.pid, Some(4242));
+    assert_eq!(run.status, crate::queue::RunStatus::Running);
+    assert_eq!(run.ended_at, None);
+    assert_eq!(run.exit_code, None);
+    assert_eq!(run.run_dir, output.run_dir.display().to_string());
+    assert_eq!(
+        run.stdout_path,
+        output.run_dir.join("stdout.txt").display().to_string()
+    );
+    assert_eq!(
+        run.stderr_path,
+        output.run_dir.join("stderr.txt").display().to_string()
+    );
 }
 
 #[test]

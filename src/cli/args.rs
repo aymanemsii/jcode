@@ -875,6 +875,10 @@ pub(crate) enum QueueCommand {
         /// Execute the rendered command synchronously
         #[arg(long)]
         execute: bool,
+
+        /// Start the rendered command in the background
+        #[arg(long)]
+        background: bool,
     },
 
     /// List recent queue worker run artifacts
