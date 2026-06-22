@@ -903,6 +903,9 @@ pub(crate) enum QueueCommand {
         limit: usize,
     },
 
+    /// Refresh completed background queue runs from completion markers
+    RefreshRuns,
+
     /// Inspect one queue run from the run index
     RunStatus {
         /// Run ID

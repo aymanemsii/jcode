@@ -709,9 +709,8 @@ fn queue_run_next_missing_worker_command_returns_helpful_error() {
     )
     .unwrap();
 
-    let err =
-        run_queue_run_next_command(Some("coder"), true, false, false)
-            .expect_err("missing worker command");
+    let err = run_queue_run_next_command(Some("coder"), true, false, false)
+        .expect_err("missing worker command");
 
     assert!(
         err.to_string()
@@ -1279,13 +1278,195 @@ fn queue_active_lists_only_running_runs_and_filters_by_worker() {
 }
 
 #[test]
+fn queue_refresh_no_running_runs_prints_clear_message() {
+    let mut index = crate::queue::RunIndex {
+        runs: vec![test_queue_run_state(
+            "run_done",
+            "task_1",
+            "coder",
+            crate::queue::RunStatus::Succeeded,
+        )],
+    };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Review,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let output = refresh_queue_runs(&mut index, &mut state, test_time("2026-06-20T12:00:00Z"));
+    let summary = format_queue_refresh_runs_summary(&output);
+
+    assert_eq!(output.checked, 0);
+    assert!(!output.run_index_changed);
+    assert!(!output.queue_changed);
+    assert!(summary.contains("Checked 0 running queue run(s)"));
+    assert!(summary.contains("No running queue runs found."));
+}
+
+#[test]
+fn queue_refresh_leaves_running_run_without_marker_unchanged() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.run_dir = temp.path().display().to_string();
+    let original_run = run.clone();
+    let mut index = crate::queue::RunIndex { runs: vec![run] };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let output = refresh_queue_runs(&mut index, &mut state, test_time("2026-06-20T12:00:00Z"));
+
+    assert_eq!(output.checked, 1);
+    assert_eq!(output.still_running, 1);
+    assert!(!output.run_index_changed);
+    assert!(!output.queue_changed);
+    assert_eq!(index.runs[0], original_run);
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Running);
+}
+
+#[test]
+fn queue_refresh_marks_run_succeeded_and_task_review() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::fs::write(temp.path().join("exit_code.txt"), "0\n").expect("write exit code");
+    let ended_at = test_time("2026-06-20T12:00:00Z");
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.run_dir = temp.path().display().to_string();
+    let mut index = crate::queue::RunIndex { runs: vec![run] };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let output = refresh_queue_runs(&mut index, &mut state, ended_at);
+
+    assert_eq!(output.checked, 1);
+    assert_eq!(output.succeeded, 1);
+    assert_eq!(output.failed, 0);
+    assert!(output.run_index_changed);
+    assert!(output.queue_changed);
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Succeeded);
+    assert_eq!(index.runs[0].exit_code, Some(0));
+    assert_eq!(index.runs[0].ended_at, Some(ended_at));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+    assert_eq!(state.tasks[0].updated_at, ended_at);
+}
+
+#[test]
+fn queue_refresh_marks_run_failed_and_task_blocked() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::fs::write(temp.path().join("exit_code.txt"), "7\n").expect("write exit code");
+    let ended_at = test_time("2026-06-20T12:00:00Z");
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.run_dir = temp.path().display().to_string();
+    let mut index = crate::queue::RunIndex { runs: vec![run] };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let output = refresh_queue_runs(&mut index, &mut state, ended_at);
+
+    assert_eq!(output.checked, 1);
+    assert_eq!(output.succeeded, 0);
+    assert_eq!(output.failed, 1);
+    assert!(output.run_index_changed);
+    assert!(output.queue_changed);
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Failed);
+    assert_eq!(index.runs[0].exit_code, Some(7));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Blocked);
+}
+
+#[test]
+fn queue_refresh_saves_updated_run_index_and_queue() {
+    let _lock = crate::storage::lock_test_env();
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    let run_dir = project
+        .path()
+        .join(".jcode")
+        .join("queue")
+        .join("runs")
+        .join("task_1")
+        .join("20260620T100000Z");
+    std::fs::create_dir_all(&run_dir).expect("create run dir");
+    std::fs::write(run_dir.join("exit_code.txt"), "0\n").expect("write exit code");
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.run_dir = run_dir.display().to_string();
+    crate::queue::save_run_index(&crate::queue::RunIndex { runs: vec![run] })
+        .expect("save run index");
+    crate::queue::save(&crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    })
+    .expect("save queue");
+
+    run_queue_refresh_runs_command().expect("refresh runs");
+
+    let index = crate::queue::load_run_index().expect("load run index");
+    let state = crate::queue::load().expect("load queue");
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Succeeded);
+    assert_eq!(index.runs[0].exit_code, Some(0));
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+}
+
+#[test]
+fn queue_refresh_handles_malformed_exit_code_gracefully() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::fs::write(temp.path().join("exit_code.txt"), "not a code\n").expect("write exit code");
+    let mut run =
+        test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Running);
+    run.run_dir = temp.path().display().to_string();
+    let mut index = crate::queue::RunIndex { runs: vec![run] };
+    let mut state = crate::queue::QueueState {
+        tasks: vec![test_queue_task(
+            "task_1",
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskPriority::Normal,
+            test_time("2026-06-20T10:00:00Z"),
+        )],
+    };
+
+    let output = refresh_queue_runs(&mut index, &mut state, test_time("2026-06-20T12:00:00Z"));
+    let summary = format_queue_refresh_runs_summary(&output);
+
+    assert_eq!(output.checked, 1);
+    assert_eq!(output.malformed, 1);
+    assert_eq!(output.still_running, 1);
+    assert!(!output.run_index_changed);
+    assert!(!output.queue_changed);
+    assert_eq!(index.runs[0].status, crate::queue::RunStatus::Running);
+    assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Running);
+    assert!(summary.contains("unreadable completion markers"));
+    assert!(summary.contains("run_1"));
+}
+
+#[test]
 fn queue_run_status_displays_one_run() {
-    let run = test_queue_run_state(
-        "run_1",
-        "task_1",
-        "coder",
-        crate::queue::RunStatus::Failed,
-    );
+    let run = test_queue_run_state("run_1", "task_1", "coder", crate::queue::RunStatus::Failed);
 
     let output = format_queue_run_status(&run);
 
@@ -1324,8 +1505,8 @@ fn queue_logs_missing_run_returns_helpful_error() {
         full: false,
     };
 
-    let err = format_queue_run_logs_from_index(&index, "missing_run", options)
-        .expect_err("missing run");
+    let err =
+        format_queue_run_logs_from_index(&index, "missing_run", options).expect_err("missing run");
 
     assert!(
         err.to_string()

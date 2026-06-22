@@ -708,6 +708,12 @@ fn queue_subcommands_parse() {
         other => panic!("unexpected command: {:?}", other),
     }
 
+    let args = Args::try_parse_from(["jcode", "queue", "refresh-runs"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::RefreshRuns)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+
     let args = Args::try_parse_from(["jcode", "queue", "run-status", "run_1"]).unwrap();
     match args.command {
         Some(Command::Queue(QueueCommand::RunStatus { run_id })) => {
@@ -717,13 +723,7 @@ fn queue_subcommands_parse() {
     }
 
     let args = Args::try_parse_from([
-        "jcode",
-        "queue",
-        "logs",
-        "run_1",
-        "--stdout",
-        "--stderr",
-        "--full",
+        "jcode", "queue", "logs", "run_1", "--stdout", "--stderr", "--full",
     ])
     .unwrap();
     match args.command {

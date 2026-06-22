@@ -1615,7 +1615,24 @@ pub fn run_queue_runs_command(task_id: Option<&str>, limit: usize) -> Result<()>
 
 pub fn run_queue_active_command(worker_profile: Option<&str>, limit: usize) -> Result<()> {
     let index = crate::queue::load_run_index()?;
-    println!("{}", format_queue_active_runs(&index, worker_profile, limit));
+    println!(
+        "{}",
+        format_queue_active_runs(&index, worker_profile, limit)
+    );
+    Ok(())
+}
+
+pub fn run_queue_refresh_runs_command() -> Result<()> {
+    let mut index = crate::queue::load_run_index()?;
+    let mut state = crate::queue::load()?;
+    let output = refresh_queue_runs(&mut index, &mut state, chrono::Utc::now());
+    if output.run_index_changed {
+        crate::queue::save_run_index(&index)?;
+    }
+    if output.queue_changed {
+        crate::queue::save(&state)?;
+    }
+    println!("{}", format_queue_refresh_runs_summary(&output));
     Ok(())
 }
 
@@ -1633,7 +1650,10 @@ pub fn run_queue_logs_command(run_id: &str, stdout: bool, stderr: bool, full: bo
         stderr,
         full,
     };
-    println!("{}", format_queue_run_logs_from_index(&index, run_id, options)?);
+    println!(
+        "{}",
+        format_queue_run_logs_from_index(&index, run_id, options)?
+    );
     Ok(())
 }
 
@@ -2573,7 +2593,7 @@ fn execute_rendered_worker_command(command: &str) -> Result<QueueRunCommandOutpu
 
 fn start_rendered_worker_command_background(
     command: &str,
-    _run_dir: &Path,
+    run_dir: &Path,
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<u32> {
@@ -2581,23 +2601,58 @@ fn start_rendered_worker_command_background(
         .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stdout_path.display()))?;
     let stderr = std::fs::File::create(stderr_path)
         .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", stderr_path.display()))?;
+    let wrapped_command = background_completion_marker_command(command, run_dir);
 
     #[cfg(windows)]
     let child = ProcessCommand::new("cmd")
-        .args(["/C", command])
+        .args(["/V:ON", "/C", &wrapped_command])
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn();
 
     #[cfg(not(windows))]
     let child = ProcessCommand::new("sh")
-        .args(["-c", command])
+        .args(["-c", &wrapped_command])
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn();
 
     let child = child?;
     Ok(child.id())
+}
+
+fn background_completion_marker_command(command: &str, run_dir: &Path) -> String {
+    let exit_code_path = run_dir.join("exit_code.txt");
+    let ended_at_path = run_dir.join("ended_at.txt");
+
+    #[cfg(windows)]
+    {
+        format!(
+            "{command}\r\nset JCODE_QUEUE_EXIT_CODE=!ERRORLEVEL!\r\n>\"{}\" echo !JCODE_QUEUE_EXIT_CODE!\r\n>\"{}\" echo %DATE% %TIME%\r\n",
+            escape_windows_cmd_path(&exit_code_path),
+            escape_windows_cmd_path(&ended_at_path)
+        )
+    }
+
+    #[cfg(not(windows))]
+    {
+        format!(
+            "{command}\ncode=$?\nprintf '%s\\n' \"$code\" > {}\ndate -u +%Y-%m-%dT%H:%M:%SZ > {}\n",
+            shell_single_quote_path(&exit_code_path),
+            shell_single_quote_path(&ended_at_path)
+        )
+    }
+}
+
+#[cfg(windows)]
+fn escape_windows_cmd_path(path: &Path) -> String {
+    path.display().to_string().replace('"', "\"\"")
+}
+
+#[cfg(not(windows))]
+fn shell_single_quote_path(path: &Path) -> String {
+    let raw = path.display().to_string();
+    format!("'{}'", raw.replace('\'', "'\\''"))
 }
 
 fn queue_run_dir_path(task_id: &str, started_at: chrono::DateTime<chrono::Utc>) -> Result<PathBuf> {
@@ -2721,14 +2776,14 @@ fn format_queue_runs(runs: &[QueueRunListEntry], limit: usize) -> String {
     for run in runs.iter().take(limit) {
         lines.push(format!("{}  {}", run.task_id, run.timestamp));
         match run.metadata.as_ref() {
-                Some(metadata) => {
-                    lines.push(format!("  worker_profile: {}", metadata.worker_profile));
-                    let exit_code = metadata
-                        .exit_code
-                        .map(|exit_code| exit_code.to_string())
-                        .unwrap_or_else(|| "unknown".to_string());
-                    lines.push(format!("  exit_code: {exit_code}"));
-                }
+            Some(metadata) => {
+                lines.push(format!("  worker_profile: {}", metadata.worker_profile));
+                let exit_code = metadata
+                    .exit_code
+                    .map(|exit_code| exit_code.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                lines.push(format!("  exit_code: {exit_code}"));
+            }
             None => {
                 lines.push("  worker_profile: unknown".to_string());
                 lines.push("  exit_code: unknown".to_string());
@@ -2747,9 +2802,7 @@ fn format_queue_active_runs(
     let runs = index
         .running_runs()
         .into_iter()
-        .filter(|run| {
-            worker_profile.is_none_or(|profile| run.worker_profile.as_str() == profile)
-        })
+        .filter(|run| worker_profile.is_none_or(|profile| run.worker_profile.as_str() == profile))
         .take(limit)
         .collect::<Vec<_>>();
 
@@ -2783,6 +2836,134 @@ fn find_queue_run_status<'a>(
     index.find(run_id).ok_or_else(|| {
         anyhow::anyhow!("Queue run '{run_id}' was not found in .jcode/queue/runs/index.json.")
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueueRefreshRunsOutput {
+    checked: usize,
+    succeeded: usize,
+    failed: usize,
+    still_running: usize,
+    malformed: usize,
+    run_index_changed: bool,
+    queue_changed: bool,
+    warnings: Vec<String>,
+}
+
+fn refresh_queue_runs(
+    index: &mut crate::queue::RunIndex,
+    state: &mut crate::queue::QueueState,
+    ended_at: chrono::DateTime<chrono::Utc>,
+) -> QueueRefreshRunsOutput {
+    let mut output = QueueRefreshRunsOutput {
+        checked: 0,
+        succeeded: 0,
+        failed: 0,
+        still_running: 0,
+        malformed: 0,
+        run_index_changed: false,
+        queue_changed: false,
+        warnings: Vec::new(),
+    };
+
+    for run in &mut index.runs {
+        if run.status != crate::queue::RunStatus::Running {
+            continue;
+        }
+
+        output.checked += 1;
+        let exit_code_path = Path::new(&run.run_dir).join("exit_code.txt");
+        if !exit_code_path.exists() {
+            output.still_running += 1;
+            continue;
+        }
+
+        let exit_code = match read_queue_run_exit_code(&exit_code_path) {
+            Ok(exit_code) => exit_code,
+            Err(err) => {
+                output.malformed += 1;
+                output.still_running += 1;
+                output.warnings.push(format!(
+                    "Run {} has an unreadable completion marker at {}: {err}",
+                    run.run_id,
+                    exit_code_path.display()
+                ));
+                continue;
+            }
+        };
+
+        run.ended_at = Some(ended_at);
+        run.exit_code = Some(exit_code);
+        if exit_code == 0 {
+            run.status = crate::queue::RunStatus::Succeeded;
+            output.succeeded += 1;
+            if mark_queue_task_by_id(
+                state,
+                &run.task_id,
+                crate::queue::TaskStatus::Review,
+                ended_at,
+            ) {
+                output.queue_changed = true;
+            }
+        } else {
+            run.status = crate::queue::RunStatus::Failed;
+            output.failed += 1;
+            if mark_queue_task_by_id(
+                state,
+                &run.task_id,
+                crate::queue::TaskStatus::Blocked,
+                ended_at,
+            ) {
+                output.queue_changed = true;
+            }
+        }
+        output.run_index_changed = true;
+    }
+
+    output
+}
+
+fn read_queue_run_exit_code(path: &Path) -> Result<i32> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+    raw.trim()
+        .parse::<i32>()
+        .map_err(|err| anyhow::anyhow!("failed to parse exit code: {err}"))
+}
+
+fn mark_queue_task_by_id(
+    state: &mut crate::queue::QueueState,
+    task_id: &str,
+    status: crate::queue::TaskStatus,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) else {
+        return false;
+    };
+    if task.status == status && task.updated_at == updated_at {
+        return false;
+    }
+    task.status = status;
+    task.updated_at = updated_at;
+    true
+}
+
+fn format_queue_refresh_runs_summary(output: &QueueRefreshRunsOutput) -> String {
+    let mut lines = vec![format!(
+        "Checked {} running queue run(s): {} succeeded, {} failed, {} still running.",
+        output.checked, output.succeeded, output.failed, output.still_running
+    )];
+    if output.checked == 0 {
+        lines.push("No running queue runs found.".to_string());
+    }
+    if output.malformed > 0 {
+        lines.push(format!(
+            "{} run(s) had unreadable completion markers and were left running.",
+            output.malformed
+        ));
+        lines.extend(output.warnings.iter().cloned());
+    }
+    lines.join("\n")
 }
 
 fn format_queue_run_status(run: &crate::queue::RunState) -> String {
@@ -2944,10 +3125,7 @@ fn format_queue_run_summary(
         format!("started_at: {}", run.metadata.started_at),
         format!(
             "ended_at: {}",
-            run.metadata
-                .ended_at
-                .as_deref()
-                .unwrap_or("unknown")
+            run.metadata.ended_at.as_deref().unwrap_or("unknown")
         ),
         format!("timestamp: {}", run.timestamp),
         format!("run_dir: {}", run.run_dir.display()),
