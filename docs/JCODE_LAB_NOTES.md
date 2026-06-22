@@ -13,3 +13,16 @@ cargo build --release
 
 Current usable binary:
 .\target\release\jcode.exe
+
+## Queue Mode CLI MVP
+
+Status:
+- Queue Mode CLI MVP is implemented.
+- Project-local storage was fixed and validated.
+- Smoke test passed for `queue init`, worker config, task add, dashboard, dry-run, execute, local `queue.json`, local handoffs/runs, review, and approve.
+
+Current limitations:
+- Execution is synchronous foreground only.
+- No background daemon yet.
+- No parallel agents yet.
+- No TUI/Kanban yet.

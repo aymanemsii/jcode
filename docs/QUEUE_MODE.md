@@ -4,6 +4,17 @@ Queue Mode is a project-local task queue for handing work to command-line worker
 
 The current MVP is CLI-only. It does not start a background daemon, run tasks in parallel, or provide a TUI queue board yet.
 
+## MVP Status
+
+Queue Mode CLI MVP is implemented. Project-local storage was fixed and validated, and the smoke test passed for `queue init`, worker config, task add, dashboard, dry-run, execute, local `queue.json`, local handoffs/runs, review, and approve.
+
+Current limitations:
+
+- Execution is synchronous foreground only.
+- No background daemon yet.
+- No parallel agents yet.
+- No TUI/Kanban yet.
+
 ## Why It Exists
 
 Queue Mode gives agent-heavy development a simple control loop:
