@@ -794,6 +794,19 @@ fn queue_run_next_execute_marks_running_before_command_and_review_after_success(
     let executor = |_: &str| {
         let state = crate::queue::load().expect("load queue while command runs");
         saw_running = state.tasks[0].status == crate::queue::TaskStatus::Running;
+        let index = crate::queue::load_run_index().expect("load run index while command runs");
+        assert_eq!(index.runs.len(), 1);
+        let run = &index.runs[0];
+        assert_eq!(run.task_id, "task_success");
+        assert_eq!(run.worker_profile, "coder");
+        assert_eq!(run.status, crate::queue::RunStatus::Running);
+        assert_eq!(run.ended_at, None);
+        assert_eq!(run.exit_code, None);
+        assert!(run.command.contains("test-worker"));
+        assert!(run.command.contains("--task task_success"));
+        assert!(run.run_dir.contains("task_success"));
+        assert!(run.stdout_path.ends_with("stdout.txt"));
+        assert!(run.stderr_path.ends_with("stderr.txt"));
         Ok(QueueRunCommandOutput {
             stdout: "ok\n".to_string(),
             stderr: String::new(),
@@ -821,6 +834,25 @@ fn queue_run_next_execute_marks_running_before_command_and_review_after_success(
     let reloaded = crate::queue::load().expect("reload queue");
     assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Review);
     assert!(reloaded.tasks[0].updated_at > created_at);
+
+    let index = crate::queue::load_run_index().expect("load run index after success");
+    assert_eq!(index.runs.len(), 1);
+    let run = &index.runs[0];
+    assert_eq!(run.task_id, "task_success");
+    assert_eq!(run.worker_profile, "coder");
+    assert!(run.command.contains("--task task_success"));
+    assert_eq!(run.status, crate::queue::RunStatus::Succeeded);
+    assert_eq!(run.exit_code, Some(0));
+    assert!(run.ended_at.is_some());
+    assert_eq!(run.run_dir, output.run_dir.display().to_string());
+    assert_eq!(
+        run.stdout_path,
+        output.run_dir.join("stdout.txt").display().to_string()
+    );
+    assert_eq!(
+        run.stderr_path,
+        output.run_dir.join("stderr.txt").display().to_string()
+    );
 }
 
 #[test]
@@ -867,6 +899,71 @@ fn queue_run_next_execute_marks_blocked_after_failure() {
 
     let reloaded = crate::queue::load().expect("reload queue");
     assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Blocked);
+
+    let index = crate::queue::load_run_index().expect("load run index after failure");
+    assert_eq!(index.runs.len(), 1);
+    let run = &index.runs[0];
+    assert_eq!(run.task_id, "task_failure");
+    assert_eq!(run.worker_profile, "coder");
+    assert!(run.command.contains("--task task_failure"));
+    assert_eq!(run.status, crate::queue::RunStatus::Failed);
+    assert_eq!(run.exit_code, Some(23));
+    assert!(run.ended_at.is_some());
+    assert_eq!(run.run_dir, output.run_dir.display().to_string());
+    assert_eq!(
+        run.stdout_path,
+        output.run_dir.join("stdout.txt").display().to_string()
+    );
+    assert_eq!(
+        run.stderr_path,
+        output.run_dir.join("stderr.txt").display().to_string()
+    );
+}
+
+#[test]
+fn queue_run_next_execute_marks_blocked_and_failed_run_state_after_launch_error() {
+    let _lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    let _cwd = CurrentDirGuard::change_to(project.path());
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::create_dir_all(project.path().join(".jcode")).unwrap();
+    std::fs::write(
+        project.path().join(".jcode").join("workers.toml"),
+        "[workers.coder]\ncommand = \"test-worker <handoff_file> --task <task_id>\"\n",
+    )
+    .unwrap();
+
+    let state = crate::queue::QueueState {
+        tasks: vec![test_queue_task_with_worker(
+            "task_launch_error",
+            crate::queue::TaskStatus::Ready,
+            crate::queue::TaskPriority::Urgent,
+            test_time("2026-06-20T10:00:00Z"),
+            Some("coder"),
+        )],
+    };
+    crate::queue::save(&state).expect("save queue state");
+
+    let executor = |_: &str| anyhow::bail!("spawn failed");
+
+    let err = run_queue_run_next_command_with_executor(Some("coder"), false, true, executor)
+        .expect_err("launch error");
+    assert!(err.to_string().contains("Failed to launch worker command"));
+
+    let reloaded = crate::queue::load().expect("reload queue");
+    assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Blocked);
+
+    let index = crate::queue::load_run_index().expect("load run index after launch error");
+    assert_eq!(index.runs.len(), 1);
+    let run = &index.runs[0];
+    assert_eq!(run.task_id, "task_launch_error");
+    assert_eq!(run.worker_profile, "coder");
+    assert!(run.command.contains("--task task_launch_error"));
+    assert_eq!(run.status, crate::queue::RunStatus::Failed);
+    assert_eq!(run.exit_code, None);
+    assert!(run.ended_at.is_some());
 }
 
 #[test]

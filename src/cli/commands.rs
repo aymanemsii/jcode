@@ -1714,9 +1714,17 @@ fn run_queue_run_next_command_with_executor(
     crate::queue::save(&state)?;
 
     let started_at = chrono::Utc::now();
+    let run_state =
+        create_queue_run_state(&task.id, worker_profile, &rendered_command, started_at)?;
     let command_output = match executor(&rendered_command) {
         Ok(output) => output,
         Err(err) => {
+            finalize_queue_run_state(
+                run_state,
+                crate::queue::RunStatus::Failed,
+                chrono::Utc::now(),
+                None,
+            )?;
             mark_queue_task_after_run(
                 &mut state,
                 index,
@@ -1743,11 +1751,23 @@ fn run_queue_run_next_command_with_executor(
         ended_at,
     })?;
 
-    let final_status = if command_output.exit_code == 0 {
-        crate::queue::TaskStatus::Review
+    let (run_status, final_status) = if command_output.exit_code == 0 {
+        (
+            crate::queue::RunStatus::Succeeded,
+            crate::queue::TaskStatus::Review,
+        )
     } else {
-        crate::queue::TaskStatus::Blocked
+        (
+            crate::queue::RunStatus::Failed,
+            crate::queue::TaskStatus::Blocked,
+        )
     };
+    finalize_queue_run_state(
+        run_state,
+        run_status,
+        ended_at,
+        Some(command_output.exit_code),
+    )?;
     mark_queue_task_after_run(&mut state, index, final_status, chrono::Utc::now());
     crate::queue::save(&state)?;
 
@@ -2379,6 +2399,44 @@ struct QueueRunArtifacts<'a> {
     exit_code: i32,
     started_at: chrono::DateTime<chrono::Utc>,
     ended_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn create_queue_run_state(
+    task_id: &str,
+    worker_profile: &str,
+    command: &str,
+    started_at: chrono::DateTime<chrono::Utc>,
+) -> Result<crate::queue::RunState> {
+    let run_dir = queue_run_dir_path(task_id, started_at)?;
+    let run = crate::queue::RunState {
+        run_id: crate::id::new_id("run"),
+        task_id: task_id.to_string(),
+        worker_profile: worker_profile.to_string(),
+        command: command.to_string(),
+        pid: None,
+        status: crate::queue::RunStatus::Running,
+        started_at,
+        ended_at: None,
+        exit_code: None,
+        run_dir: run_dir.display().to_string(),
+        stdout_path: run_dir.join("stdout.txt").display().to_string(),
+        stderr_path: run_dir.join("stderr.txt").display().to_string(),
+    };
+    crate::queue::add_or_update_run_state(run.clone())?;
+    Ok(run)
+}
+
+fn finalize_queue_run_state(
+    mut run: crate::queue::RunState,
+    status: crate::queue::RunStatus,
+    ended_at: chrono::DateTime<chrono::Utc>,
+    exit_code: Option<i32>,
+) -> Result<crate::queue::RunState> {
+    run.status = status;
+    run.ended_at = Some(ended_at);
+    run.exit_code = exit_code;
+    crate::queue::add_or_update_run_state(run.clone())?;
+    Ok(run)
 }
 
 fn execute_rendered_worker_command(command: &str) -> Result<QueueRunCommandOutput> {
