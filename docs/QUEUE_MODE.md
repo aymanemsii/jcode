@@ -2,7 +2,7 @@
 
 Queue Mode is a project-local task queue for handing work to command-line workers. It stores tasks in the current repository, renders each selected task into a Markdown handoff, and can run a configured worker command against that handoff.
 
-The current MVP is CLI-only. It does not start a background daemon, run tasks in parallel, or provide a TUI queue board yet.
+The current MVP is CLI-first. It does not start a background daemon or run tasks in parallel. A read-only TUI queue board is available with `jcode queue board --tui`.
 
 ## Phase 2 Checkpoint
 
@@ -13,7 +13,7 @@ Current limitations:
 - No daemon.
 - No automatic refresh or polling; run completion is reconciled by manual `queue refresh-runs`.
 - No parallel/swarm scheduler.
-- No TUI.
+- The TUI board is read-only and opens with `jcode queue board --tui`.
 
 ## Current Command List
 
@@ -46,6 +46,7 @@ Current limitations:
 - `jcode queue reopen`
 - `jcode queue dashboard`
 - `jcode queue board`
+- `jcode queue board --tui`
 
 ## Why It Exists
 

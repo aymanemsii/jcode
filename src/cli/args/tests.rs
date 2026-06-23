@@ -956,6 +956,16 @@ fn queue_subcommands_parse() {
 }
 
 #[test]
+fn queue_board_help_mentions_read_only_tui_entry() {
+    let help = Args::try_parse_from(["jcode", "queue", "--help"])
+        .expect_err("queue help exits after rendering help")
+        .to_string();
+
+    assert!(help.contains("board"));
+    assert!(help.contains("use --tui for the read-only board view"));
+}
+
+#[test]
 fn acp_subcommand_parses() {
     let args = Args::try_parse_from(["jcode", "acp"]).unwrap();
     match args.command {

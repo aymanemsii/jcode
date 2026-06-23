@@ -991,7 +991,7 @@ pub(crate) enum QueueCommand {
         limit: usize,
     },
 
-    /// Show a grouped queue Kanban board
+    /// Show a grouped queue Kanban board; use --tui for the read-only board view
     Board {
         /// Only include tasks assigned to this worker profile
         #[arg(long)]
