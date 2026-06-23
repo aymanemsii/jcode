@@ -2,6 +2,9 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use std::time::{Duration, Instant};
+
+const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
 pub(super) fn run_read_only_queue_board(
     mut terminal: ratatui::DefaultTerminal,
@@ -12,14 +15,51 @@ pub(super) fn run_read_only_queue_board(
     let mut status_message = None;
     let mut selection = BoardSelection::default();
     let mut input_mode: Option<AddTaskPrompt> = None;
+    let mut auto_refresh = AutoRefreshState::new(Instant::now());
     select_first_available_task(&board, &mut selection);
     terminal.draw(|frame| {
-        draw_queue_board(frame, &board, &active_runs, &selection, None, None)
+        draw_queue_board(
+            frame,
+            &board,
+            &active_runs,
+            &selection,
+            None,
+            None,
+            auto_refresh.enabled,
+        )
     })?;
 
     loop {
-        match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
+        let next_event = if auto_refresh.enabled {
+            if event::poll(auto_refresh.poll_timeout(Instant::now()))? {
+                Some(event::read()?)
+            } else {
+                None
+            }
+        } else {
+            Some(event::read()?)
+        };
+
+        match next_event {
+            None => {
+                if auto_refresh.mark_refresh_if_due(Instant::now()) {
+                    status_message =
+                        Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
+                    preserve_selection_after_refresh(&board, &mut selection);
+                    terminal.draw(|frame| {
+                        draw_queue_board(
+                            frame,
+                            &board,
+                            &active_runs,
+                            &selection,
+                            status_message.as_deref(),
+                            input_mode.as_ref(),
+                            auto_refresh.enabled,
+                        )
+                    })?;
+                }
+            }
+            Some(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                 if let Some(input) = input_mode.as_mut() {
                     let mut submit: Option<AddTaskPrompt> = None;
                     let mut cancel = false;
@@ -95,6 +135,15 @@ pub(super) fn run_read_only_queue_board(
                             status_message =
                                 Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
                             preserve_selection_after_refresh(&board, &mut selection);
+                            auto_refresh.record_refresh(Instant::now());
+                        }
+                        KeyCode::Char('t') => {
+                            auto_refresh.toggle(Instant::now());
+                            status_message = Some(if auto_refresh.enabled {
+                                "auto-refresh on".to_string()
+                            } else {
+                                "auto-refresh off".to_string()
+                            });
                         }
                         KeyCode::Char('a') => {
                             status_message = Some(approve_selected_review_task(
@@ -125,10 +174,11 @@ pub(super) fn run_read_only_queue_board(
                         &selection,
                         status_message.as_deref(),
                         input_mode.as_ref(),
+                        auto_refresh.enabled,
                     )
                 })?;
             }
-            Event::Resize(_, _) => {
+            Some(Event::Resize(_, _)) => {
                 terminal.draw(|frame| {
                     draw_queue_board(
                         frame,
@@ -137,10 +187,11 @@ pub(super) fn run_read_only_queue_board(
                         &selection,
                         status_message.as_deref(),
                         input_mode.as_ref(),
+                        auto_refresh.enabled,
                     )
                 })?;
             }
-            _ => {}
+            Some(_) => {}
         }
     }
 
@@ -159,6 +210,7 @@ fn draw_queue_board(
     selection: &BoardSelection,
     status_message: Option<&str>,
     input_mode: Option<&AddTaskPrompt>,
+    auto_refresh_enabled: bool,
 ) {
     let area = frame.area();
     let layout = Layout::vertical([
@@ -196,7 +248,14 @@ fn draw_queue_board(
         );
     }
 
-    frame.render_widget(Paragraph::new(footer_text(status_message, input_mode)), layout[3]);
+    frame.render_widget(
+        Paragraph::new(footer_text(
+            status_message,
+            input_mode,
+            auto_refresh_enabled,
+        )),
+        layout[3],
+    );
 }
 
 fn refresh_board_state(
@@ -222,6 +281,47 @@ fn refresh_board_state(
     *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
 
     Ok(refresh_status_text(&output))
+}
+
+#[derive(Debug, Clone)]
+struct AutoRefreshState {
+    enabled: bool,
+    interval: Duration,
+    last_refresh_at: Instant,
+}
+
+impl AutoRefreshState {
+    fn new(now: Instant) -> Self {
+        Self {
+            enabled: true,
+            interval: AUTO_REFRESH_INTERVAL,
+            last_refresh_at: now,
+        }
+    }
+
+    fn poll_timeout(&self, now: Instant) -> Duration {
+        self.interval
+            .checked_sub(now.saturating_duration_since(self.last_refresh_at))
+            .unwrap_or_default()
+    }
+
+    fn mark_refresh_if_due(&mut self, now: Instant) -> bool {
+        if !self.enabled || now.saturating_duration_since(self.last_refresh_at) < self.interval {
+            return false;
+        }
+
+        self.last_refresh_at = now;
+        true
+    }
+
+    fn record_refresh(&mut self, now: Instant) {
+        self.last_refresh_at = now;
+    }
+
+    fn toggle(&mut self, now: Instant) {
+        self.enabled = !self.enabled;
+        self.last_refresh_at = now;
+    }
 }
 
 fn approve_selected_review_task(
@@ -671,7 +771,11 @@ fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
     )
 }
 
-fn footer_text(status_message: Option<&str>, input_mode: Option<&AddTaskPrompt>) -> String {
+fn footer_text(
+    status_message: Option<&str>,
+    input_mode: Option<&AddTaskPrompt>,
+    auto_refresh_enabled: bool,
+) -> String {
     if let Some(input) = input_mode {
         let prompt = match input.step {
             AddTaskPromptStep::Title => format!("Title: {}", input.title),
@@ -686,11 +790,17 @@ fn footer_text(status_message: Option<&str>, input_mode: Option<&AddTaskPrompt>)
         };
     }
 
-    let help =
-        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  q quit";
+    let auto = if auto_refresh_enabled {
+        "auto-refresh on"
+    } else {
+        "auto-refresh off"
+    };
+    let help = format!(
+        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | {auto}"
+    );
     match status_message {
         Some(message) => format!("{message} | {help}"),
-        None => help.to_string(),
+        None => help,
     }
 }
 
@@ -832,12 +942,50 @@ mod tests {
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  q quit";
-        assert_eq!(footer_text(None, None), help);
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | auto-refresh on";
+        assert_eq!(footer_text(None, None, true), help);
         assert_eq!(
-            footer_text(Some("refreshed"), None),
+            footer_text(Some("refreshed"), None, true),
             format!("refreshed | {help}")
         );
+    }
+
+    #[test]
+    fn footer_shows_auto_refresh_off() {
+        let help =
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | auto-refresh off";
+        assert_eq!(footer_text(None, None, false), help);
+    }
+
+    #[test]
+    fn auto_refresh_ticks_every_two_seconds() {
+        let start = Instant::now();
+        let mut auto_refresh = AutoRefreshState::new(start);
+
+        assert!(!auto_refresh.mark_refresh_if_due(start + Duration::from_millis(1999)));
+        assert_eq!(
+            auto_refresh.poll_timeout(start + Duration::from_millis(1999)),
+            Duration::from_millis(1)
+        );
+        assert!(auto_refresh.mark_refresh_if_due(start + Duration::from_secs(2)));
+        assert!(!auto_refresh
+            .mark_refresh_if_due(start + Duration::from_secs(2) + Duration::from_millis(1)));
+    }
+
+    #[test]
+    fn auto_refresh_toggle_disables_and_reenables_ticks() {
+        let start = Instant::now();
+        let mut auto_refresh = AutoRefreshState::new(start);
+
+        auto_refresh.toggle(start + Duration::from_millis(500));
+        assert!(!auto_refresh.enabled);
+        assert!(!auto_refresh.mark_refresh_if_due(start + Duration::from_secs(5)));
+
+        auto_refresh.toggle(start + Duration::from_secs(6));
+        assert!(auto_refresh.enabled);
+        assert!(!auto_refresh
+            .mark_refresh_if_due(start + Duration::from_secs(6) + Duration::from_millis(1999)));
+        assert!(auto_refresh.mark_refresh_if_due(start + Duration::from_secs(8)));
     }
 
     #[test]
@@ -849,7 +997,7 @@ mod tests {
         };
 
         assert_eq!(
-            footer_text(None, Some(&input)),
+            footer_text(None, Some(&input), true),
             "Worker profile (optional): coder | Enter submit  Esc cancel"
         );
     }
@@ -863,7 +1011,7 @@ mod tests {
         };
 
         assert_eq!(
-            footer_text(None, Some(&input)),
+            footer_text(None, Some(&input), true),
             "Title: Update docs | Enter submit  Esc cancel"
         );
     }
