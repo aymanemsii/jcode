@@ -1822,58 +1822,22 @@ fn run_queue_run_next_command_with_executor(
     }
 
     if background {
-        let started_at = chrono::Utc::now();
-        let run_dir = write_queue_run_start_artifacts(QueueRunStartArtifacts {
-            task_id: &task.id,
-            worker_profile,
-            command: &rendered_command,
-            started_at,
-        })?;
-        let stdout_path = run_dir.join("stdout.txt");
-        let stderr_path = run_dir.join("stderr.txt");
-        let pid = match background_starter(&rendered_command, &run_dir, &stdout_path, &stderr_path)
-        {
-            Ok(pid) => pid,
-            Err(err) => {
-                mark_queue_task_after_run(
-                    &mut state,
-                    index,
-                    crate::queue::TaskStatus::Blocked,
-                    chrono::Utc::now(),
-                );
-                crate::queue::save(&state)?;
-                anyhow::bail!(
-                    "Failed to start background worker command for task '{}': {err}",
-                    task.id
-                );
-            }
-        };
-        let run_state = create_queue_run_state_with_pid(
-            &task.id,
-            worker_profile,
-            &rendered_command,
-            started_at,
-            Some(pid),
-        )?;
-        mark_queue_task_after_run(
+        let output = start_queue_task_background_at_index(
             &mut state,
             index,
-            crate::queue::TaskStatus::Running,
-            chrono::Utc::now(),
-        );
-        crate::queue::save(&state)?;
+            worker_profile,
+            &rendered_command,
+            &mut background_starter,
+        )?;
+        let run_state = crate::queue::find_run_by_id(&output.run_id)?
+            .ok_or_else(|| anyhow::anyhow!("Queue run '{}' was not recorded.", output.run_id))?;
 
         println!(
             "{}",
             format_queue_background_started(&task, worker_profile, &run_state)
         );
 
-        return Ok(Some(QueueRunNextOutput {
-            task_id: task.id,
-            run_id: run_state.run_id,
-            run_dir,
-            pid: Some(pid),
-        }));
+        return Ok(Some(output));
     }
 
     let running_at = chrono::Utc::now();
@@ -2579,6 +2543,54 @@ struct QueueRunNextOutput {
     pid: Option<u32>,
 }
 
+fn start_selected_queue_task_background_with_starter(
+    task_id: &str,
+    mut background_starter: impl FnMut(&str, &Path, &Path, &Path) -> Result<u32>,
+) -> Result<QueueRunNextOutput> {
+    let mut state = crate::queue::load()?;
+    let index = state
+        .tasks
+        .iter()
+        .position(|task| task.id == task_id)
+        .ok_or_else(|| anyhow::anyhow!("Queue task '{task_id}' was not found."))?;
+    let task = state.tasks[index].clone();
+    if !queue_task_is_actionable(task.status) {
+        anyhow::bail!("selected task is not actionable");
+    }
+    let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        anyhow::bail!("selected task has no worker profile");
+    };
+
+    let profiles = crate::queue::load_worker_profiles()?;
+    let profile = find_worker_profile(&profiles, worker_profile)?;
+    let Some(command) = profile
+        .command
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        anyhow::bail!(
+            "Worker profile '{worker_profile}' has no command configured in .jcode/workers.toml."
+        );
+    };
+
+    let brief = format_queue_handoff(&task);
+    let handoff_path = write_queue_handoff(&task, &brief)?;
+    let rendered_command = render_worker_command(command, &task, &handoff_path);
+    start_queue_task_background_at_index(
+        &mut state,
+        index,
+        worker_profile,
+        &rendered_command,
+        &mut background_starter,
+    )
+}
+
 #[derive(Serialize)]
 struct QueueRunMetadata<'a> {
     task_id: &'a str,
@@ -2674,6 +2686,62 @@ fn create_queue_run_state_with_pid(
     };
     crate::queue::add_or_update_run_state(run.clone())?;
     Ok(run)
+}
+
+fn start_queue_task_background_at_index(
+    state: &mut crate::queue::QueueState,
+    index: usize,
+    worker_profile: &str,
+    rendered_command: &str,
+    mut background_starter: impl FnMut(&str, &Path, &Path, &Path) -> Result<u32>,
+) -> Result<QueueRunNextOutput> {
+    let task = state.tasks[index].clone();
+    let started_at = chrono::Utc::now();
+    let run_dir = write_queue_run_start_artifacts(QueueRunStartArtifacts {
+        task_id: &task.id,
+        worker_profile,
+        command: rendered_command,
+        started_at,
+    })?;
+    let stdout_path = run_dir.join("stdout.txt");
+    let stderr_path = run_dir.join("stderr.txt");
+    let pid = match background_starter(rendered_command, &run_dir, &stdout_path, &stderr_path) {
+        Ok(pid) => pid,
+        Err(err) => {
+            mark_queue_task_after_run(
+                state,
+                index,
+                crate::queue::TaskStatus::Blocked,
+                chrono::Utc::now(),
+            );
+            crate::queue::save(state)?;
+            anyhow::bail!(
+                "Failed to start background worker command for task '{}': {err}",
+                task.id
+            );
+        }
+    };
+    let run_state = create_queue_run_state_with_pid(
+        &task.id,
+        worker_profile,
+        rendered_command,
+        started_at,
+        Some(pid),
+    )?;
+    mark_queue_task_after_run(
+        state,
+        index,
+        crate::queue::TaskStatus::Running,
+        chrono::Utc::now(),
+    );
+    crate::queue::save(state)?;
+
+    Ok(QueueRunNextOutput {
+        task_id: task.id,
+        run_id: run_state.run_id,
+        run_dir,
+        pid: Some(pid),
+    })
 }
 
 fn finalize_queue_run_state(
@@ -3648,7 +3716,7 @@ fn next_queue_task_index(
         .tasks
         .iter()
         .enumerate()
-        .filter(|(_, task)| queue_actionable_status_rank(task.status).is_some())
+        .filter(|(_, task)| queue_task_is_actionable(task.status))
         .filter(|(_, task)| {
             worker_profile.is_none_or(|profile| task.worker_profile.as_deref() == Some(profile))
         })
@@ -3660,6 +3728,10 @@ fn next_queue_task_index(
             )
         })
         .map(|(index, _)| index)
+}
+
+fn queue_task_is_actionable(status: crate::queue::TaskStatus) -> bool {
+    queue_actionable_status_rank(status).is_some()
 }
 
 fn queue_actionable_status_rank(status: crate::queue::TaskStatus) -> Option<u8> {

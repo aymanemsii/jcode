@@ -95,6 +95,15 @@ pub(super) fn run_read_only_queue_board(
                             )?);
                             preserve_selection_after_refresh(&board, &mut selection);
                         }
+                        KeyCode::Char('x') => {
+                            status_message = Some(run_selected_task_in_background(
+                                &mut board,
+                                &mut active_runs,
+                                selection.selected_task_id(),
+                                &options,
+                            )?);
+                            preserve_selection_after_refresh(&board, &mut selection);
+                        }
                         _ => {}
                     }
                 }
@@ -249,6 +258,72 @@ fn approve_selected_review_task_in_state(
 
     super::approve_queue_task(state, task_id, updated_at)?;
     Ok(format!("approved {task_id}"))
+}
+
+fn run_selected_task_in_background(
+    board: &mut crate::queue::QueueBoard,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selected_task_id: Option<&str>,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    run_selected_task_in_background_with_starter(
+        board,
+        active_runs,
+        selected_task_id,
+        options,
+        super::start_rendered_worker_command_background,
+    )
+}
+
+fn run_selected_task_in_background_with_starter(
+    board: &mut crate::queue::QueueBoard,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selected_task_id: Option<&str>,
+    options: &QueueBoardTuiOptions,
+    background_starter: impl FnMut(
+        &str,
+        &std::path::Path,
+        &std::path::Path,
+        &std::path::Path,
+    ) -> Result<u32>,
+) -> Result<String> {
+    let Some(task_id) = selected_task_id else {
+        return Ok("no task selected".to_string());
+    };
+    if !selected_task_is_actionable(board, task_id) {
+        return Ok("selected task is not actionable".to_string());
+    }
+
+    let state = crate::queue::load()?;
+    let Some(task) = state.tasks.iter().find(|task| task.id == task_id) else {
+        return Ok("selected task is not actionable".to_string());
+    };
+    if !task_status_is_actionable(task.status) {
+        return Ok("selected task is not actionable".to_string());
+    }
+    if task
+        .worker_profile
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Ok("selected task has no worker profile".to_string());
+    }
+    drop(state);
+
+    let output =
+        super::start_selected_queue_task_background_with_starter(task_id, background_starter)?;
+    let state = crate::queue::load()?;
+    let index = crate::queue::load_run_index()?;
+    *board = crate::queue::build_queue_board(
+        &state,
+        options.worker_profile.as_deref(),
+        Some(options.limit),
+    );
+    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+
+    Ok(format!("started {} as {}", output.task_id, output.run_id))
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -487,6 +562,17 @@ fn selected_task_status(
     })
 }
 
+fn selected_task_is_actionable(board: &crate::queue::QueueBoard, task_id: &str) -> bool {
+    selected_task_status(board, task_id).is_some_and(task_status_is_actionable)
+}
+
+fn task_status_is_actionable(status: crate::queue::TaskStatus) -> bool {
+    matches!(
+        status,
+        crate::queue::TaskStatus::Backlog | crate::queue::TaskStatus::Ready
+    )
+}
+
 fn state_task_status(
     state: &crate::queue::QueueState,
     task_id: &str,
@@ -531,7 +617,7 @@ fn footer_text(status_message: Option<&str>, input_mode: Option<&AddTaskPrompt>)
     }
 
     let help =
-        "Up/Down or j/k move within column  Left/Right or h/l move columns  n new  a approve  r refresh  q quit";
+        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  q quit";
     match status_message {
         Some(message) => format!("{message} | {help}"),
         None => help.to_string(),
@@ -676,7 +762,7 @@ mod tests {
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  n new  a approve  r refresh  q quit";
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  q quit";
         assert_eq!(footer_text(None, None), help);
         assert_eq!(
             footer_text(Some("refreshed"), None),
@@ -984,6 +1070,146 @@ mod tests {
     }
 
     #[test]
+    fn run_selected_without_selected_task_is_rejected() {
+        let mut board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
+        let mut active_runs = Vec::new();
+        let options = test_options();
+
+        let message = run_selected_task_in_background_with_starter(
+            &mut board,
+            &mut active_runs,
+            None,
+            &options,
+            |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("no selection"),
+        )
+        .expect("reject missing selection");
+
+        assert_eq!(message, "no task selected");
+    }
+
+    #[test]
+    fn run_selected_non_actionable_task_is_rejected() {
+        let mut board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Review)]);
+        let mut active_runs = Vec::new();
+        let options = test_options();
+
+        let message = run_selected_task_in_background_with_starter(
+            &mut board,
+            &mut active_runs,
+            Some("task_1"),
+            &options,
+            |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("non-actionable"),
+        )
+        .expect("reject non-actionable");
+
+        assert_eq!(message, "selected task is not actionable");
+    }
+
+    #[test]
+    fn run_selected_missing_worker_profile_is_rejected() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+
+        let timestamp = test_time("2026-06-20T10:00:00Z");
+        let state = crate::queue::QueueState {
+            tasks: vec![test_state_task_with_worker(
+                "task_1",
+                crate::queue::TaskStatus::Ready,
+                timestamp,
+                None,
+            )],
+        };
+        crate::queue::save(&state).expect("save queue");
+        let mut board = crate::queue::build_queue_board(&state, None, Some(100));
+        let mut active_runs = Vec::new();
+        let options = test_options();
+
+        let message = run_selected_task_in_background_with_starter(
+            &mut board,
+            &mut active_runs,
+            Some("task_1"),
+            &options,
+            |_command, _run_dir, _stdout_path, _stderr_path| unreachable!("missing worker"),
+        )
+        .expect("reject missing worker profile");
+
+        assert_eq!(message, "selected task has no worker profile");
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Ready);
+    }
+
+    #[test]
+    fn run_selected_starts_actionable_task_with_worker_profile() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.coder]\ncommand = \"test-worker <handoff_file> --task <task_id>\"\n",
+        )
+        .expect("write workers");
+
+        let timestamp = test_time("2026-06-20T10:00:00Z");
+        let state = crate::queue::QueueState {
+            tasks: vec![test_state_task_with_worker(
+                "task_1",
+                crate::queue::TaskStatus::Ready,
+                timestamp,
+                Some("coder"),
+            )],
+        };
+        crate::queue::save(&state).expect("save queue");
+        let mut board = crate::queue::build_queue_board(&state, None, Some(100));
+        let mut active_runs = Vec::new();
+        let options = test_options();
+        let mut saw_command = false;
+
+        let message = run_selected_task_in_background_with_starter(
+            &mut board,
+            &mut active_runs,
+            Some("task_1"),
+            &options,
+            |command, run_dir, stdout_path, stderr_path| {
+                saw_command = true;
+                assert!(command.contains("--task task_1"));
+                assert!(command.contains("task_1.md"));
+                assert!(
+                    run_dir
+                        .parent()
+                        .is_some_and(|path| path.ends_with("task_1"))
+                );
+                assert_eq!(stdout_path, run_dir.join("stdout.txt"));
+                assert_eq!(stderr_path, run_dir.join("stderr.txt"));
+                Ok(4242)
+            },
+        )
+        .expect("start selected task");
+
+        assert!(saw_command);
+        assert!(message.starts_with("started task_1 as run_"));
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert_eq!(reloaded.tasks[0].status, crate::queue::TaskStatus::Running);
+
+        let index = crate::queue::load_run_index().expect("load run index");
+        assert_eq!(index.runs.len(), 1);
+        let run = &index.runs[0];
+        assert_eq!(run.task_id, "task_1");
+        assert_eq!(run.worker_profile, "coder");
+        assert_eq!(run.status, crate::queue::RunStatus::Running);
+        assert_eq!(run.pid, Some(4242));
+        assert_eq!(active_runs.len(), 1);
+        assert_eq!(active_runs[0].run_id, run.run_id);
+    }
+
+    #[test]
     fn selection_preserves_approved_task_when_still_visible_after_reload() {
         let reloaded_board =
             test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Done)]);
@@ -1107,6 +1333,15 @@ mod tests {
         status: crate::queue::TaskStatus,
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> crate::queue::Task {
+        test_state_task_with_worker(id, status, timestamp, None)
+    }
+
+    fn test_state_task_with_worker(
+        id: &str,
+        status: crate::queue::TaskStatus,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        worker_profile: Option<&str>,
+    ) -> crate::queue::Task {
         crate::queue::Task {
             id: id.to_string(),
             title: id.to_string(),
@@ -1114,10 +1349,17 @@ mod tests {
             project: None,
             status,
             priority: crate::queue::TaskPriority::Normal,
-            worker_profile: None,
+            worker_profile: worker_profile.map(str::to_string),
             output_path: None,
             created_at: timestamp,
             updated_at: timestamp,
+        }
+    }
+
+    fn test_options() -> QueueBoardTuiOptions {
+        QueueBoardTuiOptions {
+            worker_profile: None,
+            limit: 100,
         }
     }
 
@@ -1125,5 +1367,46 @@ mod tests {
         chrono::DateTime::parse_from_rfc3339(value)
             .unwrap()
             .with_timezone(&chrono::Utc)
+    }
+
+    struct CurrentDirGuard {
+        original: std::path::PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("change current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
+
+    struct EnvGuard {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        fn capture(key: &'static str) -> Self {
+            Self {
+                key,
+                original: std::env::var_os(key),
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => crate::env::set_var(self.key, value),
+                None => crate::env::remove_var(self.key),
+            }
+        }
     }
 }
