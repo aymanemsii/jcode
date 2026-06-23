@@ -27,14 +27,24 @@ pub(super) fn run_read_only_queue_board(
                         KeyCode::Esc => {
                             cancel = true;
                         }
-                        KeyCode::Enter => {
-                            submit = Some(input.clone());
-                        }
+                        KeyCode::Enter => match input.step {
+                            AddTaskPromptStep::Title => {
+                                if input.title.trim().is_empty() {
+                                    status_message = Some("title required".to_string());
+                                } else {
+                                    input.step = AddTaskPromptStep::WorkerProfile;
+                                    status_message = None;
+                                }
+                            }
+                            AddTaskPromptStep::WorkerProfile => {
+                                submit = Some(input.clone());
+                            }
+                        },
                         KeyCode::Backspace => {
-                            input.title.pop();
+                            input.current_value_mut().pop();
                         }
                         KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            input.title.push(c);
+                            input.current_value_mut().push(c);
                         }
                         _ => {}
                     }
@@ -329,6 +339,24 @@ fn run_selected_task_in_background_with_starter(
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct AddTaskPrompt {
     title: String,
+    worker_profile: String,
+    step: AddTaskPromptStep,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum AddTaskPromptStep {
+    #[default]
+    Title,
+    WorkerProfile,
+}
+
+impl AddTaskPrompt {
+    fn current_value_mut(&mut self) -> &mut String {
+        match self.step {
+            AddTaskPromptStep::Title => &mut self.title,
+            AddTaskPromptStep::WorkerProfile => &mut self.worker_profile,
+        }
+    }
 }
 
 fn add_task_from_prompt(
@@ -338,8 +366,11 @@ fn add_task_from_prompt(
     input: &AddTaskPrompt,
     options: &QueueBoardTuiOptions,
 ) -> Result<String> {
+    let worker_profile = normalized_worker_profile(input.worker_profile.as_str());
+    validate_add_task_worker_profile(worker_profile)?;
+
     let mut state = crate::queue::load()?;
-    let task_id = add_task_to_state(&mut state, &input.title)?;
+    let task_id = add_task_to_state(&mut state, &input.title, worker_profile)?;
     crate::queue::save(&state)?;
 
     let index = crate::queue::load_run_index()?;
@@ -356,7 +387,11 @@ fn add_task_from_prompt(
     Ok(format!("added {task_id}"))
 }
 
-fn add_task_to_state(state: &mut crate::queue::QueueState, title: &str) -> Result<String> {
+fn add_task_to_state(
+    state: &mut crate::queue::QueueState,
+    title: &str,
+    worker_profile: Option<&str>,
+) -> Result<String> {
     let title = title.trim();
     if title.is_empty() {
         anyhow::bail!("title required");
@@ -367,12 +402,42 @@ fn add_task_to_state(state: &mut crate::queue::QueueState, title: &str) -> Resul
         String::new(),
         None,
         crate::queue::TaskPriority::Normal,
-        None,
+        normalized_worker_profile(worker_profile.unwrap_or_default()).map(str::to_string),
         None,
     );
     let task_id = task.id.clone();
     state.tasks.push(task);
     Ok(task_id)
+}
+
+fn normalized_worker_profile(worker_profile: &str) -> Option<&str> {
+    let worker_profile = worker_profile.trim();
+    if worker_profile.is_empty() {
+        None
+    } else {
+        Some(worker_profile)
+    }
+}
+
+fn validate_add_task_worker_profile(worker_profile: Option<&str>) -> Result<()> {
+    let Some(worker_profile) = worker_profile else {
+        return Ok(());
+    };
+
+    let path = crate::queue::worker_profiles_file_path()?;
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let profiles = crate::queue::load_worker_profiles_from_path(path)?;
+    if profiles
+        .iter()
+        .any(|profile| profile.name == worker_profile)
+    {
+        Ok(())
+    } else {
+        anyhow::bail!("unknown worker profile: {worker_profile}");
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -608,7 +673,12 @@ fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
 
 fn footer_text(status_message: Option<&str>, input_mode: Option<&AddTaskPrompt>) -> String {
     if let Some(input) = input_mode {
-        let prompt = format!("new task title: {}", input.title);
+        let prompt = match input.step {
+            AddTaskPromptStep::Title => format!("Title: {}", input.title),
+            AddTaskPromptStep::WorkerProfile => {
+                format!("Worker profile (optional): {}", input.worker_profile)
+            }
+        };
         let help = "Enter submit  Esc cancel";
         return match status_message {
             Some(message) => format!("{message} | {prompt} | {help}"),
@@ -774,11 +844,27 @@ mod tests {
     fn footer_mentions_submit_and_cancel_in_input_mode() {
         let input = AddTaskPrompt {
             title: "Update docs".to_string(),
+            worker_profile: "coder".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
         };
 
         assert_eq!(
             footer_text(None, Some(&input)),
-            "new task title: Update docs | Enter submit  Esc cancel"
+            "Worker profile (optional): coder | Enter submit  Esc cancel"
+        );
+    }
+
+    #[test]
+    fn footer_shows_title_prompt_in_first_input_step() {
+        let input = AddTaskPrompt {
+            title: "Update docs".to_string(),
+            worker_profile: String::new(),
+            step: AddTaskPromptStep::Title,
+        };
+
+        assert_eq!(
+            footer_text(None, Some(&input)),
+            "Title: Update docs | Enter submit  Esc cancel"
         );
     }
 
@@ -786,7 +872,7 @@ mod tests {
     fn add_task_to_state_adds_backlog_task_with_defaults() {
         let mut state = crate::queue::QueueState::default();
 
-        let task_id = add_task_to_state(&mut state, "  New board task  ").expect("add task");
+        let task_id = add_task_to_state(&mut state, "  New board task  ", None).expect("add task");
 
         assert_eq!(state.tasks.len(), 1);
         assert_eq!(state.tasks[0].id, task_id);
@@ -803,10 +889,111 @@ mod tests {
     fn add_task_to_state_rejects_empty_title() {
         let mut state = crate::queue::QueueState::default();
 
-        let err = add_task_to_state(&mut state, "   ").expect_err("empty title rejected");
+        let err = add_task_to_state(&mut state, "   ", None).expect_err("empty title rejected");
 
         assert!(err.to_string().contains("title required"));
         assert!(state.tasks.is_empty());
+    }
+
+    #[test]
+    fn add_task_to_state_stores_worker_profile_when_present() {
+        let mut state = crate::queue::QueueState::default();
+
+        add_task_to_state(&mut state, "New board task", Some("  coder  ")).expect("add task");
+
+        assert_eq!(state.tasks[0].worker_profile.as_deref(), Some("coder"));
+    }
+
+    #[test]
+    fn add_task_to_state_stores_none_for_empty_worker_profile() {
+        let mut state = crate::queue::QueueState::default();
+
+        add_task_to_state(&mut state, "New board task", Some("   ")).expect("add task");
+
+        assert_eq!(state.tasks[0].worker_profile, None);
+    }
+
+    #[test]
+    fn add_task_from_prompt_saves_worker_profile_and_selects_new_task() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.coder]\ncommand = \"test-worker <handoff_file>\"\n",
+        )
+        .expect("write workers");
+
+        let mut board =
+            crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut active_runs = Vec::new();
+        let mut selection = BoardSelection::default();
+        let input = AddTaskPrompt {
+            title: "New board task".to_string(),
+            worker_profile: "coder".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        let message = add_task_from_prompt(
+            &mut board,
+            &mut active_runs,
+            &mut selection,
+            &input,
+            &test_options(),
+        )
+        .expect("add task");
+
+        assert!(message.starts_with("added task_"));
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert_eq!(reloaded.tasks.len(), 1);
+        assert_eq!(reloaded.tasks[0].worker_profile.as_deref(), Some("coder"));
+        assert_eq!(
+            selection.selected_task_id(),
+            Some(reloaded.tasks[0].id.as_str())
+        );
+    }
+
+    #[test]
+    fn add_task_from_prompt_rejects_unknown_worker_profile_when_config_exists() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.coder]\ncommand = \"test-worker <handoff_file>\"\n",
+        )
+        .expect("write workers");
+
+        let mut board =
+            crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut active_runs = Vec::new();
+        let mut selection = BoardSelection::default();
+        let input = AddTaskPrompt {
+            title: "New board task".to_string(),
+            worker_profile: "reviewer".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        let err = add_task_from_prompt(
+            &mut board,
+            &mut active_runs,
+            &mut selection,
+            &input,
+            &test_options(),
+        )
+        .expect_err("unknown worker rejected");
+
+        assert_eq!(err.to_string(), "unknown worker profile: reviewer");
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert!(reloaded.tasks.is_empty());
     }
 
     #[test]
