@@ -359,6 +359,8 @@ This keeps the first integration inside the presentation layer plus queue base s
 
 ## Proposed Smallest Implementation Step
 
+Status: implemented as a read-only `/queue` overlay in the main interactive app.
+
 Next branch goal:
 
 ```text
@@ -396,6 +398,17 @@ Expected user flow:
 4. User browses columns/tasks.
 5. User presses `Esc` or `q`.
 6. The normal chat/app is restored in the same terminal.
+
+Implemented behavior:
+
+- `/queue` is registered in slash-command suggestions and the help overlay.
+- The overlay is embedded in the main TUI render/key path and returns cleanly to chat with `Esc` or `q`.
+- It reuses `QueueBoard`, `RunIndex`, and `build_queue_board` from `jcode-base`.
+- It is intentionally read-only: navigation and `r` reload are supported, but task creation, background starts, approvals, and run reconciliation are not wired into the main app.
+
+Next step for richer behavior:
+
+- Extract queue mutation/run-refresh helpers out of CLI-only modules into a lower shared queue service before adding safe main-app mutations or auto-refresh.
 
 If returning cleanly is hard:
 

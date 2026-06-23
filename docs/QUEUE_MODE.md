@@ -632,6 +632,18 @@ jcode queue board --tui
 
 `--tui` opens the standalone Kanban board for the current project-local queue state. It supports column/task navigation, task creation, background starts for selected actionable tasks, manual refresh, auto-refresh while the board is open, and approval of selected review tasks. It does not support drag-and-drop, task editing, selected-task logs/details, daemon scheduling, automatic task scheduling, or parallel/swarm scheduling. Quit with `q`.
 
+### Main interactive app `/queue`
+
+From the main interactive app launched with `jcode`, type:
+
+```text
+/queue
+```
+
+This opens a read-only project-local Queue Board overlay in the same terminal. It shows the Kanban columns and active runs, supports arrow or `h`/`j`/`k`/`l` navigation, and refreshes queue/run-index state with `r`. Press `Esc` or `q` to close the overlay and return to the main chat.
+
+Current limitations: the main-app overlay does not create tasks, start selected tasks, approve/reopen/cancel tasks, reconcile completed background runs, auto-refresh, or run daemon/scheduler behavior. Use `jcode queue board --tui` for the existing standalone mutating board, and `jcode queue refresh-runs` for run reconciliation.
+
 ## Safety Notes
 
 - Worker commands are project-local and come from `.jcode/workers.toml`.
@@ -640,7 +652,7 @@ jcode queue board --tui
 - There is no background Queue Mode daemon.
 - The standalone TUI auto-refreshes running tasks while open. In CLI workflows, run `jcode queue refresh-runs` manually.
 - There is no parallel Queue Mode scheduler.
-- The standalone TUI is not integrated into the main `jcode` interactive app yet.
+- The main `jcode` interactive app has a read-only `/queue` overlay; mutating board actions remain in the standalone TUI.
 - Worker commands run through the local shell (`sh -c` on Unix, `cmd /C` on Windows), so quote paths and arguments carefully when adding complex commands.
 - Queue Mode records process stdout, stderr, exit code, timestamps, and command metadata, but it does not validate the semantic quality of worker output. Keep human review in the loop.
 - On Windows, `queue cancel-run` uses forced process-tree termination.
