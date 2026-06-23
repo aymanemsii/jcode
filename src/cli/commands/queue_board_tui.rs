@@ -121,6 +121,9 @@ fn filtered_active_runs(
 }
 
 fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
+    if output.checked == 0 {
+        return "refreshed".to_string();
+    }
     format!(
         "refresh-runs: {} succeeded, {} failed, {} still running",
         output.succeeded, output.failed, output.still_running
@@ -277,5 +280,21 @@ mod tests {
             refresh_status_text(&output),
             "refresh-runs: 1 succeeded, 2 failed, 1 still running"
         );
+    }
+
+    #[test]
+    fn refresh_status_text_is_simple_when_no_runs_checked() {
+        let output = super::super::QueueRefreshRunsOutput {
+            checked: 0,
+            succeeded: 0,
+            failed: 0,
+            still_running: 0,
+            malformed: 0,
+            run_index_changed: false,
+            queue_changed: false,
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(refresh_status_text(&output), "refreshed");
     }
 }

@@ -603,7 +603,7 @@ jcode queue board --tui
 - There is no background Queue Mode daemon.
 - There is no automatic refresh; run `jcode queue refresh-runs` manually.
 - There is no parallel Queue Mode scheduler.
-- The Queue Mode TUI board is read-only. It has no approve, reopen, cancel, refresh, polling, or worker-run actions.
+- The Queue Mode TUI board is read-only. Its only action is manual refresh with `r`; it has no approve, reopen, cancel, polling, or worker-run actions.
 - Worker commands run through the local shell (`sh -c` on Unix, `cmd /C` on Windows), so quote paths and arguments carefully when adding complex commands.
 - Queue Mode records process stdout, stderr, exit code, timestamps, and command metadata, but it does not validate the semantic quality of worker output. Keep human review in the loop.
 - On Windows, `queue cancel-run` uses forced process-tree termination.
