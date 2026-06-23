@@ -65,6 +65,34 @@ pub(super) fn run_read_only_queue_board(
                         )
                     })?;
                 }
+                KeyCode::Char('a') => {
+                    let previous_visible_ids = visible_task_ids(&board)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect::<Vec<_>>();
+                    let previous_selection = selected_task_id.clone();
+                    status_message = Some(approve_selected_review_task(
+                        &mut board,
+                        &mut active_runs,
+                        selected_task_id.as_deref(),
+                        &options,
+                    )?);
+                    preserve_selection_after_reload(
+                        &board,
+                        &mut selected_task_id,
+                        previous_selection.as_deref(),
+                        &previous_visible_ids,
+                    );
+                    terminal.draw(|frame| {
+                        draw_queue_board(
+                            frame,
+                            &board,
+                            &active_runs,
+                            selected_task_id.as_deref(),
+                            status_message.as_deref(),
+                        )
+                    })?;
+                }
                 _ => {}
             },
             Event::Resize(_, _) => {
@@ -156,6 +184,52 @@ fn refresh_board_state(
     Ok(refresh_status_text(&output))
 }
 
+fn approve_selected_review_task(
+    board: &mut crate::queue::QueueBoard,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selected_task_id: Option<&str>,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    let mut state = crate::queue::load()?;
+    let message = approve_selected_review_task_in_state(
+        board,
+        &mut state,
+        selected_task_id,
+        chrono::Utc::now(),
+    )?;
+    if message.starts_with("approved ") {
+        crate::queue::save(&state)?;
+        let index = crate::queue::load_run_index()?;
+        *board = crate::queue::build_queue_board(
+            &state,
+            options.worker_profile.as_deref(),
+            Some(options.limit),
+        );
+        *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+    }
+    Ok(message)
+}
+
+fn approve_selected_review_task_in_state(
+    board: &crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    selected_task_id: Option<&str>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<String> {
+    let Some(task_id) = selected_task_id else {
+        return Ok("no task selected".to_string());
+    };
+    if selected_task_status(board, task_id) != Some(crate::queue::TaskStatus::Review) {
+        return Ok("selected task is not in review".to_string());
+    }
+    if state_task_status(state, task_id) != Some(crate::queue::TaskStatus::Review) {
+        return Ok("selected task is not in review".to_string());
+    }
+
+    super::approve_queue_task(state, task_id, updated_at)?;
+    Ok(format!("approved {task_id}"))
+}
+
 fn normalize_selection(board: &crate::queue::QueueBoard, selected_task_id: &mut Option<String>) {
     let visible_ids = visible_task_ids(board);
     if visible_ids.is_empty() {
@@ -171,6 +245,46 @@ fn normalize_selection(board: &crate::queue::QueueBoard, selected_task_id: &mut 
     }
 
     *selected_task_id = Some(visible_ids[0].to_string());
+}
+
+fn preserve_selection_after_reload(
+    board: &crate::queue::QueueBoard,
+    selected_task_id: &mut Option<String>,
+    previous_selection: Option<&str>,
+    previous_visible_ids: &[String],
+) {
+    let visible_ids = visible_task_ids(board);
+    if visible_ids.is_empty() {
+        *selected_task_id = None;
+        return;
+    }
+
+    if previous_selection.is_some_and(|selected| visible_ids.contains(&selected)) {
+        return;
+    }
+
+    let Some(previous_selection) = previous_selection else {
+        *selected_task_id = Some(visible_ids[0].to_string());
+        return;
+    };
+    let Some(previous_index) = previous_visible_ids
+        .iter()
+        .position(|id| id == previous_selection)
+    else {
+        *selected_task_id = Some(visible_ids[0].to_string());
+        return;
+    };
+
+    let next_id = previous_visible_ids
+        .iter()
+        .skip(previous_index + 1)
+        .chain(previous_visible_ids.iter().take(previous_index))
+        .find(|id| visible_ids.contains(&id.as_str()));
+    *selected_task_id = Some(
+        next_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| visible_ids[0].to_string()),
+    );
 }
 
 fn move_selection(
@@ -201,6 +315,30 @@ fn visible_task_ids(board: &crate::queue::QueueBoard) -> Vec<&str> {
         .collect()
 }
 
+fn selected_task_status(
+    board: &crate::queue::QueueBoard,
+    selected_task_id: &str,
+) -> Option<crate::queue::TaskStatus> {
+    board.columns.iter().find_map(|column| {
+        column
+            .tasks
+            .iter()
+            .any(|task| task.id == selected_task_id)
+            .then_some(column.status)
+    })
+}
+
+fn state_task_status(
+    state: &crate::queue::QueueState,
+    task_id: &str,
+) -> Option<crate::queue::TaskStatus> {
+    state
+        .tasks
+        .iter()
+        .find(|task| task.id == task_id)
+        .map(|task| task.status)
+}
+
 fn filtered_active_runs(
     index: &crate::queue::RunIndex,
     worker_profile: Option<&str>,
@@ -225,8 +363,8 @@ fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
 
 fn footer_text(status_message: Option<&str>) -> String {
     match status_message {
-        Some(message) => format!("{message} | j/k move  r refresh  q/Esc quit"),
-        None => "j/k move  r refresh  q/Esc quit".to_string(),
+        Some(message) => format!("{message} | a approve  j/k move  r refresh  q/Esc quit"),
+        None => "a approve  j/k move  r refresh  q/Esc quit".to_string(),
     }
 }
 
@@ -358,10 +496,13 @@ mod tests {
 
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
-        assert_eq!(footer_text(None), "j/k move  r refresh  q/Esc quit");
+        assert_eq!(
+            footer_text(None),
+            "a approve  j/k move  r refresh  q/Esc quit"
+        );
         assert_eq!(
             footer_text(Some("refreshed")),
-            "refreshed | j/k move  r refresh  q/Esc quit"
+            "refreshed | a approve  j/k move  r refresh  q/Esc quit"
         );
     }
 
@@ -458,13 +599,150 @@ mod tests {
         assert_eq!(selection.as_deref(), Some("ready_2"));
     }
 
+    #[test]
+    fn approve_selected_review_task_moves_it_to_done() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Review)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Review,
+                original_time,
+            )],
+        };
+
+        let message =
+            approve_selected_review_task_in_state(&board, &mut state, Some("task_1"), updated_time)
+                .expect("approve selected task");
+
+        assert_eq!(message, "approved task_1");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Done);
+        assert_eq!(state.tasks[0].updated_at, updated_time);
+    }
+
+    #[test]
+    fn approve_selected_non_review_task_is_rejected() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Ready,
+                original_time,
+            )],
+        };
+
+        let message =
+            approve_selected_review_task_in_state(&board, &mut state, Some("task_1"), updated_time)
+                .expect("reject selected task");
+
+        assert_eq!(message, "selected task is not in review");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+        assert_eq!(state.tasks[0].updated_at, original_time);
+    }
+
+    #[test]
+    fn approve_without_selected_task_is_rejected() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Review)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Review,
+                original_time,
+            )],
+        };
+
+        let message = approve_selected_review_task_in_state(&board, &mut state, None, updated_time)
+            .expect("reject missing selection");
+
+        assert_eq!(message, "no task selected");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Review);
+        assert_eq!(state.tasks[0].updated_at, original_time);
+    }
+
+    #[test]
+    fn selection_preserves_approved_task_when_still_visible_after_reload() {
+        let reloaded_board =
+            test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Done)]);
+        let previous_visible_ids = vec!["task_1".to_string(), "task_2".to_string()];
+        let mut selection = Some("task_1".to_string());
+
+        preserve_selection_after_reload(
+            &reloaded_board,
+            &mut selection,
+            Some("task_1"),
+            &previous_visible_ids,
+        );
+
+        assert_eq!(selection.as_deref(), Some("task_1"));
+    }
+
+    #[test]
+    fn selection_moves_to_next_visible_task_when_approved_task_disappears() {
+        let reloaded_board =
+            test_board_with_statuses(&[("task_2", crate::queue::TaskStatus::Ready)]);
+        let previous_visible_ids = vec!["task_1".to_string(), "task_2".to_string()];
+        let mut selection = Some("task_1".to_string());
+
+        preserve_selection_after_reload(
+            &reloaded_board,
+            &mut selection,
+            Some("task_1"),
+            &previous_visible_ids,
+        );
+
+        assert_eq!(selection.as_deref(), Some("task_2"));
+    }
+
+    #[test]
+    fn selection_clears_when_no_tasks_remain_after_approve() {
+        let reloaded_board = test_board_with_statuses(&[]);
+        let previous_visible_ids = vec!["task_1".to_string()];
+        let mut selection = Some("task_1".to_string());
+
+        preserve_selection_after_reload(
+            &reloaded_board,
+            &mut selection,
+            Some("task_1"),
+            &previous_visible_ids,
+        );
+
+        assert_eq!(selection, None);
+    }
+
     fn test_board(task_ids: &[&str]) -> crate::queue::QueueBoard {
+        let tasks = task_ids
+            .iter()
+            .map(|task_id| {
+                let status = if task_id.starts_with("ready") {
+                    crate::queue::TaskStatus::Ready
+                } else {
+                    crate::queue::TaskStatus::Backlog
+                };
+                (*task_id, status)
+            })
+            .collect::<Vec<_>>();
+        test_board_with_statuses(&tasks)
+    }
+
+    fn test_board_with_statuses(
+        task_ids: &[(&str, crate::queue::TaskStatus)],
+    ) -> crate::queue::QueueBoard {
         let created_at = chrono::DateTime::parse_from_rfc3339("2026-06-20T10:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc);
         let columns = [
             crate::queue::TaskStatus::Backlog,
             crate::queue::TaskStatus::Ready,
+            crate::queue::TaskStatus::Running,
+            crate::queue::TaskStatus::Review,
+            crate::queue::TaskStatus::Blocked,
+            crate::queue::TaskStatus::Done,
+            crate::queue::TaskStatus::Cancelled,
         ]
         .into_iter()
         .map(|status| crate::queue::QueueBoardColumn {
@@ -479,8 +757,12 @@ mod tests {
             columns,
         };
 
-        for task_id in task_ids {
-            let column_index = if task_id.starts_with("ready") { 1 } else { 0 };
+        for (task_id, status) in task_ids {
+            let column_index = board
+                .columns
+                .iter()
+                .position(|column| column.status == *status)
+                .unwrap();
             board.columns[column_index]
                 .tasks
                 .push(crate::queue::QueueBoardTask {
@@ -494,5 +776,30 @@ mod tests {
         }
 
         board
+    }
+
+    fn test_state_task(
+        id: &str,
+        status: crate::queue::TaskStatus,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) -> crate::queue::Task {
+        crate::queue::Task {
+            id: id.to_string(),
+            title: id.to_string(),
+            description: String::new(),
+            project: None,
+            status,
+            priority: crate::queue::TaskPriority::Normal,
+            worker_profile: None,
+            output_path: None,
+            created_at: timestamp,
+            updated_at: timestamp,
+        }
+    }
+
+    fn test_time(value: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
     }
 }
