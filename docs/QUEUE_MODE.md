@@ -45,6 +45,7 @@ Current limitations:
 - `jcode queue approve`
 - `jcode queue reopen`
 - `jcode queue dashboard`
+- `jcode queue board`
 
 ## Why It Exists
 
@@ -580,6 +581,19 @@ jcode queue dashboard --worker-profile coder
 jcode queue dashboard --limit 10
 ```
 
+### `jcode queue board`
+
+Show the grouped Queue Mode board using the same read-only board data used by the TUI scaffold.
+
+```bash
+jcode queue board
+jcode queue board --worker-profile coder --limit 10
+jcode queue board --json
+jcode queue board --tui
+```
+
+`--tui` opens a read-only terminal board for the current project-local queue state. It does not mutate tasks, refresh runs, poll in the background, or start workers. Quit with `q` or `Esc`.
+
 ## Safety Notes
 
 - Worker commands are project-local and come from `.jcode/workers.toml`.
@@ -588,7 +602,7 @@ jcode queue dashboard --limit 10
 - There is no background Queue Mode daemon.
 - There is no automatic refresh; run `jcode queue refresh-runs` manually.
 - There is no parallel Queue Mode scheduler.
-- There is no Queue Mode TUI board.
+- The Queue Mode TUI board is read-only. It has no approve, reopen, cancel, refresh, polling, or worker-run actions.
 - Worker commands run through the local shell (`sh -c` on Unix, `cmd /C` on Windows), so quote paths and arguments carefully when adding complex commands.
 - Queue Mode records process stdout, stderr, exit code, timestamps, and command metadata, but it does not validate the semantic quality of worker output. Keep human review in the loop.
 - On Windows, `queue cancel-run` uses forced process-tree termination.

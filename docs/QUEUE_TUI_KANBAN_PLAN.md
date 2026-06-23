@@ -64,6 +64,12 @@ The command should group tasks into the proposed columns, include active-run sum
 
 ## Phase 3C: Read-Only TUI Board
 
+- Current foundation: `jcode queue board --tui` opens a standalone read-only terminal board from the same `build_queue_board` data used by `jcode queue board`.
+- It renders project-local queue state once, shows the canonical columns, includes a small active-runs area when active runs exist, and exits with `q` or `Esc`.
+- It has no task mutation, no refresh action, no polling loop, and no worker/run controls.
+
+Remaining richer TUI work:
+
 - Add a minimal Queue Mode screen in the TUI.
 - Read queue state using the same logic as the CLI board command.
 - Render columns with stable ordering.
@@ -103,4 +109,4 @@ Each action should call the same logic used by existing CLI commands and should 
 
 ## Recommended Next Implementation Step
 
-First implement `jcode queue board` as a CLI/data foundation. Once that grouped board representation is working and tested, implement a read-only TUI board that renders the same data.
+Next, decide whether the standalone `jcode queue board --tui` screen should remain the canonical Queue Mode board entry or be linked from the main chat TUI. The smallest follow-up is adding explicit refresh-on-key support to the standalone board while still keeping task mutation out of scope.

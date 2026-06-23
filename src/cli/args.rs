@@ -1004,6 +1004,10 @@ pub(crate) enum QueueCommand {
         /// Emit JSON instead of human-readable output
         #[arg(long)]
         json: bool,
+
+        /// Open a read-only terminal board view
+        #[arg(long)]
+        tui: bool,
     },
 
     /// Show full details for one queued task

@@ -859,10 +859,28 @@ fn queue_subcommands_parse() {
             worker_profile,
             limit,
             json,
+            tui,
         })) => {
             assert_eq!(worker_profile.as_deref(), Some("coder"));
             assert_eq!(limit, 2);
             assert!(json);
+            assert!(!tui);
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "queue", "board", "--tui"]).unwrap();
+    match args.command {
+        Some(Command::Queue(QueueCommand::Board {
+            worker_profile,
+            limit,
+            json,
+            tui,
+        })) => {
+            assert!(worker_profile.is_none());
+            assert_eq!(limit, 20);
+            assert!(!json);
+            assert!(tui);
         }
         other => panic!("unexpected command: {:?}", other),
     }

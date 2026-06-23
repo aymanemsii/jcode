@@ -13,6 +13,7 @@ use crate::{browser, gateway, memory, session, storage, tui};
 use super::terminal::init_tui_runtime;
 
 mod provider_setup;
+mod queue_board_tui;
 mod report_info;
 mod restart;
 
@@ -1724,12 +1725,28 @@ pub fn run_queue_board_command(
     worker_profile: Option<&str>,
     limit: usize,
     json: bool,
+    tui: bool,
 ) -> Result<()> {
+    if json && tui {
+        anyhow::bail!("queue board accepts only one of --json or --tui.");
+    }
     let worker_profile = normalize_worker_profile_arg(worker_profile);
     validate_queue_worker_profile(worker_profile)?;
     let state = crate::queue::load()?;
     let board = crate::queue::build_queue_board(&state, worker_profile, Some(limit));
-    if json {
+    if tui {
+        let index = crate::queue::load_run_index()?;
+        let active_runs = index
+            .active_runs()
+            .into_iter()
+            .filter(|run| worker_profile.is_none_or(|profile| run.worker_profile == profile))
+            .cloned()
+            .collect::<Vec<_>>();
+        let (terminal, tui_runtime) = init_tui_runtime()?;
+        let result = queue_board_tui::run_read_only_queue_board(terminal, &board, &active_runs);
+        tui_runtime.finish(true);
+        result?;
+    } else if json {
         println!("{}", format_queue_board_json(&board)?);
     } else {
         println!("{}", format_queue_board(&board));
