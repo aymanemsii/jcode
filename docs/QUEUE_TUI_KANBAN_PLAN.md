@@ -65,8 +65,8 @@ The command should group tasks into the proposed columns, include active-run sum
 ## Phase 3C: Read-Only TUI Board
 
 - Current foundation: `jcode queue board --tui` opens a standalone read-only terminal board from the same `build_queue_board` data used by `jcode queue board`.
-- It renders project-local queue state once, shows the canonical columns, includes a small active-runs area when active runs exist, and exits with `q` or `Esc`.
-- It has no task mutation, no refresh action, no polling loop, and no worker/run controls.
+- It renders project-local queue state, shows the canonical columns, includes a small active-runs area when active runs exist, supports manual refresh with `r`, and exits with `q` or `Esc`.
+- Its refresh action reloads queue/run state and reuses the existing `refresh-runs` reconciliation logic. It has no approve, reopen, cancel-run, start, edit, polling loop, or worker controls.
 
 Remaining richer TUI work:
 
@@ -82,7 +82,6 @@ Remaining richer TUI work:
 
 Only after the read-only board works:
 
-- Refresh queue and run state.
 - Approve a review task.
 - Reopen a task.
 - Maybe cancel a run with explicit confirmation.

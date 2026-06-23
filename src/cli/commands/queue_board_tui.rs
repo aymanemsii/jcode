@@ -5,20 +5,31 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 pub(super) fn run_read_only_queue_board(
     mut terminal: ratatui::DefaultTerminal,
-    board: &crate::queue::QueueBoard,
-    active_runs: &[crate::queue::RunState],
+    mut board: crate::queue::QueueBoard,
+    mut active_runs: Vec<crate::queue::RunState>,
+    options: QueueBoardTuiOptions,
 ) -> Result<()> {
-    terminal.draw(|frame| draw_queue_board(frame, board, active_runs))?;
+    let mut status_message = None;
+    terminal.draw(|frame| draw_queue_board(frame, &board, &active_runs, None))?;
 
     loop {
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => break,
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+                KeyCode::Char('r') => {
+                    status_message =
+                        Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
+                    terminal.draw(|frame| {
+                        draw_queue_board(frame, &board, &active_runs, status_message.as_deref())
+                    })?;
+                }
                 _ => {}
             },
             Event::Resize(_, _) => {
-                terminal.draw(|frame| draw_queue_board(frame, board, active_runs))?;
+                terminal.draw(|frame| {
+                    draw_queue_board(frame, &board, &active_runs, status_message.as_deref())
+                })?;
             }
             _ => {}
         }
@@ -27,10 +38,16 @@ pub(super) fn run_read_only_queue_board(
     Ok(())
 }
 
+pub(super) struct QueueBoardTuiOptions {
+    pub(super) worker_profile: Option<String>,
+    pub(super) limit: usize,
+}
+
 fn draw_queue_board(
     frame: &mut Frame<'_>,
     board: &crate::queue::QueueBoard,
     active_runs: &[crate::queue::RunState],
+    status_message: Option<&str>,
 ) {
     let area = frame.area();
     let layout = Layout::vertical([
@@ -63,7 +80,58 @@ fn draw_queue_board(
         );
     }
 
-    frame.render_widget(Paragraph::new("q/Esc quit"), layout[3]);
+    frame.render_widget(Paragraph::new(footer_text(status_message)), layout[3]);
+}
+
+fn refresh_board_state(
+    board: &mut crate::queue::QueueBoard,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    let mut index = crate::queue::load_run_index()?;
+    let mut state = crate::queue::load()?;
+    let output = super::refresh_queue_runs(&mut index, &mut state, chrono::Utc::now());
+    if output.run_index_changed {
+        crate::queue::save_run_index(&index)?;
+    }
+    if output.queue_changed {
+        crate::queue::save(&state)?;
+    }
+
+    *board = crate::queue::build_queue_board(
+        &state,
+        options.worker_profile.as_deref(),
+        Some(options.limit),
+    );
+    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+
+    Ok(refresh_status_text(&output))
+}
+
+fn filtered_active_runs(
+    index: &crate::queue::RunIndex,
+    worker_profile: Option<&str>,
+) -> Vec<crate::queue::RunState> {
+    index
+        .active_runs()
+        .into_iter()
+        .filter(|run| worker_profile.is_none_or(|profile| run.worker_profile == profile))
+        .cloned()
+        .collect()
+}
+
+fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
+    format!(
+        "refresh-runs: {} succeeded, {} failed, {} still running",
+        output.succeeded, output.failed, output.still_running
+    )
+}
+
+fn footer_text(status_message: Option<&str>) -> String {
+    match status_message {
+        Some(message) => format!("{message} | r refresh  q/Esc quit"),
+        None => "r refresh  q/Esc quit".to_string(),
+    }
 }
 
 fn render_column(column: &crate::queue::QueueBoardColumn) -> Paragraph<'static> {
@@ -181,5 +249,33 @@ mod tests {
         };
 
         assert_eq!(header_text(&board), "total: 2  worker_profile: coder");
+    }
+
+    #[test]
+    fn footer_mentions_refresh_and_quit_keys() {
+        assert_eq!(footer_text(None), "r refresh  q/Esc quit");
+        assert_eq!(
+            footer_text(Some("refreshed")),
+            "refreshed | r refresh  q/Esc quit"
+        );
+    }
+
+    #[test]
+    fn refresh_status_text_is_short() {
+        let output = super::super::QueueRefreshRunsOutput {
+            checked: 4,
+            succeeded: 1,
+            failed: 2,
+            still_running: 1,
+            malformed: 0,
+            run_index_changed: true,
+            queue_changed: true,
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(
+            refresh_status_text(&output),
+            "refresh-runs: 1 succeeded, 2 failed, 1 still running"
+        );
     }
 }

@@ -593,7 +593,7 @@ jcode queue board --json
 jcode queue board --tui
 ```
 
-`--tui` opens a read-only terminal board for the current project-local queue state. It does not mutate tasks, refresh runs, poll in the background, or start workers. Quit with `q` or `Esc`.
+`--tui` opens a read-only terminal board for the current project-local queue state. Press `r` to manually refresh queue state and reconcile completed background runs, matching `jcode queue refresh-runs`. It does not approve, reopen, cancel, start, edit, poll in the background, or start workers. Quit with `q` or `Esc`.
 
 ## Safety Notes
 

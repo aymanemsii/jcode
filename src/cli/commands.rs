@@ -1743,7 +1743,15 @@ pub fn run_queue_board_command(
             .cloned()
             .collect::<Vec<_>>();
         let (terminal, tui_runtime) = init_tui_runtime()?;
-        let result = queue_board_tui::run_read_only_queue_board(terminal, &board, &active_runs);
+        let result = queue_board_tui::run_read_only_queue_board(
+            terminal,
+            board,
+            active_runs,
+            queue_board_tui::QueueBoardTuiOptions {
+                worker_profile: worker_profile.map(str::to_string),
+                limit,
+            },
+        );
         tui_runtime.finish(true);
         result?;
     } else if json {
