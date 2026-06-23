@@ -11,96 +11,104 @@ pub(super) fn run_read_only_queue_board(
 ) -> Result<()> {
     let mut status_message = None;
     let mut selection = BoardSelection::default();
+    let mut input_mode: Option<AddTaskPrompt> = None;
     select_first_available_task(&board, &mut selection);
-    terminal.draw(|frame| draw_queue_board(frame, &board, &active_runs, &selection, None))?;
+    terminal.draw(|frame| {
+        draw_queue_board(frame, &board, &active_runs, &selection, None, None)
+    })?;
 
     loop {
         match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => break,
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-                KeyCode::Down | KeyCode::Char('j') => {
-                    move_selection_within_column(&board, &mut selection, 1);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                if let Some(input) = input_mode.as_mut() {
+                    let mut submit: Option<AddTaskPrompt> = None;
+                    let mut cancel = false;
+                    match key.code {
+                        KeyCode::Esc => {
+                            cancel = true;
+                        }
+                        KeyCode::Enter => {
+                            submit = Some(input.clone());
+                        }
+                        KeyCode::Backspace => {
+                            input.title.pop();
+                        }
+                        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            input.title.push(c);
+                        }
+                        _ => {}
+                    }
+
+                    if cancel {
+                        input_mode = None;
+                        status_message = Some("add cancelled".to_string());
+                    } else if let Some(input) = submit {
+                        match add_task_from_prompt(
+                            &mut board,
+                            &mut active_runs,
+                            &mut selection,
+                            &input,
+                            &options,
+                        ) {
+                            Ok(message) => {
+                                input_mode = None;
+                                status_message = Some(message);
+                            }
+                            Err(err) => {
+                                status_message = Some(err.to_string());
+                            }
+                        }
+                    }
+                } else {
+                    match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') => break,
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            break;
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            move_selection_within_column(&board, &mut selection, 1);
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            move_selection_within_column(&board, &mut selection, -1);
+                        }
+                        KeyCode::Right | KeyCode::Char('l') => {
+                            move_selection_to_column(&board, &mut selection, 1);
+                        }
+                        KeyCode::Left | KeyCode::Char('h') => {
+                            move_selection_to_column(&board, &mut selection, -1);
+                        }
+                        KeyCode::Char('n') => {
+                            input_mode = Some(AddTaskPrompt::default());
+                            status_message = None;
+                        }
+                        KeyCode::Char('r') => {
+                            status_message =
+                                Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
+                            preserve_selection_after_refresh(&board, &mut selection);
+                        }
+                        KeyCode::Char('a') => {
+                            status_message = Some(approve_selected_review_task(
+                                &mut board,
+                                &mut active_runs,
+                                selection.selected_task_id(),
+                                &options,
+                            )?);
+                            preserve_selection_after_refresh(&board, &mut selection);
+                        }
+                        _ => {}
+                    }
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    move_selection_within_column(&board, &mut selection, -1);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    move_selection_to_column(&board, &mut selection, 1);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
-                }
-                KeyCode::Left | KeyCode::Char('h') => {
-                    move_selection_to_column(&board, &mut selection, -1);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
-                }
-                KeyCode::Char('r') => {
-                    status_message =
-                        Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
-                    preserve_selection_after_refresh(&board, &mut selection);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
-                }
-                KeyCode::Char('a') => {
-                    status_message = Some(approve_selected_review_task(
-                        &mut board,
-                        &mut active_runs,
-                        selection.selected_task_id(),
-                        &options,
-                    )?);
-                    preserve_selection_after_refresh(&board, &mut selection);
-                    terminal.draw(|frame| {
-                        draw_queue_board(
-                            frame,
-                            &board,
-                            &active_runs,
-                            &selection,
-                            status_message.as_deref(),
-                        )
-                    })?;
-                }
-                _ => {}
-            },
+                terminal.draw(|frame| {
+                    draw_queue_board(
+                        frame,
+                        &board,
+                        &active_runs,
+                        &selection,
+                        status_message.as_deref(),
+                        input_mode.as_ref(),
+                    )
+                })?;
+            }
             Event::Resize(_, _) => {
                 terminal.draw(|frame| {
                     draw_queue_board(
@@ -109,6 +117,7 @@ pub(super) fn run_read_only_queue_board(
                         &active_runs,
                         &selection,
                         status_message.as_deref(),
+                        input_mode.as_ref(),
                     )
                 })?;
             }
@@ -130,6 +139,7 @@ fn draw_queue_board(
     active_runs: &[crate::queue::RunState],
     selection: &BoardSelection,
     status_message: Option<&str>,
+    input_mode: Option<&AddTaskPrompt>,
 ) {
     let area = frame.area();
     let layout = Layout::vertical([
@@ -167,7 +177,7 @@ fn draw_queue_board(
         );
     }
 
-    frame.render_widget(Paragraph::new(footer_text(status_message)), layout[3]);
+    frame.render_widget(Paragraph::new(footer_text(status_message, input_mode)), layout[3]);
 }
 
 fn refresh_board_state(
@@ -242,6 +252,55 @@ fn approve_selected_review_task_in_state(
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct AddTaskPrompt {
+    title: String,
+}
+
+fn add_task_from_prompt(
+    board: &mut crate::queue::QueueBoard,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selection: &mut BoardSelection,
+    input: &AddTaskPrompt,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    let mut state = crate::queue::load()?;
+    let task_id = add_task_to_state(&mut state, &input.title)?;
+    crate::queue::save(&state)?;
+
+    let index = crate::queue::load_run_index()?;
+    *board = crate::queue::build_queue_board(
+        &state,
+        options.worker_profile.as_deref(),
+        Some(options.limit),
+    );
+    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+    if !select_task_by_id(board, selection, &task_id) {
+        preserve_selection_after_refresh(board, selection);
+    }
+
+    Ok(format!("added {task_id}"))
+}
+
+fn add_task_to_state(state: &mut crate::queue::QueueState, title: &str) -> Result<String> {
+    let title = title.trim();
+    if title.is_empty() {
+        anyhow::bail!("title required");
+    }
+
+    let task = crate::queue::Task::new(
+        title.to_string(),
+        String::new(),
+        None,
+        crate::queue::TaskPriority::Normal,
+        None,
+        None,
+    );
+    let task_id = task.id.clone();
+    state.tasks.push(task);
+    Ok(task_id)
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct BoardSelection {
     column_index: usize,
     row_index: Option<usize>,
@@ -269,6 +328,21 @@ fn select_first_available_task(board: &crate::queue::QueueBoard, selection: &mut
         selection.row_index = None;
         selection.task_id = None;
     }
+}
+
+fn select_task_by_id(
+    board: &crate::queue::QueueBoard,
+    selection: &mut BoardSelection,
+    task_id: &str,
+) -> bool {
+    let Some((column_index, row_index)) = find_task_position(board, task_id) else {
+        return false;
+    };
+
+    selection.column_index = column_index;
+    selection.row_index = Some(row_index);
+    selection.task_id = Some(task_id.to_string());
+    true
 }
 
 fn preserve_selection_after_refresh(
@@ -446,8 +520,18 @@ fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
     )
 }
 
-fn footer_text(status_message: Option<&str>) -> String {
-    let help = "↑/↓ or j/k move within column  ←/→ move columns  r refresh  a approve  q quit";
+fn footer_text(status_message: Option<&str>, input_mode: Option<&AddTaskPrompt>) -> String {
+    if let Some(input) = input_mode {
+        let prompt = format!("new task title: {}", input.title);
+        let help = "Enter submit  Esc cancel";
+        return match status_message {
+            Some(message) => format!("{message} | {prompt} | {help}"),
+            None => format!("{prompt} | {help}"),
+        };
+    }
+
+    let help =
+        "Up/Down or j/k move within column  Left/Right or h/l move columns  n new  a approve  r refresh  q quit";
     match status_message {
         Some(message) => format!("{message} | {help}"),
         None => help.to_string(),
@@ -591,12 +675,62 @@ mod tests {
 
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
-        let help = "↑/↓ or j/k move within column  ←/→ move columns  r refresh  a approve  q quit";
-        assert_eq!(footer_text(None), help);
+        let help =
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  n new  a approve  r refresh  q quit";
+        assert_eq!(footer_text(None, None), help);
         assert_eq!(
-            footer_text(Some("refreshed")),
+            footer_text(Some("refreshed"), None),
             format!("refreshed | {help}")
         );
+    }
+
+    #[test]
+    fn footer_mentions_submit_and_cancel_in_input_mode() {
+        let input = AddTaskPrompt {
+            title: "Update docs".to_string(),
+        };
+
+        assert_eq!(
+            footer_text(None, Some(&input)),
+            "new task title: Update docs | Enter submit  Esc cancel"
+        );
+    }
+
+    #[test]
+    fn add_task_to_state_adds_backlog_task_with_defaults() {
+        let mut state = crate::queue::QueueState::default();
+
+        let task_id = add_task_to_state(&mut state, "  New board task  ").expect("add task");
+
+        assert_eq!(state.tasks.len(), 1);
+        assert_eq!(state.tasks[0].id, task_id);
+        assert_eq!(state.tasks[0].title, "New board task");
+        assert_eq!(state.tasks[0].description, "");
+        assert_eq!(state.tasks[0].project, None);
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Backlog);
+        assert_eq!(state.tasks[0].priority, crate::queue::TaskPriority::Normal);
+        assert_eq!(state.tasks[0].worker_profile, None);
+        assert_eq!(state.tasks[0].output_path, None);
+    }
+
+    #[test]
+    fn add_task_to_state_rejects_empty_title() {
+        let mut state = crate::queue::QueueState::default();
+
+        let err = add_task_to_state(&mut state, "   ").expect_err("empty title rejected");
+
+        assert!(err.to_string().contains("title required"));
+        assert!(state.tasks.is_empty());
+    }
+
+    #[test]
+    fn select_task_by_id_selects_newly_visible_task() {
+        let board = test_board(&["backlog_1", "ready_1"]);
+        let mut selection = BoardSelection::default();
+
+        assert!(select_task_by_id(&board, &mut selection, "ready_1"));
+
+        assert_selection(&selection, 1, Some(0), Some("ready_1"));
     }
 
     #[test]
