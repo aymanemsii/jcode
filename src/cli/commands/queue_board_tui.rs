@@ -10,17 +10,9 @@ pub(super) fn run_read_only_queue_board(
     options: QueueBoardTuiOptions,
 ) -> Result<()> {
     let mut status_message = None;
-    let mut selected_task_id = None;
-    normalize_selection(&board, &mut selected_task_id);
-    terminal.draw(|frame| {
-        draw_queue_board(
-            frame,
-            &board,
-            &active_runs,
-            selected_task_id.as_deref(),
-            None,
-        )
-    })?;
+    let mut selection = BoardSelection::default();
+    select_first_available_task(&board, &mut selection);
+    terminal.draw(|frame| draw_queue_board(frame, &board, &active_runs, &selection, None))?;
 
     loop {
         match event::read()? {
@@ -28,25 +20,49 @@ pub(super) fn run_read_only_queue_board(
                 KeyCode::Esc | KeyCode::Char('q') => break,
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
                 KeyCode::Down | KeyCode::Char('j') => {
-                    move_selection(&board, &mut selected_task_id, 1);
+                    move_selection_within_column(&board, &mut selection, 1);
                     terminal.draw(|frame| {
                         draw_queue_board(
                             frame,
                             &board,
                             &active_runs,
-                            selected_task_id.as_deref(),
+                            &selection,
                             status_message.as_deref(),
                         )
                     })?;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    move_selection(&board, &mut selected_task_id, -1);
+                    move_selection_within_column(&board, &mut selection, -1);
                     terminal.draw(|frame| {
                         draw_queue_board(
                             frame,
                             &board,
                             &active_runs,
-                            selected_task_id.as_deref(),
+                            &selection,
+                            status_message.as_deref(),
+                        )
+                    })?;
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    move_selection_to_column(&board, &mut selection, 1);
+                    terminal.draw(|frame| {
+                        draw_queue_board(
+                            frame,
+                            &board,
+                            &active_runs,
+                            &selection,
+                            status_message.as_deref(),
+                        )
+                    })?;
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    move_selection_to_column(&board, &mut selection, -1);
+                    terminal.draw(|frame| {
+                        draw_queue_board(
+                            frame,
+                            &board,
+                            &active_runs,
+                            &selection,
                             status_message.as_deref(),
                         )
                     })?;
@@ -54,41 +70,31 @@ pub(super) fn run_read_only_queue_board(
                 KeyCode::Char('r') => {
                     status_message =
                         Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
-                    normalize_selection(&board, &mut selected_task_id);
+                    preserve_selection_after_refresh(&board, &mut selection);
                     terminal.draw(|frame| {
                         draw_queue_board(
                             frame,
                             &board,
                             &active_runs,
-                            selected_task_id.as_deref(),
+                            &selection,
                             status_message.as_deref(),
                         )
                     })?;
                 }
                 KeyCode::Char('a') => {
-                    let previous_visible_ids = visible_task_ids(&board)
-                        .into_iter()
-                        .map(str::to_string)
-                        .collect::<Vec<_>>();
-                    let previous_selection = selected_task_id.clone();
                     status_message = Some(approve_selected_review_task(
                         &mut board,
                         &mut active_runs,
-                        selected_task_id.as_deref(),
+                        selection.selected_task_id(),
                         &options,
                     )?);
-                    preserve_selection_after_reload(
-                        &board,
-                        &mut selected_task_id,
-                        previous_selection.as_deref(),
-                        &previous_visible_ids,
-                    );
+                    preserve_selection_after_refresh(&board, &mut selection);
                     terminal.draw(|frame| {
                         draw_queue_board(
                             frame,
                             &board,
                             &active_runs,
-                            selected_task_id.as_deref(),
+                            &selection,
                             status_message.as_deref(),
                         )
                     })?;
@@ -101,7 +107,7 @@ pub(super) fn run_read_only_queue_board(
                         frame,
                         &board,
                         &active_runs,
-                        selected_task_id.as_deref(),
+                        &selection,
                         status_message.as_deref(),
                     )
                 })?;
@@ -122,7 +128,7 @@ fn draw_queue_board(
     frame: &mut Frame<'_>,
     board: &crate::queue::QueueBoard,
     active_runs: &[crate::queue::RunState],
-    selected_task_id: Option<&str>,
+    selection: &BoardSelection,
     status_message: Option<&str>,
 ) {
     let area = frame.area();
@@ -143,8 +149,13 @@ fn draw_queue_board(
     let column_constraints =
         vec![Constraint::Ratio(1, board.columns.len() as u32); board.columns.len()];
     let columns = Layout::horizontal(column_constraints).split(layout[1]);
-    for (column_area, column) in columns.iter().zip(board.columns.iter()) {
-        frame.render_widget(render_column(column, selected_task_id), *column_area);
+    for (column_index, (column_area, column)) in
+        columns.iter().zip(board.columns.iter()).enumerate()
+    {
+        frame.render_widget(
+            render_column(column, selection, column_index == selection.column_index),
+            *column_area,
+        );
     }
 
     if active_runs_height(active_runs) > 0 {
@@ -230,89 +241,163 @@ fn approve_selected_review_task_in_state(
     Ok(format!("approved {task_id}"))
 }
 
-fn normalize_selection(board: &crate::queue::QueueBoard, selected_task_id: &mut Option<String>) {
-    let visible_ids = visible_task_ids(board);
-    if visible_ids.is_empty() {
-        *selected_task_id = None;
-        return;
-    }
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct BoardSelection {
+    column_index: usize,
+    row_index: Option<usize>,
+    task_id: Option<String>,
+}
 
-    if selected_task_id
-        .as_deref()
-        .is_some_and(|selected| visible_ids.contains(&selected))
+impl BoardSelection {
+    fn selected_task_id(&self) -> Option<&str> {
+        self.task_id.as_deref()
+    }
+}
+
+fn select_first_available_task(board: &crate::queue::QueueBoard, selection: &mut BoardSelection) {
+    if let Some((column_index, task)) = board
+        .columns
+        .iter()
+        .enumerate()
+        .find_map(|(index, column)| column.tasks.first().map(|task| (index, task)))
     {
-        return;
+        selection.column_index = column_index;
+        selection.row_index = Some(0);
+        selection.task_id = Some(task.id.clone());
+    } else {
+        selection.column_index = 0;
+        selection.row_index = None;
+        selection.task_id = None;
     }
-
-    *selected_task_id = Some(visible_ids[0].to_string());
 }
 
-fn preserve_selection_after_reload(
+fn preserve_selection_after_refresh(
     board: &crate::queue::QueueBoard,
-    selected_task_id: &mut Option<String>,
-    previous_selection: Option<&str>,
-    previous_visible_ids: &[String],
+    selection: &mut BoardSelection,
 ) {
-    let visible_ids = visible_task_ids(board);
-    if visible_ids.is_empty() {
-        *selected_task_id = None;
+    if board.columns.is_empty() {
+        selection.column_index = 0;
+        selection.row_index = None;
+        selection.task_id = None;
         return;
     }
 
-    if previous_selection.is_some_and(|selected| visible_ids.contains(&selected)) {
+    let had_selected_task = selection.task_id.is_some();
+    if let Some((column_index, row_index, task_id)) =
+        selection.task_id.as_deref().and_then(|selected| {
+            find_task_position(board, selected)
+                .map(|(column_index, row_index)| (column_index, row_index, selected.to_string()))
+        })
+    {
+        selection.column_index = column_index;
+        selection.row_index = Some(row_index);
+        selection.task_id = Some(task_id);
         return;
     }
 
-    let Some(previous_selection) = previous_selection else {
-        *selected_task_id = Some(visible_ids[0].to_string());
+    selection.column_index = selection.column_index.min(board.columns.len() - 1);
+    if !had_selected_task {
+        let preferred_row = selection.row_index.unwrap_or(0);
+        if !select_row_in_column(board, selection, preferred_row) {
+            selection.row_index = None;
+            selection.task_id = None;
+        }
         return;
-    };
-    let Some(previous_index) = previous_visible_ids
-        .iter()
-        .position(|id| id == previous_selection)
-    else {
-        *selected_task_id = Some(visible_ids[0].to_string());
-        return;
-    };
+    }
 
-    let next_id = previous_visible_ids
-        .iter()
-        .skip(previous_index + 1)
-        .chain(previous_visible_ids.iter().take(previous_index))
-        .find(|id| visible_ids.contains(&id.as_str()));
-    *selected_task_id = Some(
-        next_id
-            .map(|id| id.to_string())
-            .unwrap_or_else(|| visible_ids[0].to_string()),
-    );
+    if select_row_in_column(board, selection, selection.row_index.unwrap_or(0)) {
+        return;
+    }
+
+    if board.columns.iter().any(|column| !column.tasks.is_empty()) {
+        select_first_available_task(board, selection);
+    } else {
+        selection.row_index = None;
+        selection.task_id = None;
+    }
 }
 
-fn move_selection(
+fn move_selection_within_column(
     board: &crate::queue::QueueBoard,
-    selected_task_id: &mut Option<String>,
+    selection: &mut BoardSelection,
     delta: isize,
 ) {
-    normalize_selection(board, selected_task_id);
-
-    let visible_ids = visible_task_ids(board);
-    if visible_ids.is_empty() {
+    preserve_selection_after_refresh(board, selection);
+    let Some(column) = board.columns.get(selection.column_index) else {
+        return;
+    };
+    if column.tasks.is_empty() {
+        selection.row_index = None;
+        selection.task_id = None;
         return;
     }
 
-    let current_index = selected_task_id
-        .as_deref()
-        .and_then(|selected| visible_ids.iter().position(|id| *id == selected))
-        .unwrap_or(0);
-    let next_index = (current_index as isize + delta).rem_euclid(visible_ids.len() as isize);
-    *selected_task_id = Some(visible_ids[next_index as usize].to_string());
+    let current_row = selection.row_index.unwrap_or(0);
+    let max_row = column.tasks.len() - 1;
+    let next_row = if delta.is_negative() {
+        current_row.saturating_sub(delta.unsigned_abs())
+    } else {
+        current_row.saturating_add(delta as usize).min(max_row)
+    };
+    select_row_in_column(board, selection, next_row);
 }
 
-fn visible_task_ids(board: &crate::queue::QueueBoard) -> Vec<&str> {
+fn move_selection_to_column(
+    board: &crate::queue::QueueBoard,
+    selection: &mut BoardSelection,
+    delta: isize,
+) {
+    preserve_selection_after_refresh(board, selection);
+    if board.columns.is_empty() {
+        return;
+    }
+
+    selection.column_index = if delta.is_negative() {
+        selection.column_index.saturating_sub(delta.unsigned_abs())
+    } else {
+        selection
+            .column_index
+            .saturating_add(delta as usize)
+            .min(board.columns.len() - 1)
+    };
+
+    select_row_in_column(board, selection, selection.row_index.unwrap_or(0));
+}
+
+fn select_row_in_column(
+    board: &crate::queue::QueueBoard,
+    selection: &mut BoardSelection,
+    preferred_row: usize,
+) -> bool {
+    let Some(column) = board.columns.get(selection.column_index) else {
+        selection.row_index = None;
+        selection.task_id = None;
+        return false;
+    };
+    let Some(max_row) = column.tasks.len().checked_sub(1) else {
+        selection.row_index = None;
+        selection.task_id = None;
+        return false;
+    };
+
+    let row = preferred_row.min(max_row);
+    selection.row_index = Some(row);
+    selection.task_id = Some(column.tasks[row].id.clone());
+    true
+}
+
+fn find_task_position(board: &crate::queue::QueueBoard, task_id: &str) -> Option<(usize, usize)> {
     board
         .columns
         .iter()
-        .flat_map(|column| column.tasks.iter().map(|task| task.id.as_str()))
-        .collect()
+        .enumerate()
+        .find_map(|(column_index, column)| {
+            column
+                .tasks
+                .iter()
+                .position(|task| task.id == task_id)
+                .map(|row_index| (column_index, row_index))
+        })
 }
 
 fn selected_task_status(
@@ -362,22 +447,28 @@ fn refresh_status_text(output: &super::QueueRefreshRunsOutput) -> String {
 }
 
 fn footer_text(status_message: Option<&str>) -> String {
+    let help = "↑/↓ or j/k move within column  ←/→ move columns  r refresh  a approve  q quit";
     match status_message {
-        Some(message) => format!("{message} | a approve  j/k move  r refresh  q/Esc quit"),
-        None => "a approve  j/k move  r refresh  q/Esc quit".to_string(),
+        Some(message) => format!("{message} | {help}"),
+        None => help.to_string(),
     }
 }
 
 fn render_column(
     column: &crate::queue::QueueBoardColumn,
-    selected_task_id: Option<&str>,
+    selection: &BoardSelection,
+    is_selected_column: bool,
 ) -> Paragraph<'static> {
     let mut lines = Vec::new();
     if column.tasks.is_empty() {
-        lines.push("none".to_string());
+        lines.push(if is_selected_column {
+            "> none".to_string()
+        } else {
+            "  none".to_string()
+        });
     } else {
         for task in &column.tasks {
-            let selection_marker = if selected_task_id == Some(task.id.as_str()) {
+            let selection_marker = if selection.selected_task_id() == Some(task.id.as_str()) {
                 ">"
             } else {
                 " "
@@ -421,7 +512,11 @@ fn header_text(board: &crate::queue::QueueBoard) -> String {
 }
 
 fn active_runs_height(active_runs: &[crate::queue::RunState]) -> u16 {
-    if active_runs.is_empty() { 0 } else { 5 }
+    if active_runs.is_empty() {
+        0
+    } else {
+        5
+    }
 }
 
 fn active_runs_text(active_runs: &[crate::queue::RunState]) -> String {
@@ -496,13 +591,11 @@ mod tests {
 
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
-        assert_eq!(
-            footer_text(None),
-            "a approve  j/k move  r refresh  q/Esc quit"
-        );
+        let help = "↑/↓ or j/k move within column  ←/→ move columns  r refresh  a approve  q quit";
+        assert_eq!(footer_text(None), help);
         assert_eq!(
             footer_text(Some("refreshed")),
-            "refreshed | a approve  j/k move  r refresh  q/Esc quit"
+            format!("refreshed | {help}")
         );
     }
 
@@ -544,59 +637,151 @@ mod tests {
     #[test]
     fn selection_defaults_to_first_visible_task() {
         let board = test_board(&["backlog_1", "ready_1"]);
-        let mut selection = None;
+        let mut selection = BoardSelection::default();
 
-        normalize_selection(&board, &mut selection);
+        select_first_available_task(&board, &mut selection);
 
-        assert_eq!(selection.as_deref(), Some("backlog_1"));
+        assert_selection(&selection, 0, Some(0), Some("backlog_1"));
     }
 
     #[test]
-    fn selection_preserves_existing_task_after_refresh() {
+    fn refresh_preserves_selected_task_by_id() {
         let board = test_board(&["backlog_1", "ready_1"]);
-        let mut selection = Some("ready_1".to_string());
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(0),
+            task_id: Some("ready_1".to_string()),
+        };
 
-        normalize_selection(&board, &mut selection);
+        preserve_selection_after_refresh(&board, &mut selection);
 
-        assert_eq!(selection.as_deref(), Some("ready_1"));
+        assert_selection(&selection, 1, Some(0), Some("ready_1"));
     }
 
     #[test]
-    fn selection_falls_back_when_selected_task_disappears() {
-        let board = test_board(&["ready_1"]);
-        let mut selection = Some("missing".to_string());
+    fn refresh_preserves_column_and_row_when_selected_task_disappears() {
+        let board = test_board(&["ready_1", "ready_2"]);
+        let mut selection = BoardSelection {
+            column_index: 1,
+            row_index: Some(1),
+            task_id: Some("missing".to_string()),
+        };
 
-        normalize_selection(&board, &mut selection);
+        preserve_selection_after_refresh(&board, &mut selection);
 
-        assert_eq!(selection.as_deref(), Some("ready_1"));
+        assert_selection(&selection, 1, Some(1), Some("ready_2"));
     }
 
     #[test]
     fn selection_clears_when_board_is_empty() {
         let board = test_board(&[]);
-        let mut selection = Some("missing".to_string());
+        let mut selection = BoardSelection {
+            column_index: 1,
+            row_index: Some(2),
+            task_id: Some("missing".to_string()),
+        };
 
-        normalize_selection(&board, &mut selection);
+        preserve_selection_after_refresh(&board, &mut selection);
 
-        assert_eq!(selection, None);
+        assert_selection(&selection, 1, None, None);
     }
 
     #[test]
-    fn selection_moves_next_and_previous_through_visible_tasks() {
-        let board = test_board(&["backlog_1", "ready_1", "ready_2"]);
-        let mut selection = Some("backlog_1".to_string());
+    fn down_does_not_leave_current_column() {
+        let board = test_board(&["backlog_1", "ready_1"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(0),
+            task_id: Some("backlog_1".to_string()),
+        };
 
-        move_selection(&board, &mut selection, 1);
-        assert_eq!(selection.as_deref(), Some("ready_1"));
+        move_selection_within_column(&board, &mut selection, 1);
 
-        move_selection(&board, &mut selection, 1);
-        assert_eq!(selection.as_deref(), Some("ready_2"));
+        assert_selection(&selection, 0, Some(0), Some("backlog_1"));
+    }
 
-        move_selection(&board, &mut selection, 1);
-        assert_eq!(selection.as_deref(), Some("backlog_1"));
+    #[test]
+    fn up_does_not_leave_current_column() {
+        let board = test_board(&["backlog_1", "ready_1"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(0),
+            task_id: Some("backlog_1".to_string()),
+        };
 
-        move_selection(&board, &mut selection, -1);
-        assert_eq!(selection.as_deref(), Some("ready_2"));
+        move_selection_within_column(&board, &mut selection, -1);
+
+        assert_selection(&selection, 0, Some(0), Some("backlog_1"));
+    }
+
+    #[test]
+    fn right_moves_to_next_column() {
+        let board = test_board(&["backlog_1", "ready_1"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(0),
+            task_id: Some("backlog_1".to_string()),
+        };
+
+        move_selection_to_column(&board, &mut selection, 1);
+
+        assert_selection(&selection, 1, Some(0), Some("ready_1"));
+    }
+
+    #[test]
+    fn left_moves_to_previous_column() {
+        let board = test_board(&["backlog_1", "ready_1"]);
+        let mut selection = BoardSelection {
+            column_index: 1,
+            row_index: Some(0),
+            task_id: Some("ready_1".to_string()),
+        };
+
+        move_selection_to_column(&board, &mut selection, -1);
+
+        assert_selection(&selection, 0, Some(0), Some("backlog_1"));
+    }
+
+    #[test]
+    fn right_preserves_row_index_when_possible() {
+        let board = test_board(&["backlog_1", "backlog_2", "ready_1", "ready_2"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(1),
+            task_id: Some("backlog_2".to_string()),
+        };
+
+        move_selection_to_column(&board, &mut selection, 1);
+
+        assert_selection(&selection, 1, Some(1), Some("ready_2"));
+    }
+
+    #[test]
+    fn right_clamps_row_index_when_destination_column_has_fewer_tasks() {
+        let board = test_board(&["backlog_1", "backlog_2", "ready_1"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(1),
+            task_id: Some("backlog_2".to_string()),
+        };
+
+        move_selection_to_column(&board, &mut selection, 1);
+
+        assert_selection(&selection, 1, Some(0), Some("ready_1"));
+    }
+
+    #[test]
+    fn right_allows_selecting_empty_column_without_task() {
+        let board = test_board(&["backlog_1"]);
+        let mut selection = BoardSelection {
+            column_index: 0,
+            row_index: Some(0),
+            task_id: Some("backlog_1".to_string()),
+        };
+
+        move_selection_to_column(&board, &mut selection, 1);
+
+        assert_selection(&selection, 1, None, None);
     }
 
     #[test]
@@ -668,50 +853,55 @@ mod tests {
     fn selection_preserves_approved_task_when_still_visible_after_reload() {
         let reloaded_board =
             test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Done)]);
-        let previous_visible_ids = vec!["task_1".to_string(), "task_2".to_string()];
-        let mut selection = Some("task_1".to_string());
+        let mut selection = BoardSelection {
+            column_index: 3,
+            row_index: Some(0),
+            task_id: Some("task_1".to_string()),
+        };
 
-        preserve_selection_after_reload(
-            &reloaded_board,
-            &mut selection,
-            Some("task_1"),
-            &previous_visible_ids,
-        );
+        preserve_selection_after_refresh(&reloaded_board, &mut selection);
 
-        assert_eq!(selection.as_deref(), Some("task_1"));
+        assert_selection(&selection, 5, Some(0), Some("task_1"));
     }
 
     #[test]
-    fn selection_moves_to_next_visible_task_when_approved_task_disappears() {
+    fn selection_falls_back_when_approved_task_disappears() {
         let reloaded_board =
             test_board_with_statuses(&[("task_2", crate::queue::TaskStatus::Ready)]);
-        let previous_visible_ids = vec!["task_1".to_string(), "task_2".to_string()];
-        let mut selection = Some("task_1".to_string());
+        let mut selection = BoardSelection {
+            column_index: 3,
+            row_index: Some(0),
+            task_id: Some("task_1".to_string()),
+        };
 
-        preserve_selection_after_reload(
-            &reloaded_board,
-            &mut selection,
-            Some("task_1"),
-            &previous_visible_ids,
-        );
+        preserve_selection_after_refresh(&reloaded_board, &mut selection);
 
-        assert_eq!(selection.as_deref(), Some("task_2"));
+        assert_selection(&selection, 1, Some(0), Some("task_2"));
     }
 
     #[test]
     fn selection_clears_when_no_tasks_remain_after_approve() {
         let reloaded_board = test_board_with_statuses(&[]);
-        let previous_visible_ids = vec!["task_1".to_string()];
-        let mut selection = Some("task_1".to_string());
+        let mut selection = BoardSelection {
+            column_index: 3,
+            row_index: Some(0),
+            task_id: Some("task_1".to_string()),
+        };
 
-        preserve_selection_after_reload(
-            &reloaded_board,
-            &mut selection,
-            Some("task_1"),
-            &previous_visible_ids,
-        );
+        preserve_selection_after_refresh(&reloaded_board, &mut selection);
 
-        assert_eq!(selection, None);
+        assert_selection(&selection, 3, None, None);
+    }
+
+    fn assert_selection(
+        selection: &BoardSelection,
+        column_index: usize,
+        row_index: Option<usize>,
+        task_id: Option<&str>,
+    ) {
+        assert_eq!(selection.column_index, column_index);
+        assert_eq!(selection.row_index, row_index);
+        assert_eq!(selection.selected_task_id(), task_id);
     }
 
     fn test_board(task_ids: &[&str]) -> crate::queue::QueueBoard {
