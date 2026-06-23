@@ -9,18 +9,19 @@ I want jcode to become a tool where I can give it tasks, assign/customize agents
 Planned features:
 1. Project-local custom workers - CLI MVP implemented
 2. Queue mode - Phase 2 background runner implemented
-3. Kanban-style TUI view
+3. Kanban-style TUI view - standalone board implemented
 4. Active agents panel
 5. Review inbox
 6. Sequential task runner - CLI foreground/background control loop implemented
 7. Parallel task execution later
 
-## Queue Mode Phase 2 Status
+## Queue Mode Standalone TUI/Kanban Status
 
 Implemented:
 - Project-local `.jcode/` queue storage.
 - `queue init`.
 - Worker profiles in `.jcode/workers.toml`.
+- Handoffs.
 - `queue run-next --worker-profile <name> --dry-run`.
 - `queue run-next --worker-profile <name> --execute`.
 - `queue run-next --worker-profile <name> --background`.
@@ -28,6 +29,32 @@ Implemented:
 - `queue active`, `queue run-status <run-id>`, `queue logs <run-id>`, `queue refresh-runs`, and `queue cancel-run <run-id>`.
 - Review workflow with `queue review`, `queue approve`, and `queue reopen`.
 - Dashboard workflow with `queue dashboard`.
+- CLI board with `jcode queue board`.
+- Standalone TUI board with `jcode queue board --tui`.
+
+TUI/Kanban capabilities:
+- Columns: `backlog`, `ready`, `running`, `review`, `blocked`, `done`, `cancelled`.
+- 2D navigation with `Left`/`Right`, `Up`/`Down`, and `j`/`k`.
+- `n` creates a task and asks for title and worker profile.
+- `x` runs the selected actionable task in the background.
+- `r` manually refreshes board and run status.
+- Auto-refresh updates running tasks while the board is open.
+- `a` approves the selected review task.
+- `q` quits.
+
+Safe TUI workflow:
+```bash
+jcode queue board --tui
+```
+
+Then:
+1. Press `n`.
+2. Enter task title.
+3. Enter worker profile, such as `planner`.
+4. Select the task.
+5. Press `x` to run it in the background.
+6. Wait for auto-refresh to move it to review.
+7. Press `a` to approve it to done.
 
 Background-run workflow:
 ```bash
@@ -90,12 +117,21 @@ Current Queue Mode commands:
 - `jcode queue approve`
 - `jcode queue reopen`
 - `jcode queue dashboard`
+- `jcode queue board`
+- `jcode queue board --tui`
 
 Current limitations:
+- No integration into the main `jcode` interactive app yet.
+- No drag-and-drop.
+- No edit task action.
+- No selected-task logs/details panel yet.
 - No daemon.
-- No automatic refresh; `queue refresh-runs` is manual.
+- No automatic task scheduler.
 - No parallel/swarm scheduler.
-- No TUI/Kanban yet.
+
+Next planned phase:
+- Inspect and map the main `jcode` interactive TUI integration path.
+- Integrate Queue Board into the main `jcode` terminal app safely.
 
 Windows notes:
 - `queue logs` may display lossy characters for non-UTF-8 command output.

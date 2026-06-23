@@ -2,18 +2,55 @@
 
 Queue Mode is a project-local task queue for handing work to command-line workers. It stores tasks in the current repository, renders each selected task into a Markdown handoff, and can run a configured worker command against that handoff.
 
-The current MVP is CLI-first. It does not start a background daemon or run tasks in parallel. A read-only TUI queue board is available with `jcode queue board --tui`.
+Queue Mode is CLI-first and now includes a standalone TUI/Kanban board with `jcode queue board --tui`. It does not start a daemon, schedule tasks automatically, or run tasks in parallel.
 
-## Phase 2 Checkpoint
+## Standalone TUI/Kanban Checkpoint
 
-Queue Mode now has a working Phase 2 background-runner control loop. Queue state, worker profiles, handoffs, run logs, and run indexes are stored project-locally under `.jcode/`. Background runs can be started, inspected, refreshed, cancelled, reviewed, and approved from the CLI.
+Queue Mode now has a working standalone Kanban board launched with:
+
+```bash
+jcode queue board --tui
+```
+
+The board uses project-local `.jcode/` queue storage, worker profiles from `.jcode/workers.toml`, handoffs, run logs, and the run index/state. It displays `backlog`, `ready`, `running`, `review`, `blocked`, `done`, and `cancelled` columns, supports 2D navigation, can create tasks, start actionable tasks in the background, refresh run status, and approve review tasks to `done`.
+
+TUI controls:
+
+- `Left`/`Right`: move between columns.
+- `Up`/`Down` or `j`/`k`: move within a column.
+- `n`: create a new task; the flow asks for title and worker profile.
+- `x`: run the selected actionable task in the background.
+- `r`: manually refresh queue and run status.
+- `a`: approve the selected review task.
+- `q`: quit.
+
+End-to-end TUI workflow:
+
+1. Open the board with `jcode queue board --tui`.
+2. Press `n`.
+3. Enter a task title.
+4. Enter a worker profile, such as `planner`.
+5. Select the task.
+6. Press `x` to run it in the background.
+7. Wait for auto-refresh to move it to `review`.
+8. Press `a` to approve it to `done`.
+
+Current Queue Mode also supports CLI dry-run execution, synchronous execution, background execution, active runs, run status, logs, refresh-runs, cancel-run, review/approve/reopen, dashboard, and the CLI board with `jcode queue board`.
 
 Current limitations:
 
+- No integration into the main `jcode` interactive app yet.
+- No drag-and-drop.
+- No edit task action.
+- No selected-task logs/details panel yet.
 - No daemon.
-- No automatic refresh or polling; run completion is reconciled by manual `queue refresh-runs`.
+- No automatic task scheduler.
 - No parallel/swarm scheduler.
-- The TUI board is read-only and opens with `jcode queue board --tui`.
+
+Next planned phase:
+
+1. Inspect and map the main `jcode` interactive TUI integration path.
+2. Integrate Queue Board into the main `jcode` terminal app safely.
 
 ## Current Command List
 
@@ -593,7 +630,7 @@ jcode queue board --json
 jcode queue board --tui
 ```
 
-`--tui` opens a read-only terminal board for the current project-local queue state. Press `r` to manually refresh queue state and reconcile completed background runs, matching `jcode queue refresh-runs`. It does not approve, reopen, cancel, start, edit, poll in the background, or start workers. Quit with `q` or `Esc`.
+`--tui` opens the standalone Kanban board for the current project-local queue state. It supports column/task navigation, task creation, background starts for selected actionable tasks, manual refresh, auto-refresh while the board is open, and approval of selected review tasks. It does not support drag-and-drop, task editing, selected-task logs/details, daemon scheduling, automatic task scheduling, or parallel/swarm scheduling. Quit with `q`.
 
 ## Safety Notes
 
@@ -601,9 +638,9 @@ jcode queue board --tui
 - Always use `jcode queue run-next --worker-profile <name> --dry-run` before `--execute` or `--background`.
 - `run-next --execute` runs synchronously in the foreground. `run-next --background` detaches and writes logs to run files.
 - There is no background Queue Mode daemon.
-- There is no automatic refresh; run `jcode queue refresh-runs` manually.
+- The standalone TUI auto-refreshes running tasks while open. In CLI workflows, run `jcode queue refresh-runs` manually.
 - There is no parallel Queue Mode scheduler.
-- The Queue Mode TUI board is read-only. Its only action is manual refresh with `r`; it has no approve, reopen, cancel, polling, or worker-run actions.
+- The standalone TUI is not integrated into the main `jcode` interactive app yet.
 - Worker commands run through the local shell (`sh -c` on Unix, `cmd /C` on Windows), so quote paths and arguments carefully when adding complex commands.
 - Queue Mode records process stdout, stderr, exit code, timestamps, and command metadata, but it does not validate the semantic quality of worker output. Keep human review in the loop.
 - On Windows, `queue cancel-run` uses forced process-tree termination.

@@ -14,7 +14,7 @@ cargo build --release
 Current usable binary:
 .\target\release\jcode.exe
 
-## Queue Mode Phase 2 Background Runner
+## Queue Mode Standalone TUI/Kanban Checkpoint
 
 Status:
 - Queue Mode now has project-local `.jcode/` storage, worker profiles in `.jcode/workers.toml`, foreground execution, and background execution.
@@ -24,6 +24,32 @@ Status:
 - `queue active`, `queue run-status <run-id>`, `queue logs <run-id>`, `queue refresh-runs`, and `queue cancel-run <run-id>` are available.
 - Review flow remains `queue review`, `queue approve`, and `queue reopen`.
 - Dashboard flow remains `queue dashboard`.
+- CLI board is available with `jcode queue board`.
+- Standalone TUI/Kanban board is available with `jcode queue board --tui`.
+- TUI columns are `backlog`, `ready`, `running`, `review`, `blocked`, `done`, and `cancelled`.
+
+TUI controls:
+- `Left`/`Right`: move between columns.
+- `Up`/`Down` or `j`/`k`: move within a column.
+- `n`: create a new task; prompts for title and worker profile.
+- `x`: run the selected actionable task in the background.
+- `r`: manually refresh board and run status.
+- `a`: approve the selected review task.
+- `q`: quit.
+
+Safe TUI workflow:
+```bash
+jcode queue board --tui
+```
+
+Then:
+1. Press `n`.
+2. Enter task title.
+3. Enter worker profile, such as `planner`.
+4. Select the task.
+5. Press `x` to run it in the background.
+6. Wait for auto-refresh to move it to review.
+7. Press `a` to approve it to done.
 
 Current Queue Mode commands:
 - `jcode queue init`
@@ -54,6 +80,8 @@ Current Queue Mode commands:
 - `jcode queue approve`
 - `jcode queue reopen`
 - `jcode queue dashboard`
+- `jcode queue board`
+- `jcode queue board --tui`
 
 Minimal background workflow:
 ```bash
@@ -88,10 +116,17 @@ jcode queue dashboard
 ```
 
 Current limitations:
+- No integration into the main `jcode` interactive app yet.
+- No drag-and-drop.
+- No edit task action.
+- No selected-task logs/details panel yet.
 - No daemon.
-- No automatic refresh; run `queue refresh-runs` manually.
+- No automatic task scheduler.
 - No parallel/swarm scheduler.
-- No TUI/Kanban yet.
+
+Next planned phase:
+- Inspect and map the main `jcode` interactive TUI integration path.
+- Integrate Queue Board into the main `jcode` terminal app safely.
 
 Windows notes:
 - `queue logs` may display lossy characters for non-UTF-8 command output.
