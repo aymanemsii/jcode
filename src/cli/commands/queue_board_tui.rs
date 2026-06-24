@@ -574,19 +574,59 @@ fn validate_add_task_worker_profile(worker_profile: Option<&str>) -> Result<()> 
         return Ok(());
     };
 
+    match load_worker_profile_discovery()? {
+        WorkerProfileDiscovery::Missing => Ok(()),
+        WorkerProfileDiscovery::Profiles(names) => {
+            if names.iter().any(|name| name == worker_profile) {
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "unknown worker profile: {worker_profile} | {}",
+                    worker_profile_discovery_message(&WorkerProfileDiscovery::Profiles(names))
+                );
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WorkerProfileDiscovery {
+    Missing,
+    Profiles(Vec<String>),
+}
+
+fn load_worker_profile_discovery() -> Result<WorkerProfileDiscovery> {
     let path = crate::queue::worker_profiles_file_path()?;
     if !path.exists() {
-        return Ok(());
+        return Ok(WorkerProfileDiscovery::Missing);
     }
 
-    let profiles = crate::queue::load_worker_profiles_from_path(path)?;
-    if profiles
-        .iter()
-        .any(|profile| profile.name == worker_profile)
-    {
-        Ok(())
-    } else {
-        anyhow::bail!("unknown worker profile: {worker_profile}");
+    let mut names: Vec<String> = crate::queue::load_worker_profiles_from_path(path)?
+        .into_iter()
+        .map(|profile| profile.name)
+        .collect();
+    names.sort();
+    Ok(WorkerProfileDiscovery::Profiles(names))
+}
+
+fn worker_profile_discovery_message(discovery: &WorkerProfileDiscovery) -> String {
+    match discovery {
+        WorkerProfileDiscovery::Missing => {
+            "No workers.toml found; any profile name is allowed".to_string()
+        }
+        WorkerProfileDiscovery::Profiles(names) if names.is_empty() => {
+            "No worker profiles configured".to_string()
+        }
+        WorkerProfileDiscovery::Profiles(names) => {
+            format!("Available: {}", names.join(", "))
+        }
+    }
+}
+
+fn worker_profile_footer_message() -> String {
+    match load_worker_profile_discovery() {
+        Ok(discovery) => worker_profile_discovery_message(&discovery),
+        Err(err) => format!("workers.toml unavailable: {err}"),
     }
 }
 
@@ -830,7 +870,11 @@ fn footer_text(
         let prompt = match input.step {
             AddTaskPromptStep::Title => format!("Title: {}", input.title),
             AddTaskPromptStep::WorkerProfile => {
-                format!("Worker profile (optional): {}", input.worker_profile)
+                format!(
+                    "Worker profile (optional): {} | {}",
+                    input.worker_profile,
+                    worker_profile_footer_message()
+                )
             }
         };
         let help = "Enter submit  Esc cancel";
@@ -1171,6 +1215,15 @@ mod tests {
 
     #[test]
     fn footer_mentions_submit_and_cancel_in_input_mode() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.coder]\ncommand = \"test-worker <handoff_file>\"\n",
+        )
+        .expect("write workers");
         let input = AddTaskPrompt {
             title: "Update docs".to_string(),
             worker_profile: "coder".to_string(),
@@ -1179,7 +1232,7 @@ mod tests {
 
         assert_eq!(
             footer_text(None, Some(&input), true),
-            "Worker profile (optional): coder | Enter submit  Esc cancel"
+            "Worker profile (optional): coder | Available: coder | Enter submit  Esc cancel"
         );
     }
 
@@ -1194,6 +1247,67 @@ mod tests {
         assert_eq!(
             footer_text(None, Some(&input), true),
             "Title: Update docs | Enter submit  Esc cancel"
+        );
+    }
+
+    #[test]
+    fn footer_lists_available_worker_profiles_during_worker_step() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.planner]\ncommand = \"planner <handoff_file>\"\n[workers.coder]\ncommand = \"coder <handoff_file>\"\n",
+        )
+        .expect("write workers");
+        let input = AddTaskPrompt {
+            title: "Update docs".to_string(),
+            worker_profile: String::new(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        let footer = footer_text(None, Some(&input), true);
+
+        assert!(footer.contains("Available: "));
+        assert!(footer.contains("coder"));
+        assert!(footer.contains("planner"));
+    }
+
+    #[test]
+    fn footer_explains_missing_workers_toml_during_worker_step() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        let input = AddTaskPrompt {
+            title: "Update docs".to_string(),
+            worker_profile: "anything".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        assert_eq!(
+            footer_text(None, Some(&input), true),
+            "Worker profile (optional): anything | No workers.toml found; any profile name is allowed | Enter submit  Esc cancel"
+        );
+    }
+
+    #[test]
+    fn footer_explains_empty_workers_toml_during_worker_step() {
+        let _lock = crate::storage::lock_test_env();
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(project.path().join(".jcode").join("workers.toml"), "")
+            .expect("write workers");
+        let input = AddTaskPrompt {
+            title: "Update docs".to_string(),
+            worker_profile: String::new(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        assert_eq!(
+            footer_text(None, Some(&input), true),
+            "Worker profile (optional):  | No worker profiles configured | Enter submit  Esc cancel"
         );
     }
 
@@ -1328,9 +1442,90 @@ mod tests {
         )
         .expect_err("unknown worker rejected");
 
-        assert_eq!(err.to_string(), "unknown worker profile: reviewer");
+        assert_eq!(
+            err.to_string(),
+            "unknown worker profile: reviewer | Available: coder"
+        );
         let reloaded = crate::queue::load().expect("reload queue");
         assert!(reloaded.tasks.is_empty());
+    }
+
+    #[test]
+    fn add_task_from_prompt_allows_arbitrary_worker_profile_without_config() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+
+        let mut board =
+            crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
+        let mut active_runs = Vec::new();
+        let mut selection = BoardSelection::default();
+        let input = AddTaskPrompt {
+            title: "New board task".to_string(),
+            worker_profile: "ad-hoc".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        add_task_from_prompt(
+            &mut board,
+            &mut state,
+            &mut index,
+            &mut active_runs,
+            &mut selection,
+            &input,
+            &test_options(),
+        )
+        .expect("add task");
+
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert_eq!(reloaded.tasks[0].worker_profile.as_deref(), Some("ad-hoc"));
+    }
+
+    #[test]
+    fn add_task_from_prompt_stores_none_for_empty_worker_profile() {
+        let _lock = crate::storage::lock_test_env();
+        let _saved = EnvGuard::capture("JCODE_HOME");
+        let home = tempfile::tempdir().expect("home tempdir");
+        let project = tempfile::tempdir().expect("project tempdir");
+        let _cwd = CurrentDirGuard::change_to(project.path());
+        crate::env::set_var("JCODE_HOME", home.path());
+        std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
+        std::fs::write(
+            project.path().join(".jcode").join("workers.toml"),
+            "[workers.coder]\ncommand = \"test-worker <handoff_file>\"\n",
+        )
+        .expect("write workers");
+
+        let mut board =
+            crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
+        let mut active_runs = Vec::new();
+        let mut selection = BoardSelection::default();
+        let input = AddTaskPrompt {
+            title: "New board task".to_string(),
+            worker_profile: "   ".to_string(),
+            step: AddTaskPromptStep::WorkerProfile,
+        };
+
+        add_task_from_prompt(
+            &mut board,
+            &mut state,
+            &mut index,
+            &mut active_runs,
+            &mut selection,
+            &input,
+            &test_options(),
+        )
+        .expect("add task");
+
+        let reloaded = crate::queue::load().expect("reload queue");
+        assert_eq!(reloaded.tasks[0].worker_profile, None);
     }
 
     #[test]
