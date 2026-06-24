@@ -2,6 +2,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
@@ -16,11 +17,15 @@ pub(super) fn run_read_only_queue_board(
     let mut selection = BoardSelection::default();
     let mut input_mode: Option<AddTaskPrompt> = None;
     let mut auto_refresh = AutoRefreshState::new(Instant::now());
+    let mut state = crate::queue::load()?;
+    let mut run_index = crate::queue::load_run_index()?;
     select_first_available_task(&board, &mut selection);
     terminal.draw(|frame| {
         draw_queue_board(
             frame,
             &board,
+            &state,
+            &run_index,
             &active_runs,
             &selection,
             None,
@@ -43,13 +48,20 @@ pub(super) fn run_read_only_queue_board(
         match next_event {
             None => {
                 if auto_refresh.mark_refresh_if_due(Instant::now()) {
-                    status_message =
-                        Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
+                    status_message = Some(refresh_board_state(
+                        &mut board,
+                        &mut state,
+                        &mut run_index,
+                        &mut active_runs,
+                        &options,
+                    )?);
                     preserve_selection_after_refresh(&board, &mut selection);
                     terminal.draw(|frame| {
                         draw_queue_board(
                             frame,
                             &board,
+                            &state,
+                            &run_index,
                             &active_runs,
                             &selection,
                             status_message.as_deref(),
@@ -95,6 +107,8 @@ pub(super) fn run_read_only_queue_board(
                     } else if let Some(input) = submit {
                         match add_task_from_prompt(
                             &mut board,
+                            &mut state,
+                            &mut run_index,
                             &mut active_runs,
                             &mut selection,
                             &input,
@@ -132,8 +146,13 @@ pub(super) fn run_read_only_queue_board(
                             status_message = None;
                         }
                         KeyCode::Char('r') => {
-                            status_message =
-                                Some(refresh_board_state(&mut board, &mut active_runs, &options)?);
+                            status_message = Some(refresh_board_state(
+                                &mut board,
+                                &mut state,
+                                &mut run_index,
+                                &mut active_runs,
+                                &options,
+                            )?);
                             preserve_selection_after_refresh(&board, &mut selection);
                             auto_refresh.record_refresh(Instant::now());
                         }
@@ -148,6 +167,8 @@ pub(super) fn run_read_only_queue_board(
                         KeyCode::Char('a') => {
                             status_message = Some(approve_selected_review_task(
                                 &mut board,
+                                &mut state,
+                                &mut run_index,
                                 &mut active_runs,
                                 selection.selected_task_id(),
                                 &options,
@@ -157,6 +178,8 @@ pub(super) fn run_read_only_queue_board(
                         KeyCode::Char('x') => {
                             status_message = Some(run_selected_task_in_background(
                                 &mut board,
+                                &mut state,
+                                &mut run_index,
                                 &mut active_runs,
                                 selection.selected_task_id(),
                                 &options,
@@ -170,6 +193,8 @@ pub(super) fn run_read_only_queue_board(
                     draw_queue_board(
                         frame,
                         &board,
+                        &state,
+                        &run_index,
                         &active_runs,
                         &selection,
                         status_message.as_deref(),
@@ -183,6 +208,8 @@ pub(super) fn run_read_only_queue_board(
                     draw_queue_board(
                         frame,
                         &board,
+                        &state,
+                        &run_index,
                         &active_runs,
                         &selection,
                         status_message.as_deref(),
@@ -206,6 +233,8 @@ pub(super) struct QueueBoardTuiOptions {
 fn draw_queue_board(
     frame: &mut Frame<'_>,
     board: &crate::queue::QueueBoard,
+    state: &crate::queue::QueueState,
+    run_index: &crate::queue::RunIndex,
     active_runs: &[crate::queue::RunState],
     selection: &BoardSelection,
     status_message: Option<&str>,
@@ -213,13 +242,27 @@ fn draw_queue_board(
     auto_refresh_enabled: bool,
 ) {
     let area = frame.area();
-    let layout = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Min(5),
-        Constraint::Length(active_runs_height(active_runs)),
-        Constraint::Length(1),
-    ])
-    .split(area);
+    let details_text = selected_task_details_text(selection.selected_task_id(), state, run_index);
+    let wide = area.width >= 120;
+    let mut constraints = vec![Constraint::Length(3), Constraint::Min(5)];
+    if !wide {
+        constraints.push(Constraint::Length(details_panel_height(area.height)));
+    }
+    constraints.push(Constraint::Length(active_runs_height(active_runs)));
+    constraints.push(Constraint::Length(1));
+    let layout = Layout::vertical(constraints).split(area);
+
+    let board_area = if wide {
+        let body =
+            Layout::horizontal([Constraint::Min(60), Constraint::Length(46)]).split(layout[1]);
+        frame.render_widget(details_panel(details_text), body[1]);
+        body[0]
+    } else {
+        frame.render_widget(details_panel(details_text), layout[2]);
+        layout[1]
+    };
+    let active_runs_area = if wide { layout[2] } else { layout[3] };
+    let footer_area = if wide { layout[3] } else { layout[4] };
 
     frame.render_widget(
         Paragraph::new(header_text(board))
@@ -229,7 +272,7 @@ fn draw_queue_board(
 
     let column_constraints =
         vec![Constraint::Ratio(1, board.columns.len() as u32); board.columns.len()];
-    let columns = Layout::horizontal(column_constraints).split(layout[1]);
+    let columns = Layout::horizontal(column_constraints).split(board_area);
     for (column_index, (column_area, column)) in
         columns.iter().zip(board.columns.iter()).enumerate()
     {
@@ -244,7 +287,7 @@ fn draw_queue_board(
             Paragraph::new(active_runs_text(active_runs))
                 .block(Block::default().borders(Borders::ALL).title("Active runs"))
                 .wrap(Wrap { trim: true }),
-            layout[2],
+            active_runs_area,
         );
     }
 
@@ -254,31 +297,33 @@ fn draw_queue_board(
             input_mode,
             auto_refresh_enabled,
         )),
-        layout[3],
+        footer_area,
     );
 }
 
 fn refresh_board_state(
     board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
     active_runs: &mut Vec<crate::queue::RunState>,
     options: &QueueBoardTuiOptions,
 ) -> Result<String> {
-    let mut index = crate::queue::load_run_index()?;
-    let mut state = crate::queue::load()?;
-    let output = super::refresh_queue_runs(&mut index, &mut state, chrono::Utc::now());
+    *index = crate::queue::load_run_index()?;
+    *state = crate::queue::load()?;
+    let output = super::refresh_queue_runs(index, state, chrono::Utc::now());
     if output.run_index_changed {
-        crate::queue::save_run_index(&index)?;
+        crate::queue::save_run_index(index)?;
     }
     if output.queue_changed {
-        crate::queue::save(&state)?;
+        crate::queue::save(state)?;
     }
 
     *board = crate::queue::build_queue_board(
-        &state,
+        state,
         options.worker_profile.as_deref(),
         Some(options.limit),
     );
-    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+    *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
 
     Ok(refresh_status_text(&output))
 }
@@ -326,26 +371,23 @@ impl AutoRefreshState {
 
 fn approve_selected_review_task(
     board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
     active_runs: &mut Vec<crate::queue::RunState>,
     selected_task_id: Option<&str>,
     options: &QueueBoardTuiOptions,
 ) -> Result<String> {
-    let mut state = crate::queue::load()?;
-    let message = approve_selected_review_task_in_state(
-        board,
-        &mut state,
-        selected_task_id,
-        chrono::Utc::now(),
-    )?;
+    let message =
+        approve_selected_review_task_in_state(board, state, selected_task_id, chrono::Utc::now())?;
     if message.starts_with("approved ") {
-        crate::queue::save(&state)?;
-        let index = crate::queue::load_run_index()?;
+        crate::queue::save(state)?;
+        *index = crate::queue::load_run_index()?;
         *board = crate::queue::build_queue_board(
-            &state,
+            state,
             options.worker_profile.as_deref(),
             Some(options.limit),
         );
-        *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+        *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
     }
     Ok(message)
 }
@@ -372,12 +414,16 @@ fn approve_selected_review_task_in_state(
 
 fn run_selected_task_in_background(
     board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
     active_runs: &mut Vec<crate::queue::RunState>,
     selected_task_id: Option<&str>,
     options: &QueueBoardTuiOptions,
 ) -> Result<String> {
     run_selected_task_in_background_with_starter(
         board,
+        state,
+        index,
         active_runs,
         selected_task_id,
         options,
@@ -387,6 +433,8 @@ fn run_selected_task_in_background(
 
 fn run_selected_task_in_background_with_starter(
     board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
     active_runs: &mut Vec<crate::queue::RunState>,
     selected_task_id: Option<&str>,
     options: &QueueBoardTuiOptions,
@@ -404,8 +452,8 @@ fn run_selected_task_in_background_with_starter(
         return Ok("selected task is not actionable".to_string());
     }
 
-    let state = crate::queue::load()?;
-    let Some(task) = state.tasks.iter().find(|task| task.id == task_id) else {
+    let persisted_state = crate::queue::load()?;
+    let Some(task) = persisted_state.tasks.iter().find(|task| task.id == task_id) else {
         return Ok("selected task is not actionable".to_string());
     };
     if !task_status_is_actionable(task.status) {
@@ -420,18 +468,18 @@ fn run_selected_task_in_background_with_starter(
     {
         return Ok("selected task has no worker profile".to_string());
     }
-    drop(state);
+    drop(persisted_state);
 
     let output =
         super::start_selected_queue_task_background_with_starter(task_id, background_starter)?;
-    let state = crate::queue::load()?;
-    let index = crate::queue::load_run_index()?;
+    *state = crate::queue::load()?;
+    *index = crate::queue::load_run_index()?;
     *board = crate::queue::build_queue_board(
-        &state,
+        state,
         options.worker_profile.as_deref(),
         Some(options.limit),
     );
-    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+    *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
 
     Ok(format!("started {} as {}", output.task_id, output.run_id))
 }
@@ -461,6 +509,8 @@ impl AddTaskPrompt {
 
 fn add_task_from_prompt(
     board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
     active_runs: &mut Vec<crate::queue::RunState>,
     selection: &mut BoardSelection,
     input: &AddTaskPrompt,
@@ -469,17 +519,17 @@ fn add_task_from_prompt(
     let worker_profile = normalized_worker_profile(input.worker_profile.as_str());
     validate_add_task_worker_profile(worker_profile)?;
 
-    let mut state = crate::queue::load()?;
-    let task_id = add_task_to_state(&mut state, &input.title, worker_profile)?;
-    crate::queue::save(&state)?;
+    *state = crate::queue::load()?;
+    let task_id = add_task_to_state(state, &input.title, worker_profile)?;
+    crate::queue::save(state)?;
 
-    let index = crate::queue::load_run_index()?;
+    *index = crate::queue::load_run_index()?;
     *board = crate::queue::build_queue_board(
-        &state,
+        state,
         options.worker_profile.as_deref(),
         Some(options.limit),
     );
-    *active_runs = filtered_active_runs(&index, options.worker_profile.as_deref());
+    *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
     if !select_task_by_id(board, selection, &task_id) {
         preserve_selection_after_refresh(board, selection);
     }
@@ -886,6 +936,125 @@ fn active_runs_text(active_runs: &[crate::queue::RunState]) -> String {
         .join("\n")
 }
 
+fn details_panel(text: String) -> Paragraph<'static> {
+    Paragraph::new(text)
+        .block(Block::default().borders(Borders::ALL).title("Details"))
+        .wrap(Wrap { trim: true })
+}
+
+fn details_panel_height(terminal_height: u16) -> u16 {
+    terminal_height.saturating_sub(9).clamp(8, 16)
+}
+
+fn selected_task_details_text(
+    selected_task_id: Option<&str>,
+    state: &crate::queue::QueueState,
+    index: &crate::queue::RunIndex,
+) -> String {
+    let Some(task_id) = selected_task_id else {
+        return "no task selected".to_string();
+    };
+    let Some(task) = state.tasks.iter().find(|task| task.id == task_id) else {
+        return "no task selected".to_string();
+    };
+
+    let mut lines = vec![
+        format!("task id: {}", task.id),
+        format!("title: {}", task.title),
+        format!("status: {}", task_status_label(task.status)),
+        format!("priority: {}", priority_label(task.priority)),
+    ];
+    if let Some(worker_profile) = task
+        .worker_profile
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("worker profile: {worker_profile}"));
+    }
+    if let Some(project) = task.project.as_deref().filter(|value| !value.is_empty()) {
+        lines.push(format!("project: {project}"));
+    }
+    if let Some(output_path) = task
+        .output_path
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("output path: {output_path}"));
+    }
+    lines.push(format!("created_at: {}", task.created_at.to_rfc3339()));
+    lines.push(format!("updated_at: {}", task.updated_at.to_rfc3339()));
+    lines.push(String::new());
+
+    match latest_run_for_task(index, task_id) {
+        Some(run) => append_latest_run_details(&mut lines, run),
+        None => lines.push("no runs for selected task".to_string()),
+    }
+
+    lines.join("\n")
+}
+
+fn latest_run_for_task<'a>(
+    index: &'a crate::queue::RunIndex,
+    task_id: &str,
+) -> Option<&'a crate::queue::RunState> {
+    index
+        .runs
+        .iter()
+        .filter(|run| run.task_id == task_id)
+        .max_by_key(|run| run.started_at)
+}
+
+fn append_latest_run_details(lines: &mut Vec<String>, run: &crate::queue::RunState) {
+    lines.push("latest run:".to_string());
+    lines.push(format!("run id: {}", run.run_id));
+    lines.push(format!("worker profile: {}", run.worker_profile));
+    lines.push(format!("status: {}", run_status_label(run.status)));
+    if let Some(pid) = run.pid {
+        lines.push(format!("pid: {pid}"));
+    }
+    if let Some(exit_code) = run.exit_code {
+        lines.push(format!("exit code: {exit_code}"));
+    }
+    lines.push(format!("started_at: {}", run.started_at.to_rfc3339()));
+    if let Some(ended_at) = run.ended_at {
+        lines.push(format!("ended_at: {}", ended_at.to_rfc3339()));
+    }
+    lines.push(format!("run directory: {}", run.run_dir));
+
+    if !run.stdout_path.trim().is_empty() {
+        lines.push(String::new());
+        lines.push(log_preview_section("stdout", Path::new(&run.stdout_path)));
+    }
+    if !run.stderr_path.trim().is_empty() {
+        lines.push(String::new());
+        lines.push(log_preview_section("stderr", Path::new(&run.stderr_path)));
+    }
+}
+
+fn log_preview_section(label: &str, path: &Path) -> String {
+    let mut lines = vec![format!("{label}:")];
+    if !path.exists() {
+        lines.push(format!("missing log file: {}", path.display()));
+        return lines.join("\n");
+    }
+
+    match read_log_preview_lossy(path) {
+        Ok(preview) if preview.is_empty() => lines.push("(empty)".to_string()),
+        Ok(preview) => lines.push(preview),
+        Err(err) => lines.push(format!("failed to read {}: {err}", path.display())),
+    }
+    lines.join("\n")
+}
+
+fn read_log_preview_lossy(path: &Path) -> std::io::Result<String> {
+    const MAX_PREVIEW_LINES: usize = 5;
+    let bytes = std::fs::read(path)?;
+    let content = String::from_utf8_lossy(&bytes);
+    let lines = content.lines().collect::<Vec<_>>();
+    let start = lines.len().saturating_sub(MAX_PREVIEW_LINES);
+    Ok(lines[start..].join("\n"))
+}
+
 fn short_task_id(id: &str) -> String {
     id.chars().take(12).collect()
 }
@@ -906,6 +1075,18 @@ fn priority_label(priority: crate::queue::TaskPriority) -> &'static str {
         crate::queue::TaskPriority::Normal => "normal",
         crate::queue::TaskPriority::High => "high",
         crate::queue::TaskPriority::Urgent => "urgent",
+    }
+}
+
+fn task_status_label(status: crate::queue::TaskStatus) -> &'static str {
+    match status {
+        crate::queue::TaskStatus::Backlog => "backlog",
+        crate::queue::TaskStatus::Ready => "ready",
+        crate::queue::TaskStatus::Running => "running",
+        crate::queue::TaskStatus::Review => "review",
+        crate::queue::TaskStatus::Done => "done",
+        crate::queue::TaskStatus::Blocked => "blocked",
+        crate::queue::TaskStatus::Cancelled => "cancelled",
     }
 }
 
@@ -1078,6 +1259,8 @@ mod tests {
 
         let mut board =
             crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let mut selection = BoardSelection::default();
         let input = AddTaskPrompt {
@@ -1088,6 +1271,8 @@ mod tests {
 
         let message = add_task_from_prompt(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             &mut selection,
             &input,
@@ -1122,6 +1307,8 @@ mod tests {
 
         let mut board =
             crate::queue::build_queue_board(&crate::queue::QueueState::default(), None, Some(100));
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let mut selection = BoardSelection::default();
         let input = AddTaskPrompt {
@@ -1132,6 +1319,8 @@ mod tests {
 
         let err = add_task_from_prompt(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             &mut selection,
             &input,
@@ -1407,11 +1596,15 @@ mod tests {
     #[test]
     fn run_selected_without_selected_task_is_rejected() {
         let mut board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let options = test_options();
 
         let message = run_selected_task_in_background_with_starter(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             None,
             &options,
@@ -1425,11 +1618,15 @@ mod tests {
     #[test]
     fn run_selected_non_actionable_task_is_rejected() {
         let mut board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Review)]);
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let options = test_options();
 
         let message = run_selected_task_in_background_with_starter(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             Some("task_1"),
             &options,
@@ -1460,11 +1657,15 @@ mod tests {
         };
         crate::queue::save(&state).expect("save queue");
         let mut board = crate::queue::build_queue_board(&state, None, Some(100));
+        let mut state = state;
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let options = test_options();
 
         let message = run_selected_task_in_background_with_starter(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             Some("task_1"),
             &options,
@@ -1503,12 +1704,16 @@ mod tests {
         };
         crate::queue::save(&state).expect("save queue");
         let mut board = crate::queue::build_queue_board(&state, None, Some(100));
+        let mut state = state;
+        let mut index = crate::queue::RunIndex::default();
         let mut active_runs = Vec::new();
         let options = test_options();
         let mut saw_command = false;
 
         let message = run_selected_task_in_background_with_starter(
             &mut board,
+            &mut state,
+            &mut index,
             &mut active_runs,
             Some("task_1"),
             &options,
@@ -1516,11 +1721,9 @@ mod tests {
                 saw_command = true;
                 assert!(command.contains("--task task_1"));
                 assert!(command.contains("task_1.md"));
-                assert!(
-                    run_dir
-                        .parent()
-                        .is_some_and(|path| path.ends_with("task_1"))
-                );
+                assert!(run_dir
+                    .parent()
+                    .is_some_and(|path| path.ends_with("task_1")));
                 assert_eq!(stdout_path, run_dir.join("stdout.txt"));
                 assert_eq!(stderr_path, run_dir.join("stderr.txt"));
                 Ok(4242)
@@ -1586,6 +1789,105 @@ mod tests {
         preserve_selection_after_refresh(&reloaded_board, &mut selection);
 
         assert_selection(&selection, 3, None, None);
+    }
+
+    #[test]
+    fn selected_task_details_include_task_metadata() {
+        let created_at = test_time("2026-06-20T10:00:00Z");
+        let updated_at = test_time("2026-06-20T11:00:00Z");
+        let task = crate::queue::Task {
+            id: "task_1".to_string(),
+            title: "Ship queue details".to_string(),
+            description: String::new(),
+            project: Some("jcode".to_string()),
+            status: crate::queue::TaskStatus::Ready,
+            priority: crate::queue::TaskPriority::High,
+            worker_profile: Some("coder".to_string()),
+            output_path: Some("docs/output.md".to_string()),
+            created_at,
+            updated_at,
+        };
+        let state = crate::queue::QueueState { tasks: vec![task] };
+        let index = crate::queue::RunIndex::default();
+
+        let details = selected_task_details_text(Some("task_1"), &state, &index);
+
+        assert!(details.contains("task id: task_1"));
+        assert!(details.contains("title: Ship queue details"));
+        assert!(details.contains("status: ready"));
+        assert!(details.contains("priority: high"));
+        assert!(details.contains("worker profile: coder"));
+        assert!(details.contains("project: jcode"));
+        assert!(details.contains("output path: docs/output.md"));
+        assert!(details.contains("created_at: 2026-06-20T10:00:00+00:00"));
+        assert!(details.contains("updated_at: 2026-06-20T11:00:00+00:00"));
+        assert!(details.contains("no runs for selected task"));
+    }
+
+    #[test]
+    fn selected_task_details_uses_latest_run_for_task() {
+        let state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Running,
+                test_time("2026-06-20T10:00:00Z"),
+            )],
+        };
+        let older = test_run_state(
+            "run_old",
+            "task_1",
+            test_time("2026-06-20T11:00:00Z"),
+            crate::queue::RunStatus::Failed,
+        );
+        let newer = test_run_state(
+            "run_new",
+            "task_1",
+            test_time("2026-06-20T12:00:00Z"),
+            crate::queue::RunStatus::Running,
+        );
+        let other_task = test_run_state(
+            "run_other",
+            "task_2",
+            test_time("2026-06-20T13:00:00Z"),
+            crate::queue::RunStatus::Running,
+        );
+        let index = crate::queue::RunIndex {
+            runs: vec![newer, other_task, older],
+        };
+
+        let details = selected_task_details_text(Some("task_1"), &state, &index);
+
+        assert!(details.contains("run id: run_new"));
+        assert!(!details.contains("run id: run_old"));
+        assert!(!details.contains("run id: run_other"));
+    }
+
+    #[test]
+    fn log_preview_reports_missing_log_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("missing.log");
+
+        let preview = log_preview_section("stdout", &missing);
+
+        assert_eq!(
+            preview,
+            format!("stdout:\nmissing log file: {}", missing.display())
+        );
+    }
+
+    #[test]
+    fn log_preview_decodes_invalid_utf8_lossily_and_keeps_last_five_lines() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("stdout.log");
+        std::fs::write(&path, b"one\ntwo\nthree\nfour\nfive\nsix\ninvalid:\xFF\n")
+            .expect("write log");
+
+        let preview = log_preview_section("stdout", &path);
+
+        assert!(preview.starts_with("stdout:\nthree\nfour\nfive\nsix\ninvalid:"));
+        assert!(preview.contains(char::REPLACEMENT_CHARACTER));
+        assert!(!preview.contains("one"));
+        assert!(!preview.contains("two"));
     }
 
     fn assert_selection(
@@ -1702,6 +2004,28 @@ mod tests {
         chrono::DateTime::parse_from_rfc3339(value)
             .unwrap()
             .with_timezone(&chrono::Utc)
+    }
+
+    fn test_run_state(
+        run_id: &str,
+        task_id: &str,
+        started_at: chrono::DateTime<chrono::Utc>,
+        status: crate::queue::RunStatus,
+    ) -> crate::queue::RunState {
+        crate::queue::RunState {
+            run_id: run_id.to_string(),
+            task_id: task_id.to_string(),
+            worker_profile: "coder".to_string(),
+            command: "test-worker".to_string(),
+            pid: Some(4242),
+            status,
+            started_at,
+            ended_at: None,
+            exit_code: None,
+            run_dir: ".jcode/queue/runs/task_1/20260620T120000Z".to_string(),
+            stdout_path: ".jcode/queue/runs/task_1/20260620T120000Z/stdout.txt".to_string(),
+            stderr_path: ".jcode/queue/runs/task_1/20260620T120000Z/stderr.txt".to_string(),
+        }
     }
 
     struct CurrentDirGuard {
