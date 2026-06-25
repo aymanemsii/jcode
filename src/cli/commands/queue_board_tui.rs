@@ -186,6 +186,17 @@ pub(super) fn run_read_only_queue_board(
                             )?);
                             preserve_selection_after_refresh(&board, &mut selection);
                         }
+                        KeyCode::Char('c') => {
+                            status_message = Some(cancel_selected_running_task(
+                                &mut board,
+                                &mut state,
+                                &mut run_index,
+                                &mut active_runs,
+                                selection.selected_task_id(),
+                                &options,
+                            )?);
+                            preserve_selection_after_refresh(&board, &mut selection);
+                        }
                         KeyCode::Char('x') => {
                             status_message = Some(run_selected_task_in_background(
                                 &mut board,
@@ -480,6 +491,64 @@ fn reopen_selected_task_in_state(
 
     super::reopen_queue_task(state, task_id, updated_at)?;
     Ok(format!("reopened {task_id}"))
+}
+
+fn cancel_selected_running_task(
+    board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selected_task_id: Option<&str>,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    *index = crate::queue::load_run_index()?;
+    *state = crate::queue::load()?;
+    let message = cancel_selected_running_task_in_state(
+        board,
+        state,
+        index,
+        selected_task_id,
+        chrono::Utc::now(),
+        super::terminate_queue_run_process,
+    )?;
+    if message.starts_with("cancelled ") {
+        crate::queue::save_run_index(index)?;
+        crate::queue::save(state)?;
+        *board = crate::queue::build_queue_board(
+            state,
+            options.worker_profile.as_deref(),
+            Some(options.limit),
+        );
+        *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
+    }
+    Ok(message)
+}
+
+fn cancel_selected_running_task_in_state(
+    board: &crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
+    selected_task_id: Option<&str>,
+    ended_at: chrono::DateTime<chrono::Utc>,
+    terminator: impl FnMut(u32) -> Result<()>,
+) -> Result<String> {
+    let Some(task_id) = selected_task_id else {
+        return Ok("no task selected".to_string());
+    };
+    if selected_task_status(board, task_id) != Some(crate::queue::TaskStatus::Running) {
+        return Ok("selected task is not running".to_string());
+    }
+    if state_task_status(state, task_id) != Some(crate::queue::TaskStatus::Running) {
+        return Ok("selected task is not running".to_string());
+    }
+
+    let Some(run_id) = latest_running_run_for_task(index, task_id).map(|run| run.run_id.clone())
+    else {
+        return Ok("no active run for selected task".to_string());
+    };
+
+    super::cancel_queue_run_with_terminator(index, state, &run_id, false, ended_at, terminator)?;
+    Ok(format!("cancelled {run_id}"))
 }
 
 fn run_selected_task_in_background(
@@ -898,6 +967,17 @@ fn task_status_is_actionable(status: crate::queue::TaskStatus) -> bool {
     )
 }
 
+fn latest_running_run_for_task<'a>(
+    index: &'a crate::queue::RunIndex,
+    task_id: &str,
+) -> Option<&'a crate::queue::RunState> {
+    index
+        .runs
+        .iter()
+        .filter(|run| run.task_id == task_id && run.status == crate::queue::RunStatus::Running)
+        .max_by_key(|run| run.started_at)
+}
+
 fn state_task_status(
     state: &crate::queue::QueueState,
     task_id: &str,
@@ -960,7 +1040,7 @@ fn footer_text(
         "auto-refresh off"
     };
     let help = format!(
-        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | {auto}"
+        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  c cancel  n new  a approve  o reopen  r refresh  t auto  q quit | {auto}"
     );
     match status_message {
         Some(message) => format!("{message} | {help}"),
@@ -1237,7 +1317,7 @@ mod tests {
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh on";
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  c cancel  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh on";
         assert_eq!(footer_text(None, None, true), help);
         assert_eq!(
             footer_text(Some("refreshed"), None, true),
@@ -1248,7 +1328,7 @@ mod tests {
     #[test]
     fn footer_shows_auto_refresh_off() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh off";
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  c cancel  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh off";
         assert_eq!(footer_text(None, None, false), help);
     }
 
@@ -1596,6 +1676,177 @@ mod tests {
 
         let reloaded = crate::queue::load().expect("reload queue");
         assert_eq!(reloaded.tasks[0].worker_profile, None);
+    }
+
+    #[test]
+    fn cancel_selected_running_task_rejects_missing_selection() {
+        let board = test_board(&["task_1"]);
+        let mut state = crate::queue::QueueState::default();
+        let mut index = crate::queue::RunIndex::default();
+
+        let message = cancel_selected_running_task_in_state(
+            &board,
+            &mut state,
+            &mut index,
+            None,
+            test_time("2026-06-20T12:00:00Z"),
+            |_pid| Ok(()),
+        )
+        .expect("cancel selection");
+
+        assert_eq!(message, "no task selected");
+        assert!(index.runs.is_empty());
+        assert!(state.tasks.is_empty());
+    }
+
+    #[test]
+    fn cancel_selected_running_task_rejects_non_running_task() {
+        let board = test_board(&["task_1"]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Ready,
+                test_time("2026-06-20T10:00:00Z"),
+            )],
+        };
+        let mut index = crate::queue::RunIndex::default();
+
+        let message = cancel_selected_running_task_in_state(
+            &board,
+            &mut state,
+            &mut index,
+            Some("task_1"),
+            test_time("2026-06-20T12:00:00Z"),
+            |_pid| Ok(()),
+        )
+        .expect("cancel selection");
+
+        assert_eq!(message, "selected task is not running");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+    }
+
+    #[test]
+    fn cancel_selected_running_task_rejects_running_task_without_active_run() {
+        let board = test_board_with_statuses(&[("running_1", crate::queue::TaskStatus::Running)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "running_1",
+                crate::queue::TaskStatus::Running,
+                test_time("2026-06-20T10:00:00Z"),
+            )],
+        };
+        let mut index = crate::queue::RunIndex {
+            runs: vec![test_run_state(
+                "run_old",
+                "running_1",
+                test_time("2026-06-20T11:00:00Z"),
+                crate::queue::RunStatus::Failed,
+            )],
+        };
+
+        let message = cancel_selected_running_task_in_state(
+            &board,
+            &mut state,
+            &mut index,
+            Some("running_1"),
+            test_time("2026-06-20T12:00:00Z"),
+            |_pid| Ok(()),
+        )
+        .expect("cancel selection");
+
+        assert_eq!(message, "no active run for selected task");
+        assert_eq!(index.runs[0].status, crate::queue::RunStatus::Failed);
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Running);
+    }
+
+    #[test]
+    fn cancel_selected_running_task_uses_latest_running_run_and_blocks_task() {
+        let board = test_board_with_statuses(&[("running_1", crate::queue::TaskStatus::Running)]);
+        let ended_at = test_time("2026-06-20T12:00:00Z");
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "running_1",
+                crate::queue::TaskStatus::Running,
+                test_time("2026-06-20T10:00:00Z"),
+            )],
+        };
+        let mut older = test_run_state(
+            "run_old",
+            "running_1",
+            test_time("2026-06-20T10:30:00Z"),
+            crate::queue::RunStatus::Running,
+        );
+        older.pid = Some(1111);
+        let mut latest = test_run_state(
+            "run_latest",
+            "running_1",
+            test_time("2026-06-20T11:30:00Z"),
+            crate::queue::RunStatus::Running,
+        );
+        latest.pid = Some(2222);
+        let mut index = crate::queue::RunIndex {
+            runs: vec![latest, older],
+        };
+        let mut terminated_pid = None;
+
+        let message = cancel_selected_running_task_in_state(
+            &board,
+            &mut state,
+            &mut index,
+            Some("running_1"),
+            ended_at,
+            |pid| {
+                terminated_pid = Some(pid);
+                Ok(())
+            },
+        )
+        .expect("cancel selection");
+
+        assert_eq!(message, "cancelled run_latest");
+        assert_eq!(terminated_pid, Some(2222));
+        assert_eq!(index.runs[0].status, crate::queue::RunStatus::Cancelled);
+        assert_eq!(index.runs[0].ended_at, Some(ended_at));
+        assert_eq!(index.runs[1].status, crate::queue::RunStatus::Running);
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Blocked);
+        assert_eq!(state.tasks[0].updated_at, ended_at);
+    }
+
+    #[test]
+    fn cancel_selected_running_task_failed_termination_does_not_mutate_state() {
+        let board = test_board_with_statuses(&[("running_1", crate::queue::TaskStatus::Running)]);
+        let original_task = test_state_task(
+            "running_1",
+            crate::queue::TaskStatus::Running,
+            test_time("2026-06-20T10:00:00Z"),
+        );
+        let original_run = test_run_state(
+            "run_1",
+            "running_1",
+            test_time("2026-06-20T11:00:00Z"),
+            crate::queue::RunStatus::Running,
+        );
+        let mut state = crate::queue::QueueState {
+            tasks: vec![original_task.clone()],
+        };
+        let mut index = crate::queue::RunIndex {
+            runs: vec![original_run.clone()],
+        };
+
+        let err = cancel_selected_running_task_in_state(
+            &board,
+            &mut state,
+            &mut index,
+            Some("running_1"),
+            test_time("2026-06-20T12:00:00Z"),
+            |_pid| anyhow::bail!("termination failed"),
+        )
+        .expect_err("termination failure");
+
+        assert!(err
+            .to_string()
+            .contains("Failed to terminate queue run 'run_1'"));
+        assert_eq!(index.runs[0], original_run);
+        assert_eq!(state.tasks[0], original_task);
     }
 
     #[test]
