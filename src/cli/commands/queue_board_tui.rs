@@ -84,12 +84,27 @@ pub(super) fn run_read_only_queue_board(
                                 if input.title.trim().is_empty() {
                                     status_message = Some("title required".to_string());
                                 } else {
-                                    input.step = AddTaskPromptStep::WorkerProfile;
+                                    input.advance_step();
                                     status_message = None;
                                 }
                             }
-                            AddTaskPromptStep::WorkerProfile => {
+                            AddTaskPromptStep::Priority => {
+                                match parse_add_task_priority(&input.priority) {
+                                    Ok(_) => {
+                                        input.advance_step();
+                                        status_message = None;
+                                    }
+                                    Err(err) => {
+                                        status_message = Some(err.to_string());
+                                    }
+                                }
+                            }
+                            AddTaskPromptStep::OutputPath => {
                                 submit = Some(input.clone());
+                            }
+                            _ => {
+                                input.advance_step();
+                                status_message = None;
                             }
                         },
                         KeyCode::Backspace => {
@@ -626,7 +641,11 @@ fn run_selected_task_in_background_with_starter(
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct AddTaskPrompt {
     title: String,
+    description: String,
     worker_profile: String,
+    priority: String,
+    project: String,
+    output_path: String,
     step: AddTaskPromptStep,
 }
 
@@ -634,14 +653,44 @@ struct AddTaskPrompt {
 enum AddTaskPromptStep {
     #[default]
     Title,
+    Description,
     WorkerProfile,
+    Priority,
+    Project,
+    OutputPath,
 }
 
 impl AddTaskPrompt {
     fn current_value_mut(&mut self) -> &mut String {
         match self.step {
             AddTaskPromptStep::Title => &mut self.title,
+            AddTaskPromptStep::Description => &mut self.description,
             AddTaskPromptStep::WorkerProfile => &mut self.worker_profile,
+            AddTaskPromptStep::Priority => &mut self.priority,
+            AddTaskPromptStep::Project => &mut self.project,
+            AddTaskPromptStep::OutputPath => &mut self.output_path,
+        }
+    }
+
+    fn advance_step(&mut self) {
+        self.step = match self.step {
+            AddTaskPromptStep::Title => AddTaskPromptStep::Description,
+            AddTaskPromptStep::Description => AddTaskPromptStep::WorkerProfile,
+            AddTaskPromptStep::WorkerProfile => AddTaskPromptStep::Priority,
+            AddTaskPromptStep::Priority => AddTaskPromptStep::Project,
+            AddTaskPromptStep::Project => AddTaskPromptStep::OutputPath,
+            AddTaskPromptStep::OutputPath => AddTaskPromptStep::OutputPath,
+        };
+    }
+
+    fn step_number(&self) -> usize {
+        match self.step {
+            AddTaskPromptStep::Title => 1,
+            AddTaskPromptStep::Description => 2,
+            AddTaskPromptStep::WorkerProfile => 3,
+            AddTaskPromptStep::Priority => 4,
+            AddTaskPromptStep::Project => 5,
+            AddTaskPromptStep::OutputPath => 6,
         }
     }
 }
@@ -659,7 +708,7 @@ fn add_task_from_prompt(
     validate_add_task_worker_profile(worker_profile)?;
 
     *state = crate::queue::load()?;
-    let task_id = add_task_to_state(state, &input.title, worker_profile)?;
+    let task_id = add_task_to_state(state, input)?;
     crate::queue::save(state)?;
 
     *index = crate::queue::load_run_index()?;
@@ -678,25 +727,48 @@ fn add_task_from_prompt(
 
 fn add_task_to_state(
     state: &mut crate::queue::QueueState,
-    title: &str,
-    worker_profile: Option<&str>,
+    input: &AddTaskPrompt,
 ) -> Result<String> {
-    let title = title.trim();
+    let title = input.title.trim();
     if title.is_empty() {
         anyhow::bail!("title required");
     }
 
     let task = crate::queue::Task::new(
         title.to_string(),
-        String::new(),
-        None,
-        crate::queue::TaskPriority::Normal,
-        normalized_worker_profile(worker_profile.unwrap_or_default()).map(str::to_string),
-        None,
+        input.description.trim().to_string(),
+        normalized_optional_string(&input.project),
+        parse_add_task_priority(&input.priority)?,
+        normalized_worker_profile(&input.worker_profile).map(str::to_string),
+        normalized_optional_string(&input.output_path),
     );
     let task_id = task.id.clone();
     state.tasks.push(task);
     Ok(task_id)
+}
+
+fn parse_add_task_priority(priority: &str) -> Result<crate::queue::TaskPriority> {
+    let priority = priority.trim();
+    if priority.is_empty() {
+        return Ok(crate::queue::TaskPriority::Normal);
+    }
+
+    match priority {
+        "urgent" => Ok(crate::queue::TaskPriority::Urgent),
+        "high" => Ok(crate::queue::TaskPriority::High),
+        "normal" => Ok(crate::queue::TaskPriority::Normal),
+        "low" => Ok(crate::queue::TaskPriority::Low),
+        other => anyhow::bail!("invalid priority: {other}"),
+    }
+}
+
+fn normalized_optional_string(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn normalized_worker_profile(worker_profile: &str) -> Option<&str> {
@@ -1019,6 +1091,9 @@ fn footer_text(
     if let Some(input) = input_mode {
         let prompt = match input.step {
             AddTaskPromptStep::Title => format!("Title: {}", input.title),
+            AddTaskPromptStep::Description => {
+                format!("Description (optional): {}", input.description)
+            }
             AddTaskPromptStep::WorkerProfile => {
                 format!(
                     "Worker profile (optional): {} | {}",
@@ -1026,8 +1101,15 @@ fn footer_text(
                     worker_profile_footer_message()
                 )
             }
+            AddTaskPromptStep::Priority => {
+                format!("Priority (urgent/high/normal/low, optional): {}", input.priority)
+            }
+            AddTaskPromptStep::Project => format!("Project (optional): {}", input.project),
+            AddTaskPromptStep::OutputPath => {
+                format!("Output path (optional): {}", input.output_path)
+            }
         };
-        let help = "Enter submit  Esc cancel";
+        let help = format!("{}/6  Enter next  Esc cancel", input.step_number());
         return match status_message {
             Some(message) => format!("{message} | {prompt} | {help}"),
             None => format!("{prompt} | {help}"),
@@ -1164,6 +1246,9 @@ fn selected_task_details_text(
         .filter(|value| !value.is_empty())
     {
         lines.push(format!("worker profile: {worker_profile}"));
+    }
+    if !task.description.trim().is_empty() {
+        lines.push(format!("description: {}", task.description.trim()));
     }
     if let Some(project) = task.project.as_deref().filter(|value| !value.is_empty()) {
         lines.push(format!("project: {project}"));
@@ -1378,11 +1463,12 @@ mod tests {
             title: "Update docs".to_string(),
             worker_profile: "coder".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         assert_eq!(
             footer_text(None, Some(&input), true),
-            "Worker profile (optional): coder | Available: coder | Enter submit  Esc cancel"
+            "Worker profile (optional): coder | Available: coder | 3/6  Enter next  Esc cancel"
         );
     }
 
@@ -1390,13 +1476,13 @@ mod tests {
     fn footer_shows_title_prompt_in_first_input_step() {
         let input = AddTaskPrompt {
             title: "Update docs".to_string(),
-            worker_profile: String::new(),
             step: AddTaskPromptStep::Title,
+            ..Default::default()
         };
 
         assert_eq!(
             footer_text(None, Some(&input), true),
-            "Title: Update docs | Enter submit  Esc cancel"
+            "Title: Update docs | 1/6  Enter next  Esc cancel"
         );
     }
 
@@ -1413,8 +1499,8 @@ mod tests {
         .expect("write workers");
         let input = AddTaskPrompt {
             title: "Update docs".to_string(),
-            worker_profile: String::new(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         let footer = footer_text(None, Some(&input), true);
@@ -1433,11 +1519,12 @@ mod tests {
             title: "Update docs".to_string(),
             worker_profile: "anything".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         assert_eq!(
             footer_text(None, Some(&input), true),
-            "Worker profile (optional): anything | No workers.toml found; any profile name is allowed | Enter submit  Esc cancel"
+            "Worker profile (optional): anything | No workers.toml found; any profile name is allowed | 3/6  Enter next  Esc cancel"
         );
     }
 
@@ -1451,13 +1538,13 @@ mod tests {
             .expect("write workers");
         let input = AddTaskPrompt {
             title: "Update docs".to_string(),
-            worker_profile: String::new(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         assert_eq!(
             footer_text(None, Some(&input), true),
-            "Worker profile (optional):  | No worker profiles configured | Enter submit  Esc cancel"
+            "Worker profile (optional):  | No worker profiles configured | 3/6  Enter next  Esc cancel"
         );
     }
 
@@ -1465,7 +1552,9 @@ mod tests {
     fn add_task_to_state_adds_backlog_task_with_defaults() {
         let mut state = crate::queue::QueueState::default();
 
-        let task_id = add_task_to_state(&mut state, "  New board task  ", None).expect("add task");
+        let task_id =
+            add_task_to_state(&mut state, &test_add_task_input("  New board task  "))
+                .expect("add task");
 
         assert_eq!(state.tasks.len(), 1);
         assert_eq!(state.tasks[0].id, task_id);
@@ -1482,7 +1571,8 @@ mod tests {
     fn add_task_to_state_rejects_empty_title() {
         let mut state = crate::queue::QueueState::default();
 
-        let err = add_task_to_state(&mut state, "   ", None).expect_err("empty title rejected");
+        let err = add_task_to_state(&mut state, &test_add_task_input("   "))
+            .expect_err("empty title rejected");
 
         assert!(err.to_string().contains("title required"));
         assert!(state.tasks.is_empty());
@@ -1491,8 +1581,10 @@ mod tests {
     #[test]
     fn add_task_to_state_stores_worker_profile_when_present() {
         let mut state = crate::queue::QueueState::default();
+        let mut input = test_add_task_input("New board task");
+        input.worker_profile = "  coder  ".to_string();
 
-        add_task_to_state(&mut state, "New board task", Some("  coder  ")).expect("add task");
+        add_task_to_state(&mut state, &input).expect("add task");
 
         assert_eq!(state.tasks[0].worker_profile.as_deref(), Some("coder"));
     }
@@ -1500,10 +1592,64 @@ mod tests {
     #[test]
     fn add_task_to_state_stores_none_for_empty_worker_profile() {
         let mut state = crate::queue::QueueState::default();
+        let mut input = test_add_task_input("New board task");
+        input.worker_profile = "   ".to_string();
 
-        add_task_to_state(&mut state, "New board task", Some("   ")).expect("add task");
+        add_task_to_state(&mut state, &input).expect("add task");
 
         assert_eq!(state.tasks[0].worker_profile, None);
+    }
+
+    #[test]
+    fn add_task_to_state_stores_rich_optional_fields() {
+        let mut state = crate::queue::QueueState::default();
+        let input = AddTaskPrompt {
+            title: "  Ship queue task  ".to_string(),
+            description: "  Add richer prompts  ".to_string(),
+            worker_profile: "  coder  ".to_string(),
+            priority: "  urgent  ".to_string(),
+            project: "  jcode  ".to_string(),
+            output_path: "  docs/queue.md  ".to_string(),
+            step: AddTaskPromptStep::OutputPath,
+            ..Default::default()
+        };
+
+        add_task_to_state(&mut state, &input).expect("add task");
+
+        let task = &state.tasks[0];
+        assert_eq!(task.title, "Ship queue task");
+        assert_eq!(task.description, "Add richer prompts");
+        assert_eq!(task.worker_profile.as_deref(), Some("coder"));
+        assert_eq!(task.priority, crate::queue::TaskPriority::Urgent);
+        assert_eq!(task.project.as_deref(), Some("jcode"));
+        assert_eq!(task.output_path.as_deref(), Some("docs/queue.md"));
+    }
+
+    #[test]
+    fn parse_add_task_priority_accepts_valid_values_and_empty_default() {
+        assert_eq!(
+            parse_add_task_priority("urgent").expect("urgent"),
+            crate::queue::TaskPriority::Urgent
+        );
+        assert_eq!(
+            parse_add_task_priority(" high ").expect("high"),
+            crate::queue::TaskPriority::High
+        );
+        assert_eq!(
+            parse_add_task_priority("").expect("default"),
+            crate::queue::TaskPriority::Normal
+        );
+        assert_eq!(
+            parse_add_task_priority("low").expect("low"),
+            crate::queue::TaskPriority::Low
+        );
+    }
+
+    #[test]
+    fn parse_add_task_priority_rejects_invalid_value() {
+        let err = parse_add_task_priority("soon").expect_err("invalid priority");
+
+        assert_eq!(err.to_string(), "invalid priority: soon");
     }
 
     #[test]
@@ -1531,6 +1677,7 @@ mod tests {
             title: "New board task".to_string(),
             worker_profile: "coder".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         let message = add_task_from_prompt(
@@ -1579,6 +1726,7 @@ mod tests {
             title: "New board task".to_string(),
             worker_profile: "reviewer".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         let err = add_task_from_prompt(
@@ -1619,6 +1767,7 @@ mod tests {
             title: "New board task".to_string(),
             worker_profile: "ad-hoc".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         add_task_from_prompt(
@@ -1661,6 +1810,7 @@ mod tests {
             title: "New board task".to_string(),
             worker_profile: "   ".to_string(),
             step: AddTaskPromptStep::WorkerProfile,
+            ..Default::default()
         };
 
         add_task_from_prompt(
@@ -2418,7 +2568,7 @@ mod tests {
         let task = crate::queue::Task {
             id: "task_1".to_string(),
             title: "Ship queue details".to_string(),
-            description: String::new(),
+            description: "Write docs and tests".to_string(),
             project: Some("jcode".to_string()),
             status: crate::queue::TaskStatus::Ready,
             priority: crate::queue::TaskPriority::High,
@@ -2437,6 +2587,7 @@ mod tests {
         assert!(details.contains("status: ready"));
         assert!(details.contains("priority: high"));
         assert!(details.contains("worker profile: coder"));
+        assert!(details.contains("description: Write docs and tests"));
         assert!(details.contains("project: jcode"));
         assert!(details.contains("output path: docs/output.md"));
         assert!(details.contains("created_at: 2026-06-20T10:00:00+00:00"));
@@ -2617,6 +2768,13 @@ mod tests {
         QueueBoardTuiOptions {
             worker_profile: None,
             limit: 100,
+        }
+    }
+
+    fn test_add_task_input(title: &str) -> AddTaskPrompt {
+        AddTaskPrompt {
+            title: title.to_string(),
+            ..Default::default()
         }
     }
 
