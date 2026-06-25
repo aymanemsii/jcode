@@ -175,6 +175,17 @@ pub(super) fn run_read_only_queue_board(
                             )?);
                             preserve_selection_after_refresh(&board, &mut selection);
                         }
+                        KeyCode::Char('o') => {
+                            status_message = Some(reopen_selected_task(
+                                &mut board,
+                                &mut state,
+                                &mut run_index,
+                                &mut active_runs,
+                                selection.selected_task_id(),
+                                &options,
+                            )?);
+                            preserve_selection_after_refresh(&board, &mut selection);
+                        }
                         KeyCode::Char('x') => {
                             status_message = Some(run_selected_task_in_background(
                                 &mut board,
@@ -410,6 +421,65 @@ fn approve_selected_review_task_in_state(
 
     super::approve_queue_task(state, task_id, updated_at)?;
     Ok(format!("approved {task_id}"))
+}
+
+fn reopen_selected_task(
+    board: &mut crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    index: &mut crate::queue::RunIndex,
+    active_runs: &mut Vec<crate::queue::RunState>,
+    selected_task_id: Option<&str>,
+    options: &QueueBoardTuiOptions,
+) -> Result<String> {
+    let message =
+        reopen_selected_task_in_state(board, state, selected_task_id, chrono::Utc::now())?;
+    if message.starts_with("reopened ") {
+        crate::queue::save(state)?;
+        *index = crate::queue::load_run_index()?;
+        *board = crate::queue::build_queue_board(
+            state,
+            options.worker_profile.as_deref(),
+            Some(options.limit),
+        );
+        *active_runs = filtered_active_runs(index, options.worker_profile.as_deref());
+    }
+    Ok(message)
+}
+
+fn reopen_selected_task_in_state(
+    board: &crate::queue::QueueBoard,
+    state: &mut crate::queue::QueueState,
+    selected_task_id: Option<&str>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+) -> Result<String> {
+    let Some(task_id) = selected_task_id else {
+        return Ok("no task selected".to_string());
+    };
+
+    match selected_task_status(board, task_id) {
+        Some(crate::queue::TaskStatus::Running) => {
+            return Ok("cannot reopen running task".to_string());
+        }
+        Some(crate::queue::TaskStatus::Ready) => {
+            return Ok("task already ready".to_string());
+        }
+        Some(_) => {}
+        None => return Ok("no task selected".to_string()),
+    }
+
+    match state_task_status(state, task_id) {
+        Some(crate::queue::TaskStatus::Running) => {
+            return Ok("cannot reopen running task".to_string());
+        }
+        Some(crate::queue::TaskStatus::Ready) => {
+            return Ok("task already ready".to_string());
+        }
+        Some(_) => {}
+        None => return Ok("no task selected".to_string()),
+    }
+
+    super::reopen_queue_task(state, task_id, updated_at)?;
+    Ok(format!("reopened {task_id}"))
 }
 
 fn run_selected_task_in_background(
@@ -890,7 +960,7 @@ fn footer_text(
         "auto-refresh off"
     };
     let help = format!(
-        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | {auto}"
+        "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | {auto}"
     );
     match status_message {
         Some(message) => format!("{message} | {help}"),
@@ -1167,7 +1237,7 @@ mod tests {
     #[test]
     fn footer_mentions_refresh_and_quit_keys() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | auto-refresh on";
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh on";
         assert_eq!(footer_text(None, None, true), help);
         assert_eq!(
             footer_text(Some("refreshed"), None, true),
@@ -1178,7 +1248,7 @@ mod tests {
     #[test]
     fn footer_shows_auto_refresh_off() {
         let help =
-            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  r refresh  t auto  q quit | auto-refresh off";
+            "Up/Down or j/k move within column  Left/Right or h/l move columns  x run  n new  a approve  o reopen  r refresh  t auto  q quit | auto-refresh off";
         assert_eq!(footer_text(None, None, false), help);
     }
 
@@ -1789,6 +1859,95 @@ mod tests {
     }
 
     #[test]
+    fn reopen_selected_review_done_and_blocked_tasks_moves_them_to_ready() {
+        for status in [
+            crate::queue::TaskStatus::Review,
+            crate::queue::TaskStatus::Done,
+            crate::queue::TaskStatus::Blocked,
+        ] {
+            let original_time = test_time("2026-06-20T10:00:00Z");
+            let updated_time = test_time("2026-06-20T12:00:00Z");
+            let board = test_board_with_statuses(&[("task_1", status)]);
+            let mut state = crate::queue::QueueState {
+                tasks: vec![test_state_task("task_1", status, original_time)],
+            };
+
+            let message =
+                reopen_selected_task_in_state(&board, &mut state, Some("task_1"), updated_time)
+                    .expect("reopen selected task");
+
+            assert_eq!(message, "reopened task_1");
+            assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+            assert_eq!(state.tasks[0].updated_at, updated_time);
+        }
+    }
+
+    #[test]
+    fn reopen_selected_running_task_is_rejected() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Running)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Running,
+                original_time,
+            )],
+        };
+
+        let message =
+            reopen_selected_task_in_state(&board, &mut state, Some("task_1"), updated_time)
+                .expect("reject running task");
+
+        assert_eq!(message, "cannot reopen running task");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Running);
+        assert_eq!(state.tasks[0].updated_at, original_time);
+    }
+
+    #[test]
+    fn reopen_selected_ready_task_is_rejected() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Ready,
+                original_time,
+            )],
+        };
+
+        let message =
+            reopen_selected_task_in_state(&board, &mut state, Some("task_1"), updated_time)
+                .expect("reject ready task");
+
+        assert_eq!(message, "task already ready");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Ready);
+        assert_eq!(state.tasks[0].updated_at, original_time);
+    }
+
+    #[test]
+    fn reopen_without_selected_task_is_rejected() {
+        let original_time = test_time("2026-06-20T10:00:00Z");
+        let updated_time = test_time("2026-06-20T12:00:00Z");
+        let board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Done)]);
+        let mut state = crate::queue::QueueState {
+            tasks: vec![test_state_task(
+                "task_1",
+                crate::queue::TaskStatus::Done,
+                original_time,
+            )],
+        };
+
+        let message = reopen_selected_task_in_state(&board, &mut state, None, updated_time)
+            .expect("reject missing selection");
+
+        assert_eq!(message, "no task selected");
+        assert_eq!(state.tasks[0].status, crate::queue::TaskStatus::Done);
+        assert_eq!(state.tasks[0].updated_at, original_time);
+    }
+
+    #[test]
     fn run_selected_without_selected_task_is_rejected() {
         let mut board = test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
         let mut state = crate::queue::QueueState::default();
@@ -1955,6 +2114,21 @@ mod tests {
         preserve_selection_after_refresh(&reloaded_board, &mut selection);
 
         assert_selection(&selection, 5, Some(0), Some("task_1"));
+    }
+
+    #[test]
+    fn selection_preserves_reopened_task_when_still_visible_after_reload() {
+        let reloaded_board =
+            test_board_with_statuses(&[("task_1", crate::queue::TaskStatus::Ready)]);
+        let mut selection = BoardSelection {
+            column_index: 5,
+            row_index: Some(0),
+            task_id: Some("task_1".to_string()),
+        };
+
+        preserve_selection_after_refresh(&reloaded_board, &mut selection);
+
+        assert_selection(&selection, 1, Some(0), Some("task_1"));
     }
 
     #[test]
