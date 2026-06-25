@@ -4,7 +4,7 @@
 
 Build a TUI/Kanban board that makes Queue Mode easier to operate visually without changing the proven CLI workflow. The board should expose queue tasks, active runs, review state, and task details in one place while keeping existing commands and project-local storage as the operational foundation.
 
-## Current Checkpoint
+## Queue TUI v0.4 Checkpoint
 
 Standalone Queue Mode TUI/Kanban is implemented and launched with:
 
@@ -12,43 +12,61 @@ Standalone Queue Mode TUI/Kanban is implemented and launched with:
 jcode queue board --tui
 ```
 
-It displays `backlog`, `ready`, `running`, `review`, `blocked`, `done`, and `cancelled` columns using project-local `.jcode/` queue storage and run state.
+It displays `backlog`, `ready`, `running`, `review`, `blocked`, `done`, and `cancelled` columns using project-local `.jcode/` queue storage and run state. This checkpoint supports a complete human-controlled AI Kanban loop: create work, run a selected actionable task in the background, watch it move to review or blocked, inspect details/log previews, approve finished work, reopen work for another pass, or cancel a running task.
 
 Keyboard controls:
 
 - `Left`/`Right`: move between columns.
 - `Up`/`Down` or `j`/`k`: move within a column.
-- `n`: create a new task; prompts for title and worker profile.
+- `n`: create a rich task with title, description, worker profile, priority, project, and output path.
 - `x`: run the selected actionable task in the background.
 - `r`: manually refresh board and run status.
-- `a`: approve the selected review task.
+- `a`: approve the selected review task to `done`.
+- `o`: reopen the selected `review`, `done`, or `blocked` task to `ready`.
+- `c`: cancel the selected running task to `blocked`.
 - `q`: quit.
 
 Safe workflow:
 
 1. Open `jcode queue board --tui`.
 2. Press `n`.
-3. Enter a task title.
-4. Enter a worker profile, such as `planner`.
+3. Create a task with title, description, worker profile, priority, project, and output path.
 5. Select the task.
 6. Press `x` to run it in the background.
-7. Wait for auto-refresh to move it to `review`.
-8. Press `a` to approve it to `done`.
+7. Watch auto-refresh move it to `review` or `blocked`.
+8. Inspect the details panel, latest run summary, and stdout/stderr log preview.
+9. Press `a` to approve a review task to `done`, `o` to reopen a review/done/blocked task to `ready`, or `c` to cancel a running task to `blocked`.
+
+Worker profile behavior:
+
+- `.jcode/workers.toml` controls valid worker profiles when present.
+- The TUI discovers and shows available profiles from `.jcode/workers.toml`.
+- Task creation validates the selected worker profile against that file.
+- If `.jcode/workers.toml` is missing, arbitrary profile names are allowed.
+
+Run lifecycle:
+
+- `backlog`/`ready` -> `running` when a selected actionable task starts.
+- `running` -> `review` when the worker exits successfully.
+- `running` -> `blocked` when the worker fails or the task is cancelled.
+- `review` -> `done` when approved.
+- `review`/`done`/`blocked` -> `ready` when reopened.
 
 Current limitations:
 
-- No integration into the main `jcode` interactive app yet.
+- The mutating Kanban workflow is standalone only; it is not integrated into the main `jcode` app yet.
 - No drag-and-drop.
-- No edit task action.
-- No selected-task logs/details panel yet.
-- No daemon.
-- No automatic task scheduler.
-- No parallel/swarm scheduler.
+- No task editing.
+- No daemon or scheduler.
+- No parallel/swarm mode.
+- No full log viewer in the TUI beyond the preview.
 
-Next planned phase:
+Next recommended phases:
 
-1. Inspect and map the main `jcode` interactive TUI integration path.
-2. Integrate Queue Board into the main `jcode` terminal app safely.
+1. Native visual restyle for the standalone board.
+2. Main `jcode` integration.
+3. Security and hardening.
+4. Daemon/scheduler later.
 
 ## Principles
 
@@ -107,35 +125,22 @@ Purpose:
 
 The command should group tasks into the proposed columns, include active-run summaries, and preserve existing Queue Mode semantics.
 
-## Phase 3C: Read-Only TUI Board
+## Phase 3C: Standalone TUI Board
 
 - Completed foundation: `jcode queue board --tui` opens a standalone terminal board from the same board data used by `jcode queue board`.
-- It renders project-local queue state, shows the canonical columns, supports 2D navigation, creates tasks, starts selected actionable tasks in the background, manually refreshes with `r`, auto-refreshes running tasks while open, approves selected review tasks, and exits with `q`.
+- It renders project-local queue state, shows the canonical columns, supports 2D navigation, creates rich tasks, starts selected actionable tasks in the background, manually refreshes with `r`, auto-refreshes running tasks while open, shows selected-task details and log previews, approves selected review tasks, reopens review/done/blocked tasks, cancels selected running tasks, and exits with `q`.
 - Its refresh action reloads queue/run state and reuses the existing `refresh-runs` reconciliation logic.
-
-Remaining richer TUI work:
-
-- Add a minimal Queue Mode screen in the TUI.
-- Read queue state using the same logic as the CLI board command.
-- Render columns with stable ordering.
-- Render active runs.
-- Render selected task details.
-- Support keyboard navigation across columns and tasks.
 
 ## Phase 3D: Safe TUI Actions
 
 Initial safe actions are implemented in the standalone board:
 
-- Create task.
+- Create rich task.
 - Run selected actionable task in the background.
 - Refresh/reconcile run status.
 - Approve selected review task.
-
-Potential later standalone actions:
-
-- Reopen a task.
-- Maybe cancel a run with explicit confirmation.
-- Maybe open logs or task details from the selected task/run.
+- Reopen selected review/done/blocked task.
+- Cancel selected running task.
 
 Each action should call the same logic used by existing CLI commands and should be introduced one at a time with focused tests.
 
@@ -145,6 +150,8 @@ Each action should call the same logic used by existing CLI commands and should 
 - Automatic task scheduling.
 - Parallel or swarm scheduling.
 - Drag-and-drop.
+- Task editing.
+- Full in-TUI log viewer.
 - Complex agent orchestration.
 - Provider, model, or session integration.
 
@@ -156,6 +163,9 @@ Each action should call the same logic used by existing CLI commands and should 
 - Prefer board data helpers before UI rendering changes.
 - Treat TUI mutations as a later layer over already-tested CLI behavior.
 
-## Recommended Next Implementation Step
+## Recommended Next Implementation Steps
 
-Next, inspect and map the main `jcode` interactive TUI integration path, then integrate Queue Board into the main terminal app safely.
+1. Native visual restyle for the standalone board.
+2. Main `jcode` integration.
+3. Security and hardening.
+4. Daemon/scheduler later.

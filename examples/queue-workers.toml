@@ -16,3 +16,7 @@ description = "Safe smoke-test worker"
 # `--execute`, `--background`, and `jcode queue board --tui` without
 # launching a real agent.
 command = "echo smoke worker ran task=<task_id> handoff=<handoff_file>"
+
+# In `jcode queue board --tui`, this file controls the valid worker profiles
+# when it exists. If `.jcode/workers.toml` is missing, the TUI allows arbitrary
+# profile names so tasks can still be captured.
