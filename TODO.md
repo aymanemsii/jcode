@@ -168,3 +168,51 @@ Acceptance criteria:
 
 Result:
 Documented the shared server shutdown behavior in `docs/SERVER_ARCHITECTURE.md`.
+
+## Task 4 - Investigate Queue storage foundation implementation
+
+Task Type: Investigation / Implementation Planning
+
+Status: Not started
+
+Priority: High
+
+Goal:
+Investigate the cleanest, smallest implementation path for the first Queue Mode foundation slice.
+
+Planned foundation scope:
+
+* Project-local `.jcode/queue/tasks.json`
+* Minimal task schema:
+
+  * id
+  * title
+  * body
+  * status
+  * priority
+  * created_at
+  * updated_at
+  * optional worker_profile
+* CLI-only commands:
+
+  * `jcode queue init`
+  * `jcode queue add`
+  * `jcode queue list`
+
+Questions to answer:
+
+* Where are existing CLI commands defined?
+* Where should a new `queue` command group be added?
+* Is there an existing pattern for subcommands similar to this?
+* Where should queue storage code live?
+* What crates/modules should be touched for the smallest safe implementation?
+* What dependencies already exist for JSON serialization, timestamps, IDs, and filesystem paths?
+* What should the first implementation slice include?
+* What should be explicitly deferred?
+
+Acceptance criteria:
+
+* The investigation identifies the exact files/functions likely involved.
+* The implementation plan is small and CLI-only.
+* No TUI, worker execution, background runs, or visual/theme changes are included.
+* No source code is changed during this task.
