@@ -130,3 +130,36 @@ Risks / things to avoid:
 
 Final recommendation:
 For now, document the existing command. Later, if needed, implement `/server-stop` as an informational slash command that surfaces the existing safe manual shutdown path.
+
+## Task 3 - Document shared server shutdown behavior
+
+Task Type: Documentation
+
+Status: Not started
+
+Priority: High
+
+Goal:
+Document the current `/quit` and background server behavior so future users/developers understand that `/quit` exits the client only, while the shared `jcode.exe --provider auto serve` process may remain alive.
+
+Planned documentation should explain:
+
+* `/quit` exits the TUI/client.
+* `/quit` does not stop the shared background server.
+* The background server may outlive individual clients.
+* In normal mode, the server may self-exit after an idle timeout.
+* In self-dev/debug-control mode, idle shutdown may be disabled.
+* To intentionally stop the server, use:
+
+```powershell
+jcode server stop --force
+```
+
+* Stopping the server can drop live headless/swarm sessions.
+* Do not use manual `taskkill` as the normal user-facing shutdown path.
+* Do not change `/quit` behavior.
+
+Acceptance criteria:
+
+* `TODO.md` clearly records the documentation task.
+* No code or documentation files are changed yet.
