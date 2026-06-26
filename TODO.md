@@ -75,3 +75,58 @@ Before release builds on Windows, kill existing `jcode.exe` processes if the bin
 ```powershell
 taskkill /IM jcode.exe /F 2>$null
 ```
+
+## Task 2 - Investigate safest solution for intentional server shutdown
+
+Task Type: Investigation / Proposal
+
+Status: Completed
+
+Priority: High
+
+Context:
+Task 1 confirmed that `/quit` should remain client-only. The remaining issue is user experience: if the shared background server stays alive, users need a safe and discoverable way to intentionally stop it.
+
+Investigation result:
+
+* Existing shutdown already exists through `jcode server stop --force`.
+* The implementation is in `src/cli/commands.rs`.
+* Without `--force`, the command refuses and warns that stopping the daemon can drop live headless/swarm sessions.
+* With `--force`, it finds the server through the registry/socket.
+* On Windows, it uses the existing platform termination logic rather than requiring manual `taskkill`.
+* No existing graceful shutdown RPC/protocol command was found.
+* Adding a direct TUI shutdown command would require more risky crate/layering changes.
+* Changing `/quit` to stop the server is not recommended.
+* Changing self-dev/debug-control idle timeout behavior is also risky.
+
+Candidate solutions:
+
+1. Document `jcode server stop --force`.
+2. Add an informational TUI slash command such as `/server-stop` that explains the risk and shows the exact CLI command to run.
+3. Add a confirmed TUI command that invokes the stop logic directly.
+4. Add `/quit --shutdown`.
+5. Change `/quit` behavior automatically.
+
+Decision:
+The safest immediate solution is documentation only.
+
+Best future UX improvement:
+Add `/server-stop` as an informational slash command only. It should not kill the server directly. It should explain that the shared server may outlive the TUI and tell the user to run:
+
+```powershell
+jcode server stop --force
+```
+
+Recommended wording:
+`/server-stop` is better than `/shutdown`, `/quit-server`, or `/quit --shutdown` because it mirrors the existing CLI command and makes the target clear.
+
+Risks / things to avoid:
+
+* Do not make `/quit` stop the server.
+* Do not add a shutdown RPC unless there is a broader need.
+* Do not bypass the existing `--force` warning semantics.
+* Do not rely on manual `taskkill` for normal UX.
+* Do not hide that stopping the server can drop headless/swarm work.
+
+Final recommendation:
+For now, document the existing command. Later, if needed, implement `/server-stop` as an informational slash command that surfaces the existing safe manual shutdown path.
