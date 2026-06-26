@@ -135,7 +135,7 @@ For now, document the existing command. Later, if needed, implement `/server-sto
 
 Task Type: Documentation
 
-Status: Not started
+Status: Completed
 
 Priority: High
 
@@ -162,4 +162,9 @@ jcode server stop --force
 Acceptance criteria:
 
 * `TODO.md` clearly records the documentation task.
-* No code or documentation files are changed yet.
+* `docs/SERVER_ARCHITECTURE.md` documents `/quit` as client-only behavior.
+* `docs/SERVER_ARCHITECTURE.md` documents `jcode server stop --force` as the intentional shared-server shutdown path.
+* No Rust/source/config files are changed.
+
+Result:
+Documented the shared server shutdown behavior in `docs/SERVER_ARCHITECTURE.md`.

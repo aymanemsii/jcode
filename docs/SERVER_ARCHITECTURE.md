@@ -86,6 +86,28 @@ The server shuts down when:
 - **Manual**: server process is killed
 - **Reload**: server execs into a new binary (same socket path)
 
+### Client quit vs server shutdown
+
+`/quit` exits only the current TUI/client. It does not stop the shared
+background server. On Windows, that server may appear in process lists as
+`jcode.exe --provider auto serve`.
+
+This is intentional: the shared server can outlive individual clients so other
+clients, headless sessions, swarm work, and reconnectable sessions are not
+interrupted. In normal mode, the server may self-exit after its idle timeout
+once no clients remain connected. In self-dev/debug-control mode, idle shutdown
+may be disabled.
+
+To intentionally stop the shared server, use:
+
+```powershell
+jcode server stop --force
+```
+
+Stopping the server can drop live headless or swarm sessions. Do not use manual
+`taskkill` as the normal user-facing shutdown path, and do not change `/quit` to
+stop the server.
+
 ### Client Reconnection
 
 Clients have a built-in reconnect loop. When the connection drops (server
