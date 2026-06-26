@@ -245,3 +245,59 @@ Deferred:
 * Multi-project/global queue discovery.
 * Reusing or modifying swarm/ambient/safety queues.
 * Any implementation copied from old Queue work.
+
+## Task 5 - Implement Queue CLI foundation
+
+Task Type: Implementation
+
+Status: Not started
+
+Priority: High
+
+Goal:
+Implement the first Queue Mode foundation slice as a small CLI-only feature.
+
+Scope:
+
+* Add project-local queue storage at `./.jcode/queue/tasks.json`.
+* Add a reusable queue storage module in `crates/jcode-base/src/queue.rs`.
+* Re-export it from `crates/jcode-base/src/lib.rs`.
+* Add CLI parsing for:
+
+  * `jcode queue init`
+  * `jcode queue add`
+  * `jcode queue list`
+* Add thin CLI command handling, likely through `src/cli/commands/queue.rs`.
+* Wire dispatch through `src/cli/args.rs`, `src/cli/dispatch.rs`, and command exports as needed.
+
+Minimal task schema:
+
+* id
+* title
+* body
+* status
+* priority
+* created_at
+* updated_at
+* optional worker_profile
+
+Implementation rules:
+
+* Keep it CLI-only.
+* Keep output simple.
+* Use project-local storage only.
+* Use existing dependencies where possible.
+* Do not add TUI integration.
+* Do not add worker execution.
+* Do not add background runs.
+* Do not add server protocol changes.
+* Do not touch visual/theme files.
+* Do not copy old Queue code.
+
+Acceptance criteria:
+
+* `jcode queue init` creates `./.jcode/queue/tasks.json`.
+* `jcode queue add` adds a task.
+* `jcode queue list` lists tasks.
+* `cargo check --lib --release` passes.
+* No TUI, worker, background-run, or visual/theme files are touched.
