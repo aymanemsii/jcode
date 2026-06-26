@@ -173,7 +173,7 @@ Documented the shared server shutdown behavior in `docs/SERVER_ARCHITECTURE.md`.
 
 Task Type: Investigation / Implementation Planning
 
-Status: Not started
+Status: Completed
 
 Priority: High
 
@@ -216,3 +216,32 @@ Acceptance criteria:
 * The implementation plan is small and CLI-only.
 * No TUI, worker execution, background runs, or visual/theme changes are included.
 * No source code is changed during this task.
+
+Investigation result:
+
+* Existing CLI commands are defined in `src/cli/args.rs`.
+* Runtime dispatch happens in `src/cli/dispatch.rs`.
+* Command implementation mostly lives in `src/cli/commands.rs`, with larger commands split under `src/cli/commands/`.
+* `--cwd` is applied before dispatch, so queue storage can use `std::env::current_dir()` safely.
+* The recommended queue storage module location is `crates/jcode-base/src/queue.rs`.
+* `crates/jcode-base/src/lib.rs` should re-export it with `pub mod queue;`.
+* CLI-facing queue implementation should likely live in a small new `src/cli/commands/queue.rs`.
+* Existing usable dependencies include `serde`, `serde_json`, `chrono`, `uuid` or `crate::id::new_id`, `std::fs`, `PathBuf`, `anyhow`, and existing storage helpers.
+* Queue storage should be project-local at `./.jcode/queue/tasks.json`.
+* First implementation slice should include only `jcode queue init`, `jcode queue add`, and `jcode queue list`.
+
+Decision:
+Implement Queue foundation as a small reusable `jcode-base` storage module plus thin CLI wiring. Keep the first slice CLI-only, project-local, JSON-backed, typed, and boring.
+
+Deferred:
+
+* TUI integration.
+* Worker execution.
+* Background runs.
+* Server protocol changes.
+* Debug socket support.
+* Visual/theme changes.
+* Task claiming/locking.
+* Multi-project/global queue discovery.
+* Reusing or modifying swarm/ambient/safety queues.
+* Any implementation copied from old Queue work.
