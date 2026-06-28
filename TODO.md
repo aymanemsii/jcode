@@ -245,3 +245,24 @@ Deferred:
 * Multi-project/global queue discovery.
 * Reusing or modifying swarm/ambient/safety queues.
 * Any implementation copied from old Queue work.
+
+## Task 6 - Add informational `/server-stop` slash command
+
+Task Type: Implementation / UX
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `/server-stop` as an informational TUI slash command.
+* The command does not stop the server directly.
+* The command explains that `/quit` exits only the TUI/client.
+* The command tells users to run `jcode server stop --force` to intentionally stop the shared server.
+* The command warns that stopping the server can drop live headless/swarm sessions.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not record validation as passed unless validation was actually run outside Codex.

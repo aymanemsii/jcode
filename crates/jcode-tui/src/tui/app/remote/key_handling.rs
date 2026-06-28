@@ -860,6 +860,10 @@ async fn handle_remote_key_internal(
                     return Ok(());
                 }
 
+                if app_mod::commands::handle_server_stop_command(app, trimmed) {
+                    return Ok(());
+                }
+
                 if trimmed == "/continue" || trimmed == "/resumeall" || trimmed == "/resume-all" {
                     app.push_display_message(DisplayMessage::system(
                         "Continuing all interrupted sessions...".to_string(),

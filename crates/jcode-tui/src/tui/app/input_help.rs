@@ -155,6 +155,14 @@ impl App {
             "version" => "/version\nShow jcode version/build details.",
             "changelog" => "/changelog\nShow recent changes embedded in this build.",
             "quit" => "/quit\nExit jcode.",
+            "server-stop" => {
+                concat!(
+                    "/server-stop\nShow how to intentionally stop the shared background server.\n\n",
+                    "/quit exits only this TUI/client. The shared server may continue running. ",
+                    "To intentionally stop the shared server, exit jcode and run: ",
+                    "jcode server stop --force. Warning: this can drop live headless or swarm sessions."
+                )
+            }
             "config" => {
                 "/config\nShow active configuration.\n\n/config init\nCreate default config file.\n\n/config edit\nOpen config in $EDITOR."
             }

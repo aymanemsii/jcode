@@ -33,6 +33,11 @@ use std::time::Instant;
 const BTW_PAGE_ID: &str = "btw";
 pub(super) const REVIEW_PREFERRED_MODEL: &str = "gpt-5.5";
 const POKE_OFF_UI_HINT: &str = "/poke off to stop.";
+const SERVER_STOP_INFO_MESSAGE: &str = concat!(
+    "/quit exits only this TUI/client. The shared server may continue running. ",
+    "To intentionally stop the shared server, exit jcode and run: ",
+    "jcode server stop --force. Warning: this can drop live headless or swarm sessions."
+);
 const TODO_CONFIDENCE_THRESHOLD: u8 = 90;
 const TODO_CONFIDENCE_SUMMARY_PREFIX: &str = "All todos are done. Todo confidence summary:";
 
@@ -843,6 +848,18 @@ pub(super) fn handle_help_command(app: &mut App, trimmed: &str) -> bool {
     }
 
     false
+}
+
+pub(super) fn handle_server_stop_command(app: &mut App, trimmed: &str) -> bool {
+    if trimmed != "/server-stop" {
+        return false;
+    }
+
+    app.push_display_message(DisplayMessage::system(
+        SERVER_STOP_INFO_MESSAGE.to_string(),
+    ));
+    app.set_status_notice("Server stop instructions shown");
+    true
 }
 
 /// `/keys` shows the keymap diagnostics: detected terminal, discovered terminal
