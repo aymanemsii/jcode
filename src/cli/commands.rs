@@ -14,6 +14,7 @@ use super::terminal::init_tui_runtime;
 
 mod menubar;
 mod provider_setup;
+mod queue;
 mod report_info;
 mod restart;
 
@@ -28,6 +29,7 @@ pub use super::auth_test::{
 };
 pub use menubar::{ensure_menubar_helper_running, run_menubar_command};
 pub(crate) use provider_setup::{ProviderAddOptions, run_provider_add_command};
+pub(crate) use queue::{QueueSubcommand, run_queue_command};
 pub use restart::{
     maybe_run_pending_restart_restore_on_startup, run_restart_clear_command,
     run_restart_restore_command, run_restart_save_command, run_restart_status_command,

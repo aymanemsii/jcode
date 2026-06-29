@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use super::args::{
     AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, MemoryCommand,
-    ModelCommand, ProviderCommand, RestartCommand, ServerCommand, SessionCommand,
+    ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand, SessionCommand,
     TranscriptModeArg,
 };
 use crate::{
@@ -256,6 +256,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         },
         Some(Command::Ambient(subcmd)) => {
             commands::run_ambient_command(map_ambient_subcommand(subcmd)).await?;
+        }
+        Some(Command::Queue(subcmd)) => {
+            commands::run_queue_command(map_queue_subcommand(subcmd))?;
         }
         Some(Command::Cloud(subcmd)) => {
             commands::run_cloud_command(map_cloud_subcommand(subcmd))?;
@@ -549,6 +552,24 @@ fn map_memory_subcommand(subcmd: MemoryCommand) -> commands::MemorySubcommand {
         },
         MemoryCommand::Stats => commands::MemorySubcommand::Stats,
         MemoryCommand::ClearTest => commands::MemorySubcommand::ClearTest,
+    }
+}
+
+fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
+    match subcmd {
+        QueueCommand::Init => commands::QueueSubcommand::Init,
+        QueueCommand::Add {
+            title,
+            body,
+            priority,
+            worker_profile,
+        } => commands::QueueSubcommand::Add {
+            title,
+            body,
+            priority,
+            worker_profile,
+        },
+        QueueCommand::List => commands::QueueSubcommand::List,
     }
 }
 

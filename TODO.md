@@ -266,3 +266,28 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not record validation as passed unless validation was actually run outside Codex.
+
+## Task 7 - Implement Queue CLI foundation
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added project-local queue storage at `./.jcode/queue/tasks.json`.
+* Added reusable queue storage module in `crates/jcode-base/src/queue.rs`.
+* Re-exported queue module from `crates/jcode-base/src/lib.rs`.
+* Added CLI parsing for `jcode queue init`, `jcode queue add`, and `jcode queue list`.
+* Added thin CLI command handling.
+* Wired queue command dispatch through CLI args/dispatch/command exports as needed.
+* `queue init` creates storage if missing and preserves existing tasks.
+* `queue add` auto-initializes storage if missing.
+* `queue list` prints a simple readable task list.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

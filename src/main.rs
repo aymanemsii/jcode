@@ -59,6 +59,35 @@ fn main() -> Result<()> {
         return jcode::setup_hints::run_macos_hotkey_listener_main_thread();
     }
 
+    run_cli_entrypoint()
+}
+
+#[cfg(all(windows, debug_assertions))]
+fn run_cli_entrypoint() -> Result<()> {
+    const DEBUG_STARTUP_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+    std::thread::Builder::new()
+        .name("jcode-debug-startup".to_string())
+        .stack_size(DEBUG_STARTUP_STACK_SIZE)
+        .spawn(run_tokio_entrypoint)?
+        .join()
+        .map_err(|panic| {
+            if let Some(message) = panic.downcast_ref::<&str>() {
+                anyhow::anyhow!("jcode startup thread panicked: {message}")
+            } else if let Some(message) = panic.downcast_ref::<String>() {
+                anyhow::anyhow!("jcode startup thread panicked: {message}")
+            } else {
+                anyhow::anyhow!("jcode startup thread panicked")
+            }
+        })?
+}
+
+#[cfg(not(all(windows, debug_assertions)))]
+fn run_cli_entrypoint() -> Result<()> {
+    run_tokio_entrypoint()
+}
+
+fn run_tokio_entrypoint() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;

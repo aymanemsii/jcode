@@ -278,6 +278,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Ambient(AmbientCommand),
 
+    /// Project-local queue commands
+    #[command(subcommand)]
+    Queue(QueueCommand),
+
     /// Optional Jcode Cloud/Jade integration commands
     #[command(subcommand)]
     Cloud(CloudCommand),
@@ -711,6 +715,31 @@ pub(crate) enum CloudSessionsCommand {
         #[command(flatten)]
         jade: JadeCloudOptions,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum QueueCommand {
+    /// Create project-local queue storage if missing
+    Init,
+    /// Add a task to the project-local queue
+    Add {
+        /// Task title
+        title: String,
+
+        /// Task details
+        #[arg(long, default_value = "")]
+        body: String,
+
+        /// Task priority
+        #[arg(long, default_value = "normal")]
+        priority: String,
+
+        /// Optional worker profile hint
+        #[arg(long)]
+        worker_profile: Option<String>,
+    },
+    /// List project-local queue tasks
+    List,
 }
 
 #[derive(Parser, Debug, Clone)]
