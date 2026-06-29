@@ -745,6 +745,14 @@ pub(crate) enum QueueCommand {
         /// Queue task id
         id: String,
     },
+    /// Manually update one project-local queue task status
+    Status {
+        /// Queue task id
+        id: String,
+
+        /// New queue task status: ready, running, done, or failed
+        status: String,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

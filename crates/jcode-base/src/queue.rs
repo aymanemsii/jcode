@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const QUEUE_FILE_RELATIVE_PATH: &str = ".jcode/queue/tasks.json";
+pub const VALID_QUEUE_STATUSES: &[&str] = &["ready", "running", "done", "failed"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueStore {
@@ -30,6 +31,12 @@ pub struct NewQueueTask {
     pub body: String,
     pub priority: String,
     pub worker_profile: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueStatusUpdate {
+    pub task: QueueTask,
+    pub old_status: String,
 }
 
 impl Default for QueueStore {
@@ -84,6 +91,44 @@ pub fn add_project_queue_task(project_dir: &Path, new_task: NewQueueTask) -> Res
     store.tasks.push(task.clone());
     write_queue_store(&path, &store)?;
     Ok(task)
+}
+
+pub fn update_project_queue_task_status(
+    project_dir: &Path,
+    id: &str,
+    status: &str,
+) -> Result<QueueStatusUpdate> {
+    if !is_valid_queue_status(status) {
+        anyhow::bail!(
+            "invalid queue status: {status}. Expected one of: {}",
+            VALID_QUEUE_STATUSES.join(", ")
+        );
+    }
+
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let update = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+        let old_status = task.status.clone();
+        task.status = status.to_string();
+        task.updated_at = now;
+        QueueStatusUpdate {
+            task: task.clone(),
+            old_status,
+        }
+    };
+
+    write_queue_store(&path, &store)?;
+    Ok(update)
+}
+
+pub fn is_valid_queue_status(status: &str) -> bool {
+    VALID_QUEUE_STATUSES.contains(&status)
 }
 
 fn write_queue_store(path: &Path, store: &QueueStore) -> Result<()> {

@@ -311,3 +311,24 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 9 - Add Queue status command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode queue status <id> <status>` for manually updating queued task status.
+* Supported statuses: `ready`, `running`, `done`, and `failed`.
+* Updated `updated_at` when task status changes.
+* Kept Queue storage project-local at `./.jcode/queue/tasks.json`.
+* Did not add execution, background workers, TUI, Queue Board, or server protocol changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

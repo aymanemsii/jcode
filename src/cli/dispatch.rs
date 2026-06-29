@@ -571,6 +571,7 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
         },
         QueueCommand::List => commands::QueueSubcommand::List,
         QueueCommand::Show { id } => commands::QueueSubcommand::Show { id },
+        QueueCommand::Status { id, status } => commands::QueueSubcommand::Status { id, status },
     }
 }
 

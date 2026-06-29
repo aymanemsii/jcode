@@ -12,6 +12,7 @@ pub enum QueueSubcommand {
     },
     List,
     Show { id: String },
+    Status { id: String, status: String },
 }
 
 pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
@@ -52,10 +53,7 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
         QueueSubcommand::List => {
             let path = base_queue::queue_file_path(&project_dir);
             if !path.exists() {
-                println!(
-                    "No queue found at {}. Run `jcode queue init` or `jcode queue add \"Task title\"`.",
-                    path.display()
-                );
+                print_missing_queue_message(&path);
                 return Ok(());
             }
 
@@ -80,10 +78,7 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
         QueueSubcommand::Show { id } => {
             let path = base_queue::queue_file_path(&project_dir);
             if !path.exists() {
-                println!(
-                    "No queue found at {}. Run `jcode queue init` or `jcode queue add \"Task title\"`.",
-                    path.display()
-                );
+                print_missing_queue_message(&path);
                 return Ok(());
             }
 
@@ -107,8 +102,30 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
             println!("  created_at: {}", task.created_at);
             println!("  updated_at: {}", task.updated_at);
         }
+        QueueSubcommand::Status { id, status } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let status = required_text(status, "status")?;
+            let update = base_queue::update_project_queue_task_status(&project_dir, &id, &status)?;
+            println!(
+                "Updated queue task {} status: {} -> {}",
+                update.task.id, update.old_status, update.task.status
+            );
+        }
     }
     Ok(())
+}
+
+fn print_missing_queue_message(path: &std::path::Path) {
+    println!(
+        "No queue found at {}. Run jcode queue init or jcode queue add \"Task title\".",
+        path.display()
+    );
 }
 
 fn required_text(value: String, label: &str) -> Result<String> {
