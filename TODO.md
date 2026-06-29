@@ -375,3 +375,25 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 12 - Add Queue edit command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode queue edit <id>` for editing queued task metadata.
+* Supported editing title, body, priority, and worker profile.
+* Added `--clear-worker-profile`.
+* Updated `updated_at` when a task is edited.
+* Kept Queue storage project-local at `./.jcode/queue/tasks.json`.
+* Did not add execution, claiming, background workers, TUI, Queue Board, or server protocol changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

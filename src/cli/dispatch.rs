@@ -574,6 +574,21 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
         QueueCommand::Show { id } => commands::QueueSubcommand::Show { id },
         QueueCommand::Status { id, status } => commands::QueueSubcommand::Status { id, status },
         QueueCommand::Archive { id } => commands::QueueSubcommand::Archive { id },
+        QueueCommand::Edit {
+            id,
+            title,
+            body,
+            priority,
+            worker_profile,
+            clear_worker_profile,
+        } => commands::QueueSubcommand::Edit {
+            id,
+            title,
+            body,
+            priority,
+            worker_profile,
+            clear_worker_profile,
+        },
     }
 }
 

@@ -764,6 +764,31 @@ pub(crate) enum QueueCommand {
         /// Queue task id
         id: String,
     },
+    /// Edit metadata for one project-local queue task
+    Edit {
+        /// Queue task id
+        id: String,
+
+        /// New task title
+        #[arg(long)]
+        title: Option<String>,
+
+        /// New task details
+        #[arg(long)]
+        body: Option<String>,
+
+        /// New task priority
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Optional worker profile hint
+        #[arg(long)]
+        worker_profile: Option<String>,
+
+        /// Clear the worker profile hint
+        #[arg(long)]
+        clear_worker_profile: bool,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

@@ -15,6 +15,14 @@ pub enum QueueSubcommand {
     Show { id: String },
     Status { id: String, status: String },
     Archive { id: String },
+    Edit {
+        id: String,
+        title: Option<String>,
+        body: Option<String>,
+        priority: Option<String>,
+        worker_profile: Option<String>,
+        clear_worker_profile: bool,
+    },
 }
 
 pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
@@ -174,6 +182,41 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
             let id = required_text(id, "id")?;
             let update = base_queue::archive_project_queue_task(&project_dir, &id)?;
             println!("Archived queue task {}", update.task.id);
+        }
+        QueueSubcommand::Edit {
+            id,
+            title,
+            body,
+            priority,
+            worker_profile,
+            clear_worker_profile,
+        } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            if worker_profile.is_some() && clear_worker_profile {
+                anyhow::bail!("cannot use --worker-profile and --clear-worker-profile together");
+            }
+            let worker_profile = if clear_worker_profile {
+                Some(None)
+            } else {
+                worker_profile.map(Some)
+            };
+            let update = base_queue::edit_project_queue_task(
+                &project_dir,
+                &id,
+                base_queue::QueueTaskEdit {
+                    title,
+                    body,
+                    priority,
+                    worker_profile,
+                },
+            )?;
+            println!("Updated queue task {}", update.task.id);
         }
     }
     Ok(())

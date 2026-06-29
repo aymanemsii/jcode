@@ -46,6 +46,19 @@ pub struct QueueArchiveUpdate {
     pub task: QueueTask,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct QueueTaskEdit {
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub priority: Option<String>,
+    pub worker_profile: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueEditUpdate {
+    pub task: QueueTask,
+}
+
 impl Default for QueueStore {
     fn default() -> Self {
         Self { tasks: Vec::new() }
@@ -154,6 +167,59 @@ pub fn archive_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueA
     Ok(update)
 }
 
+pub fn edit_project_queue_task(
+    project_dir: &Path,
+    id: &str,
+    edit: QueueTaskEdit,
+) -> Result<QueueEditUpdate> {
+    if edit.title.is_none()
+        && edit.body.is_none()
+        && edit.priority.is_none()
+        && edit.worker_profile.is_none()
+    {
+        anyhow::bail!("no queue task edits provided");
+    }
+
+    let title = edit.title.map(|value| required_edit_text(value, "title"));
+    let body = edit.body.map(|value| value.trim().to_string());
+    let priority = edit
+        .priority
+        .map(|value| required_edit_text(value, "priority"));
+    let worker_profile = edit.worker_profile.map(|value| {
+        value.map(|profile| required_edit_text(profile, "worker_profile"))
+            .transpose()
+    });
+
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let update = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+
+        if let Some(title) = title {
+            task.title = title?;
+        }
+        if let Some(body) = body {
+            task.body = body;
+        }
+        if let Some(priority) = priority {
+            task.priority = priority?;
+        }
+        if let Some(worker_profile) = worker_profile {
+            task.worker_profile = worker_profile?;
+        }
+        task.updated_at = now;
+        QueueEditUpdate { task: task.clone() }
+    };
+
+    write_queue_store(&path, &store)?;
+    Ok(update)
+}
+
 pub fn next_active_ready_task(store: &QueueStore) -> Option<&QueueTask> {
     store
         .tasks
@@ -174,4 +240,12 @@ fn write_queue_store(path: &Path, store: &QueueStore) -> Result<()> {
     std::fs::write(path, content)
         .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", path.display()))?;
     Ok(())
+}
+
+fn required_edit_text(value: String, label: &str) -> Result<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("{label} cannot be empty");
+    }
+    Ok(trimmed.to_string())
 }
