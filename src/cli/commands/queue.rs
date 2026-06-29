@@ -11,6 +11,7 @@ pub enum QueueSubcommand {
         worker_profile: Option<String>,
     },
     List { all: bool },
+    Next,
     Show { id: String },
     Status { id: String, status: String },
     Archive { id: String },
@@ -94,6 +95,29 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
                     task.title
                 );
             }
+        }
+        QueueSubcommand::Next => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let store = base_queue::load_project_queue(&project_dir)?;
+            let Some(task) = base_queue::next_active_ready_task(&store) else {
+                println!("No ready queue tasks.");
+                return Ok(());
+            };
+
+            println!("Next queue task:");
+            println!("  id: {}", task.id);
+            println!("  title: {}", task.title);
+            println!("  priority: {}", task.priority);
+            if let Some(worker_profile) = task.worker_profile.as_deref() {
+                println!("  worker_profile: {worker_profile}");
+            }
+            println!("  created_at: {}", task.created_at);
+            println!("  updated_at: {}", task.updated_at);
         }
         QueueSubcommand::Show { id } => {
             let path = base_queue::queue_file_path(&project_dir);

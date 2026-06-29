@@ -154,6 +154,13 @@ pub fn archive_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueA
     Ok(update)
 }
 
+pub fn next_active_ready_task(store: &QueueStore) -> Option<&QueueTask> {
+    store
+        .tasks
+        .iter()
+        .find(|task| task.status == "ready" && task.archived_at.is_none())
+}
+
 pub fn is_valid_queue_status(status: &str) -> bool {
     VALID_QUEUE_STATUSES.contains(&status)
 }

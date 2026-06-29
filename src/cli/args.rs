@@ -744,6 +744,8 @@ pub(crate) enum QueueCommand {
         #[arg(long)]
         all: bool,
     },
+    /// Show the next active ready project-local queue task
+    Next,
     /// Show full details for one project-local queue task
     Show {
         /// Queue task id
