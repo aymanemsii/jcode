@@ -291,3 +291,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 8 - Add Queue show command and list polish
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode queue show <id>` for inspecting a single queued task.
+* Improved `jcode queue list` readability while keeping output simple.
+* Kept Queue storage project-local at `./.jcode/queue/tasks.json`.
+* Did not add execution, background workers, TUI, or server protocol changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

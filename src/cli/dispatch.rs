@@ -570,6 +570,7 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
             worker_profile,
         },
         QueueCommand::List => commands::QueueSubcommand::List,
+        QueueCommand::Show { id } => commands::QueueSubcommand::Show { id },
     }
 }
 

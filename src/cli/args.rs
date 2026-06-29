@@ -740,6 +740,11 @@ pub(crate) enum QueueCommand {
     },
     /// List project-local queue tasks
     List,
+    /// Show full details for one project-local queue task
+    Show {
+        /// Queue task id
+        id: String,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

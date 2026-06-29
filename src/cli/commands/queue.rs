@@ -11,6 +11,7 @@ pub enum QueueSubcommand {
         worker_profile: Option<String>,
     },
     List,
+    Show { id: String },
 }
 
 pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
@@ -65,19 +66,46 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
             }
 
             println!("Queue tasks:");
-            for task in store.tasks {
+            for (index, task) in store.tasks.iter().enumerate() {
                 println!(
-                    "- [{}] {} ({}, {})",
-                    task.status, task.title, task.priority, task.id
+                    "{}. {} [{}] ({}) {}",
+                    index + 1,
+                    task.id,
+                    task.status,
+                    task.priority,
+                    task.title
                 );
-                if !task.body.trim().is_empty() {
-                    println!("  body: {}", task.body);
-                }
-                if let Some(worker_profile) = task.worker_profile.as_deref() {
-                    println!("  worker_profile: {worker_profile}");
-                }
-                println!("  updated_at: {}", task.updated_at);
             }
+        }
+        QueueSubcommand::Show { id } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                println!(
+                    "No queue found at {}. Run `jcode queue init` or `jcode queue add \"Task title\"`.",
+                    path.display()
+                );
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let store = base_queue::load_project_queue(&project_dir)?;
+            let task = store
+                .tasks
+                .iter()
+                .find(|task| task.id.as_str() == id.as_str())
+                .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+
+            println!("Queue task:");
+            println!("  id: {}", task.id);
+            println!("  title: {}", task.title);
+            println!("  body: {}", task.body);
+            println!("  status: {}", task.status);
+            println!("  priority: {}", task.priority);
+            if let Some(worker_profile) = task.worker_profile.as_deref() {
+                println!("  worker_profile: {worker_profile}");
+            }
+            println!("  created_at: {}", task.created_at);
+            println!("  updated_at: {}", task.updated_at);
         }
     }
     Ok(())
