@@ -22,6 +22,8 @@ pub struct QueueTask {
     pub created_at: String,
     pub updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_profile: Option<String>,
 }
 
@@ -37,6 +39,11 @@ pub struct NewQueueTask {
 pub struct QueueStatusUpdate {
     pub task: QueueTask,
     pub old_status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueArchiveUpdate {
+    pub task: QueueTask,
 }
 
 impl Default for QueueStore {
@@ -86,6 +93,7 @@ pub fn add_project_queue_task(project_dir: &Path, new_task: NewQueueTask) -> Res
         priority: new_task.priority,
         created_at: now.clone(),
         updated_at: now,
+        archived_at: None,
         worker_profile: new_task.worker_profile,
     };
     store.tasks.push(task.clone());
@@ -121,6 +129,25 @@ pub fn update_project_queue_task_status(
             task: task.clone(),
             old_status,
         }
+    };
+
+    write_queue_store(&path, &store)?;
+    Ok(update)
+}
+
+pub fn archive_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueArchiveUpdate> {
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let update = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+        task.archived_at = Some(now.clone());
+        task.updated_at = now;
+        QueueArchiveUpdate { task: task.clone() }
     };
 
     write_queue_store(&path, &store)?;

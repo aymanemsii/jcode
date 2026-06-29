@@ -332,3 +332,25 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 10 - Add Queue archive command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode queue archive <id>` for preserving queued tasks while hiding them from the default active list.
+* Added optional `archived_at` metadata to queue tasks.
+* Added `jcode queue list --all` to include archived tasks.
+* Updated `jcode queue show <id>` to display `archived_at` when present.
+* Kept Queue storage project-local at `./.jcode/queue/tasks.json`.
+* Did not add deletion, execution, background workers, TUI, Queue Board, or server protocol changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

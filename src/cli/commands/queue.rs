@@ -10,9 +10,10 @@ pub enum QueueSubcommand {
         priority: String,
         worker_profile: Option<String>,
     },
-    List,
+    List { all: bool },
     Show { id: String },
     Status { id: String, status: String },
+    Archive { id: String },
 }
 
 pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
@@ -50,7 +51,7 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
                 println!("  worker_profile: {worker_profile}");
             }
         }
-        QueueSubcommand::List => {
+        QueueSubcommand::List { all } => {
             let path = base_queue::queue_file_path(&project_dir);
             if !path.exists() {
                 print_missing_queue_message(&path);
@@ -63,13 +64,32 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
                 return Ok(());
             }
 
-            println!("Queue tasks:");
-            for (index, task) in store.tasks.iter().enumerate() {
+            let tasks: Vec<_> = store
+                .tasks
+                .iter()
+                .filter(|task| all || task.archived_at.is_none())
+                .collect();
+
+            if tasks.is_empty() {
                 println!(
-                    "{}. {} [{}] ({}) {}",
+                    "Queue has no active tasks. Use jcode queue list --all to include archived tasks."
+                );
+                return Ok(());
+            }
+
+            println!("Queue tasks:");
+            for (index, task) in tasks.iter().enumerate() {
+                let archived = if task.archived_at.is_some() {
+                    " archived"
+                } else {
+                    ""
+                };
+                println!(
+                    "{}. {} [{}{}] ({}) {}",
                     index + 1,
                     task.id,
                     task.status,
+                    archived,
                     task.priority,
                     task.title
                 );
@@ -101,6 +121,9 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
             }
             println!("  created_at: {}", task.created_at);
             println!("  updated_at: {}", task.updated_at);
+            if let Some(archived_at) = task.archived_at.as_deref() {
+                println!("  archived_at: {archived_at}");
+            }
         }
         QueueSubcommand::Status { id, status } => {
             let path = base_queue::queue_file_path(&project_dir);
@@ -116,6 +139,17 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
                 "Updated queue task {} status: {} -> {}",
                 update.task.id, update.old_status, update.task.status
             );
+        }
+        QueueSubcommand::Archive { id } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let update = base_queue::archive_project_queue_task(&project_dir, &id)?;
+            println!("Archived queue task {}", update.task.id);
         }
     }
     Ok(())

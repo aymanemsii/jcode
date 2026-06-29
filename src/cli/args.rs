@@ -739,7 +739,11 @@ pub(crate) enum QueueCommand {
         worker_profile: Option<String>,
     },
     /// List project-local queue tasks
-    List,
+    List {
+        /// Include archived queue tasks
+        #[arg(long)]
+        all: bool,
+    },
     /// Show full details for one project-local queue task
     Show {
         /// Queue task id
@@ -752,6 +756,11 @@ pub(crate) enum QueueCommand {
 
         /// New queue task status: ready, running, done, or failed
         status: String,
+    },
+    /// Archive one project-local queue task
+    Archive {
+        /// Queue task id
+        id: String,
     },
 }
 
