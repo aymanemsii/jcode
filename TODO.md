@@ -397,3 +397,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 13 - Investigate Queue runner architecture
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Investigated the safest architecture for future manual Queue task execution.
+* Documented recommended scope for a future `jcode queue run <id>` or `jcode queue run-next` slice.
+* Identified status transitions, storage/logging considerations, and safety boundaries.
+* Explicitly deferred background workers, claiming, Queue Board, TUI, server protocol changes, scheduling, retries, and parallel execution.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
