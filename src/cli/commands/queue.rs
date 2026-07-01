@@ -23,9 +23,14 @@ pub enum QueueSubcommand {
         worker_profile: Option<String>,
         clear_worker_profile: bool,
     },
+    Run { id: String },
 }
 
-pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
+pub async fn run_queue_command(
+    cmd: QueueSubcommand,
+    provider_choice: &crate::cli::provider_init::ProviderChoice,
+    model: Option<&str>,
+) -> Result<()> {
     let project_dir = std::env::current_dir()?;
     match cmd {
         QueueSubcommand::Init => {
@@ -218,6 +223,69 @@ pub fn run_queue_command(cmd: QueueSubcommand) -> Result<()> {
             )?;
             println!("Updated queue task {}", update.task.id);
         }
+        QueueSubcommand::Run { id } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let store = base_queue::load_project_queue(&project_dir)?;
+            let task = store
+                .tasks
+                .iter()
+                .find(|task| task.id.as_str() == id.as_str())
+                .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+            let prompt = queue_task_prompt(task);
+
+            let run = base_queue::start_project_queue_task_run(&project_dir, &id)?;
+            println!("Running queue task {}", run.task.id);
+
+            let result = super::run_single_message_command_once(
+                provider_choice,
+                model,
+                None,
+                &prompt,
+            )
+            .await;
+            match result {
+                Ok(()) => {
+                    let finish = base_queue::finish_project_queue_task_run(
+                        &project_dir,
+                        &id,
+                        &run.run_record,
+                        "done",
+                        None,
+                    )?;
+                    println!("Completed queue task {}", finish.task.id);
+                    return Ok(());
+                }
+                Err(err) => {
+                    let error = crate::util::format_error_chain(&err);
+                    let finish_result = base_queue::finish_project_queue_task_run(
+                        &project_dir,
+                        &id,
+                        &run.run_record,
+                        "failed",
+                        Some(error),
+                    );
+                    match finish_result {
+                        Ok(finish) => {
+                            println!("Failed queue task {}", finish.task.id);
+                        }
+                        Err(finish_err) => {
+                            println!("Failed queue task {}", run.task.id);
+                            eprintln!(
+                                "Failed to update queue task {} after run error: {finish_err:#}",
+                                run.task.id
+                            );
+                        }
+                    }
+                    return Err(err);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -240,4 +308,18 @@ fn optional_text(value: String) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn queue_task_prompt(task: &base_queue::QueueTask) -> String {
+    let worker_profile = task.worker_profile.as_deref().unwrap_or("none");
+    let mut prompt = format!(
+        "Queued task:\n\nTitle: {}\nPriority: {}\nWorker profile: {}\n",
+        task.title, task.priority, worker_profile
+    );
+    let body = task.body.trim();
+    if !body.is_empty() {
+        prompt.push('\n');
+        prompt.push_str(body);
+    }
+    prompt
 }

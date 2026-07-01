@@ -789,6 +789,11 @@ pub(crate) enum QueueCommand {
         #[arg(long)]
         clear_worker_profile: bool,
     },
+    /// Run one ready project-local queue task in the foreground
+    Run {
+        /// Queue task id
+        id: String,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

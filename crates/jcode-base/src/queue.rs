@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const QUEUE_FILE_RELATIVE_PATH: &str = ".jcode/queue/tasks.json";
+pub const QUEUE_RUNS_RELATIVE_PATH: &str = ".jcode/queue/runs";
 pub const VALID_QUEUE_STATUSES: &[&str] = &["ready", "running", "done", "failed"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +26,18 @@ pub struct QueueTask {
     pub archived_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_profile: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueRunRecord {
+    pub run_id: String,
+    pub task_id: String,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +72,20 @@ pub struct QueueEditUpdate {
     pub task: QueueTask,
 }
 
+#[derive(Debug, Clone)]
+pub struct QueueRunStart {
+    pub task: QueueTask,
+    pub run_record: QueueRunRecord,
+    pub run_record_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueRunFinish {
+    pub task: QueueTask,
+    pub run_record: QueueRunRecord,
+    pub run_record_path: PathBuf,
+}
+
 impl Default for QueueStore {
     fn default() -> Self {
         Self { tasks: Vec::new() }
@@ -73,6 +100,10 @@ impl QueueStore {
 
 pub fn queue_file_path(project_dir: &Path) -> PathBuf {
     project_dir.join(QUEUE_FILE_RELATIVE_PATH)
+}
+
+pub fn queue_runs_dir(project_dir: &Path) -> PathBuf {
+    project_dir.join(QUEUE_RUNS_RELATIVE_PATH)
 }
 
 pub fn init_project_queue(project_dir: &Path) -> Result<PathBuf> {
@@ -146,6 +177,87 @@ pub fn update_project_queue_task_status(
 
     write_queue_store(&path, &store)?;
     Ok(update)
+}
+
+pub fn start_project_queue_task_run(project_dir: &Path, id: &str) -> Result<QueueRunStart> {
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let run_id = crate::id::new_id("queue_run");
+    let task = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+        if task.archived_at.is_some() {
+            anyhow::bail!("queue task is archived: {id}");
+        }
+        if task.status != "ready" {
+            anyhow::bail!("queue task is not ready: {id} has status {}", task.status);
+        }
+        task.status = "running".to_string();
+        task.updated_at = now.clone();
+        task.clone()
+    };
+    write_queue_store(&path, &store)?;
+
+    let run_record = QueueRunRecord {
+        run_id: run_id.clone(),
+        task_id: id.to_string(),
+        started_at: now,
+        finished_at: None,
+        status: "running".to_string(),
+        error: None,
+    };
+    let run_record_path = queue_run_record_path(project_dir, id, &run_id);
+    write_queue_run_record_best_effort(&run_record_path, &run_record);
+
+    Ok(QueueRunStart {
+        task,
+        run_record,
+        run_record_path,
+    })
+}
+
+pub fn finish_project_queue_task_run(
+    project_dir: &Path,
+    id: &str,
+    run_record: &QueueRunRecord,
+    status: &str,
+    error: Option<String>,
+) -> Result<QueueRunFinish> {
+    if !matches!(status, "done" | "failed") {
+        anyhow::bail!("invalid queue run finish status: {status}");
+    }
+
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let task = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+        task.status = status.to_string();
+        task.updated_at = now.clone();
+        task.clone()
+    };
+    write_queue_store(&path, &store)?;
+
+    let mut finished_record = run_record.clone();
+    finished_record.finished_at = Some(now);
+    finished_record.status = status.to_string();
+    finished_record.error = error;
+    let run_record_path = queue_run_record_path(project_dir, id, &run_record.run_id);
+    write_queue_run_record_best_effort(&run_record_path, &finished_record);
+
+    Ok(QueueRunFinish {
+        task,
+        run_record: finished_record,
+        run_record_path,
+    })
 }
 
 pub fn archive_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueArchiveUpdate> {
@@ -237,6 +349,32 @@ fn write_queue_store(path: &Path, store: &QueueStore) -> Result<()> {
             .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", parent.display()))?;
     }
     let content = serde_json::to_vec_pretty(store)?;
+    std::fs::write(path, content)
+        .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", path.display()))?;
+    Ok(())
+}
+
+fn queue_run_record_path(project_dir: &Path, task_id: &str, run_id: &str) -> PathBuf {
+    queue_runs_dir(project_dir)
+        .join(task_id)
+        .join(format!("{run_id}.json"))
+}
+
+fn write_queue_run_record_best_effort(path: &Path, record: &QueueRunRecord) {
+    if let Err(err) = write_queue_run_record(path, record) {
+        crate::logging::warn(&format!(
+            "failed to write queue run metadata at {}: {err}",
+            path.display()
+        ));
+    }
+}
+
+fn write_queue_run_record(path: &Path, record: &QueueRunRecord) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| anyhow::anyhow!("failed to create {}: {err}", parent.display()))?;
+    }
+    let content = serde_json::to_vec_pretty(record)?;
     std::fs::write(path, content)
         .map_err(|err| anyhow::anyhow!("failed to write {}: {err}", path.display()))?;
     Ok(())

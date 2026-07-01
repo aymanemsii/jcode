@@ -258,7 +258,12 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             commands::run_ambient_command(map_ambient_subcommand(subcmd)).await?;
         }
         Some(Command::Queue(subcmd)) => {
-            commands::run_queue_command(map_queue_subcommand(subcmd))?;
+            commands::run_queue_command(
+                map_queue_subcommand(subcmd),
+                &args.provider,
+                args.model.as_deref(),
+            )
+            .await?;
         }
         Some(Command::Cloud(subcmd)) => {
             commands::run_cloud_command(map_cloud_subcommand(subcmd))?;
@@ -589,6 +594,7 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
             worker_profile,
             clear_worker_profile,
         },
+        QueueCommand::Run { id } => commands::QueueSubcommand::Run { id },
     }
 }
 

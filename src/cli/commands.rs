@@ -2420,7 +2420,49 @@ pub async fn run_single_message_command(
     emit_json: bool,
     emit_ndjson: bool,
 ) -> Result<()> {
-    let provider = if emit_json || emit_ndjson {
+    let (provider, mut agent) =
+        init_run_single_message_agent(choice, model, emit_json || emit_ndjson).await?;
+    restore_agent_session_if_requested(&mut agent, resume_session)?;
+
+    if emit_json {
+        let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;
+        let report = RunCommandReport {
+            session_id: agent.session_id().to_string(),
+            provider: provider.name().to_string(),
+            model: provider.model(),
+            text,
+            usage: agent.last_usage().clone(),
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else if emit_ndjson {
+        run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
+    } else {
+        run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn run_single_message_command_once(
+    choice: &super::provider_init::ProviderChoice,
+    model: Option<&str>,
+    resume_session: Option<&str>,
+    message: &str,
+) -> Result<()> {
+    let (_provider, mut agent) = init_run_single_message_agent(choice, model, false).await?;
+    restore_agent_session_if_requested(&mut agent, resume_session)?;
+    run_single_message_command_plain_once(&mut agent, message).await
+}
+
+async fn init_run_single_message_agent(
+    choice: &super::provider_init::ProviderChoice,
+    model: Option<&str>,
+    quiet_provider_init: bool,
+) -> Result<(
+    std::sync::Arc<dyn crate::provider::Provider>,
+    crate::agent::Agent,
+)> {
+    let provider = if quiet_provider_init {
         super::provider_init::init_provider_quiet(choice, model).await?
     } else {
         super::provider_init::init_provider_for_validation(choice, model).await?
@@ -2445,26 +2487,8 @@ pub async fn run_single_message_command(
         // the agent runs. Warm runs skip this entirely and stay instant. (#390)
         wait_for_cold_cache_mcp_tools(&registry).await;
     }
-    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
-    restore_agent_session_if_requested(&mut agent, resume_session)?;
-
-    if emit_json {
-        let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;
-        let report = RunCommandReport {
-            session_id: agent.session_id().to_string(),
-            provider: provider.name().to_string(),
-            model: provider.model(),
-            text,
-            usage: agent.last_usage().clone(),
-        };
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else if emit_ndjson {
-        run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
-    } else {
-        run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
-    }
-
-    Ok(())
+    let agent = crate::agent::Agent::new(provider.clone(), registry);
+    Ok((provider, agent))
 }
 
 fn run_command_auto_poke_enabled() -> bool {
@@ -2772,7 +2796,7 @@ async fn run_single_message_command_plain_with_auto_poke(
     let mut turns_completed = 0usize;
     let mut confidence_summary_sent = false;
     loop {
-        agent.run_once(&next_message).await?;
+        run_single_message_command_plain_once(agent, &next_message).await?;
         turns_completed += 1;
         if !run_command_auto_poke_enabled() {
             break;
@@ -2807,6 +2831,13 @@ async fn run_single_message_command_plain_with_auto_poke(
         }
     }
     Ok(())
+}
+
+async fn run_single_message_command_plain_once(
+    agent: &mut crate::agent::Agent,
+    message: &str,
+) -> Result<()> {
+    agent.run_once(message).await
 }
 
 async fn run_single_message_command_capture_with_auto_poke(

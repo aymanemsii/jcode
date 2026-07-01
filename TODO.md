@@ -417,3 +417,25 @@ Validation:
 
 * Documentation-only change.
 * Manual review will be run separately after this change.
+
+## Task 14 - Add manual Queue run command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `jcode queue run <id>` for manually running one queued task in the foreground.
+* Kept execution explicit-id-only and current-process.
+* Updated task status from `ready` to `running`, then to `done` or `failed`.
+* Rejected archived tasks and non-ready tasks.
+* Kept Queue storage project-local at `./.jcode/queue/tasks.json`.
+* Did not add claiming, locks, background workers, Queue Board, TUI, server protocol changes, scheduling, retries, or `run-next`.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.
