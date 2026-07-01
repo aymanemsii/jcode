@@ -595,6 +595,7 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
             clear_worker_profile,
         },
         QueueCommand::Run { id } => commands::QueueSubcommand::Run { id },
+        QueueCommand::Runs { id } => commands::QueueSubcommand::Runs { id },
     }
 }
 

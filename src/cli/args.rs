@@ -794,6 +794,11 @@ pub(crate) enum QueueCommand {
         /// Queue task id
         id: String,
     },
+    /// List recorded runs for one project-local queue task
+    Runs {
+        /// Queue task id
+        id: String,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

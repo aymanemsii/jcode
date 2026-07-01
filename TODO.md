@@ -439,3 +439,24 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 15 - Add Queue run history command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode queue runs <id>` for listing recorded run metadata for one queue task.
+* Kept the command read-only.
+* Displayed run id, status, started_at, finished_at or unfinished, and error summaries when present.
+* Reused project-local Queue run metadata under `./.jcode/queue/runs/<task-id>/`.
+* Did not change Queue execution, claiming, locks, background workers, Queue Board, TUI, server protocol, scheduling, retries, or `run-next`.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

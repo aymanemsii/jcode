@@ -1,6 +1,7 @@
 use crate::queue as base_queue;
 
 use anyhow::Result;
+use std::path::PathBuf;
 
 pub enum QueueSubcommand {
     Init,
@@ -24,6 +25,7 @@ pub enum QueueSubcommand {
         clear_worker_profile: bool,
     },
     Run { id: String },
+    Runs { id: String },
 }
 
 pub async fn run_queue_command(
@@ -286,8 +288,105 @@ pub async fn run_queue_command(
                 }
             }
         }
+        QueueSubcommand::Runs { id } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let store = base_queue::load_project_queue(&project_dir)?;
+            if !store
+                .tasks
+                .iter()
+                .any(|task| task.id.as_str() == id.as_str())
+            {
+                anyhow::bail!("queue task not found: {id}");
+            }
+
+            let mut records = load_queue_run_records(&project_dir, &id)?;
+            if records.is_empty() {
+                println!("No queue runs found for {id}.");
+                return Ok(());
+            }
+
+            records.sort_by(|left, right| {
+                left.record
+                    .started_at
+                    .cmp(&right.record.started_at)
+                    .then_with(|| left.path.cmp(&right.path))
+            });
+
+            println!("Queue runs for {id}:");
+            for (index, entry) in records.iter().enumerate() {
+                let finished_at = entry.record.finished_at.as_deref().unwrap_or("unfinished");
+                println!(
+                    "{}. {} [{}] {} -> {}",
+                    index + 1,
+                    entry.record.run_id,
+                    entry.record.status,
+                    entry.record.started_at,
+                    finished_at
+                );
+                if let Some(error) = entry.record.error.as_deref() {
+                    if !error.trim().is_empty() {
+                        println!("   error: {}", short_error_summary(error));
+                    }
+                }
+            }
+        }
     }
     Ok(())
+}
+
+struct QueueRunRecordEntry {
+    path: PathBuf,
+    record: base_queue::QueueRunRecord,
+}
+
+fn load_queue_run_records(
+    project_dir: &std::path::Path,
+    id: &str,
+) -> Result<Vec<QueueRunRecordEntry>> {
+    let runs_dir = base_queue::queue_runs_dir(project_dir).join(id);
+    if !runs_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut paths = Vec::new();
+    for entry in std::fs::read_dir(&runs_dir)
+        .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", runs_dir.display()))?
+    {
+        let entry = entry.map_err(|err| {
+            anyhow::anyhow!("failed to read entry in {}: {err}", runs_dir.display())
+        })?;
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) == Some("json") {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+
+    let mut records = Vec::new();
+    for path in paths {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("failed to read {}: {err}", path.display()))?;
+        let record: base_queue::QueueRunRecord = serde_json::from_str(&content)
+            .map_err(|err| anyhow::anyhow!("failed to parse {}: {err}", path.display()))?;
+        records.push(QueueRunRecordEntry { path, record });
+    }
+
+    Ok(records)
+}
+
+fn short_error_summary(error: &str) -> String {
+    error
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn print_missing_queue_message(path: &std::path::Path) {
