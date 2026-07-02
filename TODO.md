@@ -481,3 +481,22 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 17 - Document Queue v1 workflow
+
+Task Type: Documentation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `docs/QUEUE.md` documenting the Queue v1 workflow, commands, storage layout, run metadata, manual execution model, and recovery flow.
+* Documented that Queue v1 is manual, foreground-only, explicit-id-only, and project-local.
+* Documented deferred Queue v2 work including run-next, claiming, locks, background workers, Queue Board/TUI, server protocol changes, scheduling, retries, worker_profile mapping, and multi-agent execution.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
