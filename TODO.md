@@ -500,3 +500,23 @@ Validation:
 
 * Documentation-only change.
 * Manual review will be run separately after this change.
+
+## Task 18 - Document Queue v2 architecture
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `docs/QUEUE_V2_ARCHITECTURE.md` documenting the safe Queue v2 architecture direction.
+* Documented future claiming, locking, run-next, worker profiles, retries, scheduling, background workers, Queue Board/TUI, and multi-agent execution.
+* Recommended a phased implementation order that avoids adding background workers or run-next before claim and lock semantics are designed.
+* Kept Queue v2 as architecture only with no implementation changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
