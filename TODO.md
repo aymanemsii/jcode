@@ -540,3 +540,23 @@ Validation:
 
 * Documentation-only change.
 * Manual review will be run separately after this change.
+
+## Task 20 - Add global accent color customization
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added a minimal global accent color configuration path.
+* Routed the existing semantic `accent_color()` path through the configured accent color when valid.
+* Preserved the existing default accent color when no config is set or the configured value is invalid.
+* Kept the change narrow and did not add named themes, wallpaper, project-local customization, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

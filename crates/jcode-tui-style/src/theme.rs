@@ -1,6 +1,11 @@
 use crate::color;
 use crate::color::rgb;
 use ratatui::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+const DEFAULT_ACCENT_RGB: (u8, u8, u8) = (186, 139, 255);
+const NO_CONFIGURED_ACCENT: u32 = 0x0100_0000;
+static CONFIGURED_ACCENT_RGB: AtomicU32 = AtomicU32::new(NO_CONFIGURED_ACCENT);
 
 pub fn user_color() -> Color {
     rgb(138, 180, 248)
@@ -18,7 +23,31 @@ pub fn dim_color() -> Color {
     rgb(80, 80, 80)
 }
 pub fn accent_color() -> Color {
-    rgb(186, 139, 255)
+    let packed = CONFIGURED_ACCENT_RGB.load(Ordering::Relaxed);
+    let (r, g, b) = if packed == NO_CONFIGURED_ACCENT {
+        DEFAULT_ACCENT_RGB
+    } else {
+        unpack_rgb(packed)
+    };
+    rgb(r, g, b)
+}
+pub fn set_accent_color_from_config(value: Option<&str>) {
+    let packed = value.and_then(parse_hex_rgb).unwrap_or(NO_CONFIGURED_ACCENT);
+    CONFIGURED_ACCENT_RGB.store(packed, Ordering::Relaxed);
+}
+fn parse_hex_rgb(value: &str) -> Option<u32> {
+    let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
+    if hex.len() != 6 || !hex.as_bytes().iter().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(hex, 16).ok()
+}
+fn unpack_rgb(packed: u32) -> (u8, u8, u8) {
+    (
+        ((packed >> 16) & 0xff) as u8,
+        ((packed >> 8) & 0xff) as u8,
+        (packed & 0xff) as u8,
+    )
 }
 pub fn system_message_color() -> Color {
     rgb(255, 170, 220)
@@ -237,6 +266,36 @@ mod tests {
             first, later,
             "liveness spinner should advance within one second"
         );
+    }
+
+    #[test]
+    fn parse_hex_rgb_accepts_hash_prefixed_and_bare_values() {
+        assert_eq!(parse_hex_rgb("#1A2b3C").map(unpack_rgb), Some((26, 43, 60)));
+        assert_eq!(parse_hex_rgb("1A2b3C").map(unpack_rgb), Some((26, 43, 60)));
+    }
+
+    #[test]
+    fn parse_hex_rgb_rejects_invalid_values() {
+        assert_eq!(parse_hex_rgb("#12345"), None);
+        assert_eq!(parse_hex_rgb("#1234567"), None);
+        assert_eq!(parse_hex_rgb("#12xx56"), None);
+        assert_eq!(parse_hex_rgb(""), None);
+    }
+
+    #[test]
+    fn configured_accent_falls_back_to_default_for_missing_or_invalid_values() {
+        set_accent_color_from_config(None);
+        assert_eq!(accent_color(), rgb(186, 139, 255));
+
+        set_accent_color_from_config(Some("not-a-color"));
+        assert_eq!(accent_color(), rgb(186, 139, 255));
+    }
+
+    #[test]
+    fn configured_accent_overrides_default_when_valid() {
+        set_accent_color_from_config(Some("#123456"));
+        assert_eq!(accent_color(), rgb(18, 52, 86));
+        set_accent_color_from_config(None);
     }
 
     #[test]

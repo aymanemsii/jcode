@@ -258,6 +258,7 @@ impl App {
         if session.provider_key.is_none() {
             session.provider_key = crate::session::derive_session_provider_key(provider.name());
         }
+        crate::tui::install_configured_accent_color();
         let display = config().display.clone();
         let features = config().features.clone();
         let autoreview_enabled = session
@@ -618,6 +619,7 @@ impl App {
         session.model = Some(provider.model());
         session.provider_key = crate::session::derive_session_provider_key(provider.name());
         session.ensure_initial_session_context_message();
+        crate::tui::install_configured_accent_color();
         let display = config().display.clone();
         let features = config().features.clone();
         let autoreview_enabled = session

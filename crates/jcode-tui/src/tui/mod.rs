@@ -53,7 +53,23 @@ pub use app::{App, CopyBadgeUiState, ProcessingStatus, RunResult};
 use crate::message::ToolCall;
 use ratatui::prelude::Frame;
 use ratatui::text::Line;
+use std::sync::Once;
 use std::time::Duration;
+
+static ACCENT_COLOR_CONFIG_RELOAD_LISTENER: Once = Once::new();
+
+pub(crate) fn install_configured_accent_color() {
+    apply_configured_accent_color(&crate::config::config().display);
+    ACCENT_COLOR_CONFIG_RELOAD_LISTENER.call_once(|| {
+        crate::config::on_config_reloaded(|| {
+            apply_configured_accent_color(&crate::config::config().display);
+        });
+    });
+}
+
+fn apply_configured_accent_color(display: &crate::config::DisplayConfig) {
+    jcode_tui_style::theme::set_accent_color_from_config(display.accent_color.as_deref());
+}
 
 pub(crate) fn scheduled_notification_text(
     info: Option<&info_widget::AmbientWidgetData>,

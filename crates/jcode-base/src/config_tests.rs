@@ -617,6 +617,21 @@ fn test_copy_badge_alt_label_defaults_to_auto_and_deserializes() {
 }
 
 #[test]
+fn test_display_accent_color_defaults_to_none_and_deserializes() {
+    assert_eq!(DisplayConfig::default().accent_color, None);
+
+    let cfg: Config = toml::from_str(
+        r##"
+        [display]
+        accent_color = "#12abEF"
+        "##,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.display.accent_color.as_deref(), Some("#12abEF"));
+}
+
+#[test]
 fn test_session_picker_resume_action_defaults_to_current_terminal() {
     assert_eq!(
         Config::default().keybindings.session_picker_enter,
