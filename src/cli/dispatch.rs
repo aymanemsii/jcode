@@ -6,9 +6,9 @@ use std::process::{Command as ProcessCommand, Stdio};
 use std::time::Instant;
 
 use super::args::{
-    AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, MemoryCommand,
-    ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand, SessionCommand,
-    TranscriptModeArg,
+    AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, ConfigCommand,
+    MemoryCommand, ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand,
+    SessionCommand, TranscriptModeArg,
 };
 use crate::{
     agent, auth, build, provider, provider_catalog, server, session, setup_hints, startup_profile,
@@ -242,6 +242,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                     json,
                 })?;
             }
+        },
+        Some(Command::Config(subcmd)) => match subcmd {
+            ConfigCommand::Show => commands::run_config_show_command()?,
         },
         Some(Command::Memory(subcmd)) => {
             commands::run_memory_command(map_memory_subcommand(subcmd))?;

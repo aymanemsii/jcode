@@ -247,6 +247,61 @@ fn cli_route_display_uses_typed_api_methods() {
     );
 }
 
+#[test]
+fn config_show_reports_missing_accent_as_default() {
+    let cfg = crate::config::Config::default();
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.accent_color: not configured"));
+    assert!(output.contains("accent_color valid: not configured"));
+    assert!(output.contains("active accent color: #BA8BFF"));
+    assert!(output.contains("default accent color: #BA8BFF"));
+    assert!(output.contains("fallback: default is being used (no accent_color configured)"));
+    assert!(!output.contains("api_key"));
+    assert!(!output.contains("token"));
+}
+
+#[test]
+fn config_show_reports_valid_accent_as_active() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.accent_color = Some("#12abEF".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.accent_color: #12abEF"));
+    assert!(output.contains("accent_color valid: true"));
+    assert!(output.contains("active accent color: #12ABEF"));
+    assert!(output.contains("fallback: not used"));
+}
+
+#[test]
+fn config_show_reports_invalid_accent_as_default() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.accent_color = Some("not-a-color".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.accent_color: not-a-color"));
+    assert!(output.contains("accent_color valid: false"));
+    assert!(output.contains("active accent color: #BA8BFF"));
+    assert!(
+        output.contains("fallback: default is being used (configured value is invalid)")
+    );
+}
+
+#[test]
+fn config_show_reports_empty_accent_as_invalid() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.accent_color = Some("   ".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.accent_color: (empty)"));
+    assert!(output.contains("accent_color valid: false"));
+    assert!(output.contains("active accent color: #BA8BFF"));
+}
+
 fn test_todo(
     id: &str,
     status: &str,

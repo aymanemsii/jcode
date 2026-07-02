@@ -47,6 +47,8 @@ pub enum CloudSubcommand {
     Sessions(CloudSessionsSubcommand),
 }
 
+const DEFAULT_ACCENT_COLOR_HEX: &str = "#BA8BFF";
+
 pub enum CloudSessionsSubcommand {
     Configure {
         api_base: Option<String>,
@@ -407,6 +409,49 @@ fn non_empty(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+pub fn run_config_show_command() -> Result<()> {
+    print!("{}", render_config_show(crate::config::config()));
+    Ok(())
+}
+
+fn render_config_show(config: &crate::config::Config) -> String {
+    let configured = config.display.accent_color.as_deref();
+    let parsed = configured.and_then(parse_accent_color_hex);
+    let active = parsed.as_deref().unwrap_or(DEFAULT_ACCENT_COLOR_HEX);
+    let configured_label = match configured.map(str::trim) {
+        Some("") => "(empty)",
+        Some(value) => value,
+        None => "not configured",
+    };
+    let valid_label = match configured {
+        Some(_) if parsed.is_some() => "true",
+        Some(_) => "false",
+        None => "not configured",
+    };
+    let fallback_label = match configured {
+        Some(_) if parsed.is_some() => "not used",
+        Some(_) => "default is being used (configured value is invalid)",
+        None => "default is being used (no accent_color configured)",
+    };
+
+    format!(
+        "Display customization config:\n\
+display.accent_color: {configured_label}\n\
+accent_color valid: {valid_label}\n\
+active accent color: {active}\n\
+default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
+fallback: {fallback_label}\n"
+    )
+}
+
+fn parse_accent_color_hex(value: &str) -> Option<String> {
+    let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
+    if hex.len() != 6 || !hex.as_bytes().iter().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("#{}", hex.to_ascii_uppercase()))
 }
 
 struct CloudSessionsSyncRequest {

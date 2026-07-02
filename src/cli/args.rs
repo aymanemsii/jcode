@@ -266,6 +266,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Provider(ProviderCommand),
 
+    /// Show safe read-only configuration details
+    #[command(subcommand)]
+    Config(ConfigCommand),
+
     /// Memory management commands
     #[command(subcommand)]
     Memory(MemoryCommand),
@@ -974,6 +978,12 @@ pub(crate) enum ProviderCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ConfigCommand {
+    /// Show safe display/customization configuration
+    Show,
 }
 
 #[derive(Subcommand, Debug)]

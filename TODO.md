@@ -560,3 +560,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 21 - Add customization config visibility
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added a read-only config visibility path for safe display/customization settings.
+* Displayed configured `display.accent_color`, whether it is valid, the active accent color, and fallback/default behavior.
+* Avoided printing secrets or raw full configuration.
+* Did not add config editing, named themes, wallpaper, project-local customization, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.
