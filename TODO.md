@@ -520,3 +520,23 @@ Validation:
 
 * Documentation-only change.
 * Manual review will be run separately after this change.
+
+## Task 19 - Investigate jcode customization architecture
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `docs/JCODE_CUSTOMIZATION_ARCHITECTURE.md` documenting a safe architecture direction for jcode customization.
+* Investigated theme, visual styling, wallpaper feasibility, configuration options, multi-session UI direction, and future multi-agent/agent mixture surface direction.
+* Recommended a phased implementation order that starts with small configuration and theme slices before broad TUI changes.
+* Kept this as documentation only with no implementation changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
