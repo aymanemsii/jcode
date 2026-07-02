@@ -279,6 +279,35 @@ pub fn archive_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueA
     Ok(update)
 }
 
+pub fn reset_running_project_queue_task(project_dir: &Path, id: &str) -> Result<QueueStatusUpdate> {
+    let path = queue_file_path(project_dir);
+    let mut store = load_project_queue(project_dir)?;
+    let now = Utc::now().to_rfc3339();
+    let update = {
+        let task = store
+            .tasks
+            .iter_mut()
+            .find(|task| task.id.as_str() == id)
+            .ok_or_else(|| anyhow::anyhow!("queue task not found: {id}"))?;
+        if task.archived_at.is_some() {
+            anyhow::bail!("queue task is archived: {id}");
+        }
+        if task.status != "running" {
+            anyhow::bail!("queue task is not running: {id} has status {}", task.status);
+        }
+        let old_status = task.status.clone();
+        task.status = "ready".to_string();
+        task.updated_at = now;
+        QueueStatusUpdate {
+            task: task.clone(),
+            old_status,
+        }
+    };
+
+    write_queue_store(&path, &store)?;
+    Ok(update)
+}
+
 pub fn edit_project_queue_task(
     project_dir: &Path,
     id: &str,

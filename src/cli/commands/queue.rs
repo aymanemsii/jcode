@@ -16,6 +16,7 @@ pub enum QueueSubcommand {
     Show { id: String },
     Status { id: String, status: String },
     Archive { id: String },
+    ResetRunning { id: String },
     Edit {
         id: String,
         title: Option<String>,
@@ -189,6 +190,20 @@ pub async fn run_queue_command(
             let id = required_text(id, "id")?;
             let update = base_queue::archive_project_queue_task(&project_dir, &id)?;
             println!("Archived queue task {}", update.task.id);
+        }
+        QueueSubcommand::ResetRunning { id } => {
+            let path = base_queue::queue_file_path(&project_dir);
+            if !path.exists() {
+                print_missing_queue_message(&path);
+                return Ok(());
+            }
+
+            let id = required_text(id, "id")?;
+            let update = base_queue::reset_running_project_queue_task(&project_dir, &id)?;
+            println!(
+                "Reset queue task {} status: {} -> {}",
+                update.task.id, update.old_status, update.task.status
+            );
         }
         QueueSubcommand::Edit {
             id,

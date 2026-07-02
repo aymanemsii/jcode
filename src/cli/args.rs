@@ -764,6 +764,11 @@ pub(crate) enum QueueCommand {
         /// Queue task id
         id: String,
     },
+    /// Reset one running project-local queue task back to ready
+    ResetRunning {
+        /// Queue task id
+        id: String,
+    },
     /// Edit metadata for one project-local queue task
     Edit {
         /// Queue task id

@@ -579,6 +579,7 @@ fn map_queue_subcommand(subcmd: QueueCommand) -> commands::QueueSubcommand {
         QueueCommand::Show { id } => commands::QueueSubcommand::Show { id },
         QueueCommand::Status { id, status } => commands::QueueSubcommand::Status { id, status },
         QueueCommand::Archive { id } => commands::QueueSubcommand::Archive { id },
+        QueueCommand::ResetRunning { id } => commands::QueueSubcommand::ResetRunning { id },
         QueueCommand::Edit {
             id,
             title,

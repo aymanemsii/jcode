@@ -460,3 +460,24 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 16 - Add Queue reset-running command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `jcode queue reset-running <id>` for recovering interrupted manual Queue runs.
+* Reset only non-archived tasks currently in `running` back to `ready`.
+* Preserved task content, priority, worker_profile, created_at, archived_at, and run metadata.
+* Rejected missing, archived, and non-running tasks with clear errors.
+* Did not change Queue execution, run history, claiming, locks, background workers, Queue Board, TUI, server protocol, scheduling, retries, rerun, or `run-next`.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.
