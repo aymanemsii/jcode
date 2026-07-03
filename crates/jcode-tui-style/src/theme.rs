@@ -4,8 +4,11 @@ use ratatui::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 const DEFAULT_ACCENT_RGB: (u8, u8, u8) = (186, 139, 255);
+const DARK_THEME_ACCENT_RGB: (u8, u8, u8) = (125, 211, 252);
+const HIGH_CONTRAST_THEME_ACCENT_RGB: (u8, u8, u8) = (255, 255, 0);
 const NO_CONFIGURED_ACCENT: u32 = 0x0100_0000;
 static CONFIGURED_ACCENT_RGB: AtomicU32 = AtomicU32::new(NO_CONFIGURED_ACCENT);
+static THEME_ACCENT_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_ACCENT_RGB));
 
 pub fn user_color() -> Color {
     rgb(138, 180, 248)
@@ -25,15 +28,41 @@ pub fn dim_color() -> Color {
 pub fn accent_color() -> Color {
     let packed = CONFIGURED_ACCENT_RGB.load(Ordering::Relaxed);
     let (r, g, b) = if packed == NO_CONFIGURED_ACCENT {
-        DEFAULT_ACCENT_RGB
+        unpack_rgb(THEME_ACCENT_RGB.load(Ordering::Relaxed))
     } else {
         unpack_rgb(packed)
     };
     rgb(r, g, b)
 }
 pub fn set_accent_color_from_config(value: Option<&str>) {
-    let packed = value.and_then(parse_hex_rgb).unwrap_or(NO_CONFIGURED_ACCENT);
-    CONFIGURED_ACCENT_RGB.store(packed, Ordering::Relaxed);
+    set_accent_color_and_theme_from_config(value, None);
+}
+pub fn set_accent_color_and_theme_from_config(value: Option<&str>, theme: Option<&str>) {
+    let theme_accent = pack_rgb(theme_default_accent_rgb(theme));
+    let configured_accent = value.and_then(parse_hex_rgb).unwrap_or(NO_CONFIGURED_ACCENT);
+    THEME_ACCENT_RGB.store(theme_accent, Ordering::Relaxed);
+    CONFIGURED_ACCENT_RGB.store(configured_accent, Ordering::Relaxed);
+}
+pub fn theme_default_accent_rgb(theme: Option<&str>) -> (u8, u8, u8) {
+    match canonical_theme_name(theme).unwrap_or("default") {
+        "dark" => DARK_THEME_ACCENT_RGB,
+        "high-contrast" => HIGH_CONTRAST_THEME_ACCENT_RGB,
+        _ => DEFAULT_ACCENT_RGB,
+    }
+}
+pub fn canonical_theme_name(theme: Option<&str>) -> Option<&'static str> {
+    match theme.map(str::trim).unwrap_or("").to_ascii_lowercase().as_str() {
+        "" | "default" => Some("default"),
+        "dark" => Some("dark"),
+        "high-contrast" => Some("high-contrast"),
+        _ => None,
+    }
+}
+const fn pack_rgb((r, g, b): (u8, u8, u8)) -> u32 {
+    ((r as u32) << 16) | ((g as u32) << 8) | b as u32
+}
+pub fn color_to_hex((r, g, b): (u8, u8, u8)) -> String {
+    format!("#{r:02X}{g:02X}{b:02X}")
 }
 fn parse_hex_rgb(value: &str) -> Option<u32> {
     let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
@@ -296,6 +325,38 @@ mod tests {
         set_accent_color_from_config(Some("#123456"));
         assert_eq!(accent_color(), rgb(18, 52, 86));
         set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn theme_accent_is_used_when_configured_accent_is_missing_or_invalid() {
+        set_accent_color_and_theme_from_config(None, Some("dark"));
+        assert_eq!(accent_color(), rgb(125, 211, 252));
+
+        set_accent_color_and_theme_from_config(Some("not-a-color"), Some("high-contrast"));
+        assert_eq!(accent_color(), rgb(255, 255, 0));
+
+        set_accent_color_and_theme_from_config(None, Some("unknown"));
+        assert_eq!(accent_color(), rgb(186, 139, 255));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn configured_accent_overrides_theme_accent_when_valid() {
+        set_accent_color_and_theme_from_config(Some("#123456"), Some("high-contrast"));
+        assert_eq!(accent_color(), rgb(18, 52, 86));
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn canonical_theme_name_accepts_supported_names_case_insensitively() {
+        assert_eq!(canonical_theme_name(Some("default")), Some("default"));
+        assert_eq!(canonical_theme_name(Some("Dark")), Some("dark"));
+        assert_eq!(
+            canonical_theme_name(Some("HIGH-CONTRAST")),
+            Some("high-contrast")
+        );
+        assert_eq!(canonical_theme_name(Some("unknown")), None);
     }
 
     #[test]

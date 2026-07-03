@@ -580,3 +580,24 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 22 - Add named theme config MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added a minimal `display.theme` configuration field with built-in `default`, `dark`, and `high-contrast` theme names.
+* Used the active theme only to choose the default accent color fallback when `display.accent_color` is missing or invalid.
+* Preserved explicit valid `display.accent_color` as the highest-priority override.
+* Updated `jcode config show` to display theme validity, active theme, accent validity, active accent color, and fallback behavior.
+* Did not add full palette theming, wallpaper, project-local customization, config editing, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

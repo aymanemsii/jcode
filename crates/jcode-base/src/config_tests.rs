@@ -632,6 +632,21 @@ fn test_display_accent_color_defaults_to_none_and_deserializes() {
 }
 
 #[test]
+fn test_display_theme_defaults_to_none_and_deserializes() {
+    assert_eq!(DisplayConfig::default().theme, None);
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [display]
+        theme = "Dark"
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.display.theme.as_deref(), Some("Dark"));
+}
+
+#[test]
 fn test_session_picker_resume_action_defaults_to_current_terminal() {
     assert_eq!(
         Config::default().keybindings.session_picker_enter,

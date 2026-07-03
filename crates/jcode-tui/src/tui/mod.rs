@@ -68,7 +68,10 @@ pub(crate) fn install_configured_accent_color() {
 }
 
 fn apply_configured_accent_color(display: &crate::config::DisplayConfig) {
-    jcode_tui_style::theme::set_accent_color_from_config(display.accent_color.as_deref());
+    jcode_tui_style::theme::set_accent_color_and_theme_from_config(
+        display.accent_color.as_deref(),
+        display.theme.as_deref(),
+    );
 }
 
 pub(crate) fn scheduled_notification_text(

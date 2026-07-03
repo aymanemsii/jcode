@@ -887,6 +887,8 @@ pub struct DisplayConfig {
     pub compact_notifications: bool,
     /// Override the Alt/Option label shown in copy badges. Empty = auto (⌥ on macOS, Alt elsewhere).
     pub copy_badge_alt_label: String,
+    /// Built-in theme name. MVP: only affects the accent color fallback.
+    pub theme: Option<String>,
     /// Optional global accent color override. Accepts "#RRGGBB" or "RRGGBB".
     pub accent_color: Option<String>,
     /// Native terminal scrollbar configuration for scrollable panes
@@ -918,6 +920,7 @@ impl Default for DisplayConfig {
             prompt_preview: true,
             compact_notifications: false,
             copy_badge_alt_label: String::new(),
+            theme: None,
             accent_color: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }

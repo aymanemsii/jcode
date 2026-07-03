@@ -105,6 +105,10 @@ key = "off"
 timeout_secs = 90
 
 [display]
+# Built-in theme name: "default", "dark", or "high-contrast".
+# MVP: only affects the default accent color fallback.
+theme = "default"
+
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"
 

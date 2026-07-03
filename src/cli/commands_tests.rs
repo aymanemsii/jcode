@@ -253,40 +253,86 @@ fn config_show_reports_missing_accent_as_default() {
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("display.theme: not configured"));
+    assert!(output.contains("theme valid: not configured"));
+    assert!(output.contains("active theme: default"));
+    assert!(output.contains("theme accent color: #BA8BFF"));
     assert!(output.contains("display.accent_color: not configured"));
     assert!(output.contains("accent_color valid: not configured"));
     assert!(output.contains("active accent color: #BA8BFF"));
-    assert!(output.contains("default accent color: #BA8BFF"));
-    assert!(output.contains("fallback: default is being used (no accent_color configured)"));
+    assert!(output.contains("built-in default accent color: #BA8BFF"));
+    assert!(
+        output.contains(
+            "fallback: active theme/default accent is being used (no accent_color configured)"
+        )
+    );
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
 }
 
 #[test]
+fn config_show_reports_valid_theme_as_accent_fallback() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("Dark".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.theme: dark"));
+    assert!(output.contains("theme valid: true"));
+    assert!(output.contains("active theme: dark"));
+    assert!(output.contains("theme accent color: #7DD3FC"));
+    assert!(output.contains("active accent color: #7DD3FC"));
+}
+
+#[test]
+fn config_show_reports_invalid_theme_as_default_theme() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("solarized".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.theme: solarized"));
+    assert!(output.contains("theme valid: false"));
+    assert!(output.contains("active theme: default"));
+    assert!(output.contains("theme accent color: #BA8BFF"));
+    assert!(output.contains("active accent color: #BA8BFF"));
+}
+
+#[test]
 fn config_show_reports_valid_accent_as_active() {
     let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("high-contrast".to_string());
     cfg.display.accent_color = Some("#12abEF".to_string());
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("display.theme: high-contrast"));
+    assert!(output.contains("theme valid: true"));
+    assert!(output.contains("theme accent color: #FFFF00"));
     assert!(output.contains("display.accent_color: #12abEF"));
     assert!(output.contains("accent_color valid: true"));
     assert!(output.contains("active accent color: #12ABEF"));
-    assert!(output.contains("fallback: not used"));
+    assert!(
+        output.contains("fallback: not used (display.accent_color overrides active theme accent)")
+    );
 }
 
 #[test]
 fn config_show_reports_invalid_accent_as_default() {
     let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("high-contrast".to_string());
     cfg.display.accent_color = Some("not-a-color".to_string());
 
     let output = render_config_show(&cfg);
 
     assert!(output.contains("display.accent_color: not-a-color"));
     assert!(output.contains("accent_color valid: false"));
-    assert!(output.contains("active accent color: #BA8BFF"));
+    assert!(output.contains("active theme: high-contrast"));
+    assert!(output.contains("active accent color: #FFFF00"));
     assert!(
-        output.contains("fallback: default is being used (configured value is invalid)")
+        output.contains(
+            "fallback: active theme/default accent is being used (configured accent_color is invalid)"
+        )
     );
 }
 

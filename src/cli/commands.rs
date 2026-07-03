@@ -417,33 +417,68 @@ pub fn run_config_show_command() -> Result<()> {
 }
 
 fn render_config_show(config: &crate::config::Config) -> String {
-    let configured = config.display.accent_color.as_deref();
-    let parsed = configured.and_then(parse_accent_color_hex);
-    let active = parsed.as_deref().unwrap_or(DEFAULT_ACCENT_COLOR_HEX);
-    let configured_label = match configured.map(str::trim) {
+    let configured_theme = config.display.theme.as_deref();
+    let parsed_theme = configured_theme.and_then(parse_theme_name);
+    let active_theme = parsed_theme.unwrap_or("default");
+    let theme_accent = jcode_tui_style::theme::color_to_hex(
+        jcode_tui_style::theme::theme_default_accent_rgb(Some(active_theme)),
+    );
+    let configured_theme_label = match configured_theme.map(str::trim) {
+        Some("") => "(empty)".to_string(),
+        Some(_) if parsed_theme.is_some() => active_theme.to_string(),
+        Some(value) => value.to_string(),
+        None => "not configured".to_string(),
+    };
+    let theme_valid_label = match configured_theme {
+        Some(value) if parsed_theme.is_some() && !value.trim().is_empty() => "true",
+        Some(_) => "false",
+        None => "not configured",
+    };
+
+    let configured_accent = config.display.accent_color.as_deref();
+    let parsed_accent = configured_accent.and_then(parse_accent_color_hex);
+    let active_accent = parsed_accent.as_deref().unwrap_or(&theme_accent);
+    let configured_accent_label = match configured_accent.map(str::trim) {
         Some("") => "(empty)",
         Some(value) => value,
         None => "not configured",
     };
-    let valid_label = match configured {
-        Some(_) if parsed.is_some() => "true",
+    let accent_valid_label = match configured_accent {
+        Some(_) if parsed_accent.is_some() => "true",
         Some(_) => "false",
         None => "not configured",
     };
-    let fallback_label = match configured {
-        Some(_) if parsed.is_some() => "not used",
-        Some(_) => "default is being used (configured value is invalid)",
-        None => "default is being used (no accent_color configured)",
+    let fallback_label = match configured_accent {
+        Some(_) if parsed_accent.is_some() => {
+            "not used (display.accent_color overrides active theme accent)"
+        }
+        Some(_) => {
+            "active theme/default accent is being used (configured accent_color is invalid)"
+        }
+        None => "active theme/default accent is being used (no accent_color configured)",
     };
 
     format!(
         "Display customization config:\n\
-display.accent_color: {configured_label}\n\
-accent_color valid: {valid_label}\n\
-active accent color: {active}\n\
-default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
+display.theme: {configured_theme_label}\n\
+theme valid: {theme_valid_label}\n\
+active theme: {active_theme}\n\
+theme accent color: {theme_accent}\n\
+display.accent_color: {configured_accent_label}\n\
+accent_color valid: {accent_valid_label}\n\
+active accent color: {active_accent}\n\
+built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
     )
+}
+
+fn parse_theme_name(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "default" => Some("default"),
+        "dark" => Some("dark"),
+        "high-contrast" => Some("high-contrast"),
+        _ => None,
+    }
 }
 
 fn parse_accent_color_hex(value: &str) -> Option<String> {
