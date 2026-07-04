@@ -601,3 +601,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 23 - Add theme palette MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added a small built-in theme palette path for central semantic TUI colors.
+* Preserved the default theme behavior and kept explicit `display.accent_color` as the highest-priority accent override.
+* Applied `default`, `dark`, and `high-contrast` themes only through existing central semantic color functions.
+* Avoided broad TUI recoloring, direct color migration, wallpaper, project-local customization, config editing, Queue changes, server protocol changes, and layout refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

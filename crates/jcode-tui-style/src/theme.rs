@@ -4,20 +4,67 @@ use ratatui::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 const DEFAULT_ACCENT_RGB: (u8, u8, u8) = (186, 139, 255);
-const DARK_THEME_ACCENT_RGB: (u8, u8, u8) = (125, 211, 252);
-const HIGH_CONTRAST_THEME_ACCENT_RGB: (u8, u8, u8) = (255, 255, 0);
 const NO_CONFIGURED_ACCENT: u32 = 0x0100_0000;
+const THEME_DEFAULT: u8 = 0;
+const THEME_DARK: u8 = 1;
+const THEME_HIGH_CONTRAST: u8 = 2;
 static CONFIGURED_ACCENT_RGB: AtomicU32 = AtomicU32::new(NO_CONFIGURED_ACCENT);
 static THEME_ACCENT_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_ACCENT_RGB));
+static ACTIVE_THEME: AtomicU32 = AtomicU32::new(THEME_DEFAULT as u32);
+
+#[derive(Clone, Copy)]
+struct ThemePalette {
+    accent: (u8, u8, u8),
+    user: (u8, u8, u8),
+    ai: (u8, u8, u8),
+    tool: (u8, u8, u8),
+    system_message: (u8, u8, u8),
+    queued: (u8, u8, u8),
+    asap: (u8, u8, u8),
+    pending: (u8, u8, u8),
+}
+
+const DEFAULT_PALETTE: ThemePalette = ThemePalette {
+    accent: DEFAULT_ACCENT_RGB,
+    user: (138, 180, 248),
+    ai: (129, 199, 132),
+    tool: (120, 120, 120),
+    system_message: (255, 170, 220),
+    queued: (255, 193, 7),
+    asap: (110, 210, 255),
+    pending: (140, 140, 140),
+};
+
+const DARK_PALETTE: ThemePalette = ThemePalette {
+    accent: (125, 211, 252),
+    user: (147, 197, 253),
+    ai: (134, 239, 172),
+    tool: (148, 163, 184),
+    system_message: (244, 114, 182),
+    queued: (251, 191, 36),
+    asap: (34, 211, 238),
+    pending: (156, 163, 175),
+};
+
+const HIGH_CONTRAST_PALETTE: ThemePalette = ThemePalette {
+    accent: (255, 255, 0),
+    user: (0, 255, 255),
+    ai: (0, 255, 0),
+    tool: (255, 255, 255),
+    system_message: (255, 0, 255),
+    queued: (255, 255, 0),
+    asap: (0, 255, 255),
+    pending: (192, 192, 192),
+};
 
 pub fn user_color() -> Color {
-    rgb(138, 180, 248)
+    color_from_rgb(active_palette().user)
 }
 pub fn ai_color() -> Color {
-    rgb(129, 199, 132)
+    color_from_rgb(active_palette().ai)
 }
 pub fn tool_color() -> Color {
-    rgb(120, 120, 120)
+    color_from_rgb(active_palette().tool)
 }
 pub fn file_link_color() -> Color {
     rgb(180, 200, 255)
@@ -38,17 +85,15 @@ pub fn set_accent_color_from_config(value: Option<&str>) {
     set_accent_color_and_theme_from_config(value, None);
 }
 pub fn set_accent_color_and_theme_from_config(value: Option<&str>, theme: Option<&str>) {
-    let theme_accent = pack_rgb(theme_default_accent_rgb(theme));
+    let theme_id = theme_id(theme);
+    let theme_accent = pack_rgb(palette_for_theme_id(theme_id).accent);
     let configured_accent = value.and_then(parse_hex_rgb).unwrap_or(NO_CONFIGURED_ACCENT);
+    ACTIVE_THEME.store(theme_id as u32, Ordering::Relaxed);
     THEME_ACCENT_RGB.store(theme_accent, Ordering::Relaxed);
     CONFIGURED_ACCENT_RGB.store(configured_accent, Ordering::Relaxed);
 }
 pub fn theme_default_accent_rgb(theme: Option<&str>) -> (u8, u8, u8) {
-    match canonical_theme_name(theme).unwrap_or("default") {
-        "dark" => DARK_THEME_ACCENT_RGB,
-        "high-contrast" => HIGH_CONTRAST_THEME_ACCENT_RGB,
-        _ => DEFAULT_ACCENT_RGB,
-    }
+    palette_for_theme_id(theme_id(theme)).accent
 }
 pub fn canonical_theme_name(theme: Option<&str>) -> Option<&'static str> {
     match theme.map(str::trim).unwrap_or("").to_ascii_lowercase().as_str() {
@@ -57,6 +102,26 @@ pub fn canonical_theme_name(theme: Option<&str>) -> Option<&'static str> {
         "high-contrast" => Some("high-contrast"),
         _ => None,
     }
+}
+fn theme_id(theme: Option<&str>) -> u8 {
+    match canonical_theme_name(theme).unwrap_or("default") {
+        "dark" => THEME_DARK,
+        "high-contrast" => THEME_HIGH_CONTRAST,
+        _ => THEME_DEFAULT,
+    }
+}
+fn palette_for_theme_id(theme_id: u8) -> ThemePalette {
+    match theme_id {
+        THEME_DARK => DARK_PALETTE,
+        THEME_HIGH_CONTRAST => HIGH_CONTRAST_PALETTE,
+        _ => DEFAULT_PALETTE,
+    }
+}
+fn active_palette() -> ThemePalette {
+    palette_for_theme_id(ACTIVE_THEME.load(Ordering::Relaxed) as u8)
+}
+fn color_from_rgb((r, g, b): (u8, u8, u8)) -> Color {
+    rgb(r, g, b)
 }
 const fn pack_rgb((r, g, b): (u8, u8, u8)) -> u32 {
     ((r as u32) << 16) | ((g as u32) << 8) | b as u32
@@ -79,16 +144,16 @@ fn unpack_rgb(packed: u32) -> (u8, u8, u8) {
     )
 }
 pub fn system_message_color() -> Color {
-    rgb(255, 170, 220)
+    color_from_rgb(active_palette().system_message)
 }
 pub fn queued_color() -> Color {
-    rgb(255, 193, 7)
+    color_from_rgb(active_palette().queued)
 }
 pub fn asap_color() -> Color {
-    rgb(110, 210, 255)
+    color_from_rgb(active_palette().asap)
 }
 pub fn pending_color() -> Color {
-    rgb(140, 140, 140)
+    color_from_rgb(active_palette().pending)
 }
 pub fn user_text() -> Color {
     rgb(245, 245, 255)
@@ -267,6 +332,13 @@ pub fn animated_tool_color(elapsed: f32, enable_decorative_animations: bool) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static THEME_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn theme_test_guard() -> MutexGuard<'static, ()> {
+        THEME_TEST_LOCK.lock().unwrap()
+    }
 
     #[test]
     fn spinner_frames_are_circular_braille_sequence() {
@@ -313,6 +385,8 @@ mod tests {
 
     #[test]
     fn configured_accent_falls_back_to_default_for_missing_or_invalid_values() {
+        let _guard = theme_test_guard();
+
         set_accent_color_from_config(None);
         assert_eq!(accent_color(), rgb(186, 139, 255));
 
@@ -322,6 +396,8 @@ mod tests {
 
     #[test]
     fn configured_accent_overrides_default_when_valid() {
+        let _guard = theme_test_guard();
+
         set_accent_color_from_config(Some("#123456"));
         assert_eq!(accent_color(), rgb(18, 52, 86));
         set_accent_color_from_config(None);
@@ -329,6 +405,8 @@ mod tests {
 
     #[test]
     fn theme_accent_is_used_when_configured_accent_is_missing_or_invalid() {
+        let _guard = theme_test_guard();
+
         set_accent_color_and_theme_from_config(None, Some("dark"));
         assert_eq!(accent_color(), rgb(125, 211, 252));
 
@@ -343,6 +421,8 @@ mod tests {
 
     #[test]
     fn configured_accent_overrides_theme_accent_when_valid() {
+        let _guard = theme_test_guard();
+
         set_accent_color_and_theme_from_config(Some("#123456"), Some("high-contrast"));
         assert_eq!(accent_color(), rgb(18, 52, 86));
         set_accent_color_from_config(None);
@@ -357,6 +437,83 @@ mod tests {
             Some("high-contrast")
         );
         assert_eq!(canonical_theme_name(Some("unknown")), None);
+    }
+
+    #[test]
+    fn default_theme_preserves_existing_semantic_colors() {
+        let _guard = theme_test_guard();
+
+        set_accent_color_and_theme_from_config(None, Some("default"));
+
+        assert_eq!(accent_color(), rgb(186, 139, 255));
+        assert_eq!(user_color(), rgb(138, 180, 248));
+        assert_eq!(ai_color(), rgb(129, 199, 132));
+        assert_eq!(tool_color(), rgb(120, 120, 120));
+        assert_eq!(system_message_color(), rgb(255, 170, 220));
+        assert_eq!(queued_color(), rgb(255, 193, 7));
+        assert_eq!(asap_color(), rgb(110, 210, 255));
+        assert_eq!(pending_color(), rgb(140, 140, 140));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn named_themes_apply_to_central_semantic_colors() {
+        let _guard = theme_test_guard();
+
+        set_accent_color_and_theme_from_config(None, Some("dark"));
+        assert_eq!(accent_color(), rgb(125, 211, 252));
+        assert_eq!(user_color(), rgb(147, 197, 253));
+        assert_eq!(ai_color(), rgb(134, 239, 172));
+        assert_eq!(tool_color(), rgb(148, 163, 184));
+        assert_eq!(system_message_color(), rgb(244, 114, 182));
+        assert_eq!(queued_color(), rgb(251, 191, 36));
+        assert_eq!(asap_color(), rgb(34, 211, 238));
+        assert_eq!(pending_color(), rgb(156, 163, 175));
+
+        set_accent_color_and_theme_from_config(None, Some("high-contrast"));
+        assert_eq!(accent_color(), rgb(255, 255, 0));
+        assert_eq!(user_color(), rgb(0, 255, 255));
+        assert_eq!(ai_color(), rgb(0, 255, 0));
+        assert_eq!(tool_color(), rgb(255, 255, 255));
+        assert_eq!(system_message_color(), rgb(255, 0, 255));
+        assert_eq!(queued_color(), rgb(255, 255, 0));
+        assert_eq!(asap_color(), rgb(0, 255, 255));
+        assert_eq!(pending_color(), rgb(192, 192, 192));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn invalid_theme_uses_default_palette() {
+        let _guard = theme_test_guard();
+
+        set_accent_color_and_theme_from_config(None, Some("unknown"));
+
+        assert_eq!(accent_color(), rgb(186, 139, 255));
+        assert_eq!(user_color(), rgb(138, 180, 248));
+        assert_eq!(ai_color(), rgb(129, 199, 132));
+        assert_eq!(tool_color(), rgb(120, 120, 120));
+        assert_eq!(system_message_color(), rgb(255, 170, 220));
+        assert_eq!(queued_color(), rgb(255, 193, 7));
+        assert_eq!(asap_color(), rgb(110, 210, 255));
+        assert_eq!(pending_color(), rgb(140, 140, 140));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn configured_accent_only_overrides_accent_in_theme_palette() {
+        let _guard = theme_test_guard();
+
+        set_accent_color_and_theme_from_config(Some("#123456"), Some("dark"));
+
+        assert_eq!(accent_color(), rgb(18, 52, 86));
+        assert_eq!(user_color(), rgb(147, 197, 253));
+        assert_eq!(ai_color(), rgb(134, 239, 172));
+        assert_eq!(tool_color(), rgb(148, 163, 184));
+
+        set_accent_color_from_config(None);
     }
 
     #[test]
