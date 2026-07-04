@@ -891,6 +891,8 @@ pub struct DisplayConfig {
     pub theme: Option<String>,
     /// Optional global accent color override. Accepts "#RRGGBB" or "RRGGBB".
     pub accent_color: Option<String>,
+    /// Show a minimal startup splash in the empty TUI state when explicitly enabled.
+    pub startup_splash: Option<bool>,
     /// Native terminal scrollbar configuration for scrollable panes
     pub native_scrollbars: NativeScrollbarConfig,
 }
@@ -922,6 +924,7 @@ impl Default for DisplayConfig {
             copy_badge_alt_label: String::new(),
             theme: None,
             accent_color: None,
+            startup_splash: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }
     }

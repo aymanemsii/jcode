@@ -621,3 +621,24 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 24 - Add startup splash MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added an opt-in `display.startup_splash` configuration field.
+* Added a minimal theme-aware TUI startup splash/background panel for the empty/startup state when enabled.
+* Kept default behavior unchanged when `display.startup_splash` is missing or false.
+* Updated `jcode config show` to display `display.startup_splash`.
+* Did not implement true wallpaper, terminal image backgrounds, animation, layout refactors, Queue changes, server protocol changes, multi-session, or multi-agent behavior.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

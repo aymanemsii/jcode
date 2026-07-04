@@ -109,6 +109,9 @@ timeout_secs = 90
 # MVP: only affects the default accent color fallback.
 theme = "default"
 
+# Show a minimal startup splash/background panel in the empty TUI state.
+# startup_splash = true
+
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"
 

@@ -457,6 +457,11 @@ fn render_config_show(config: &crate::config::Config) -> String {
         }
         None => "active theme/default accent is being used (no accent_color configured)",
     };
+    let startup_splash_label = match config.display.startup_splash {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "not configured",
+    };
 
     format!(
         "Display customization config:\n\
@@ -467,6 +472,7 @@ theme accent color: {theme_accent}\n\
 display.accent_color: {configured_accent_label}\n\
 accent_color valid: {accent_valid_label}\n\
 active accent color: {active_accent}\n\
+display.startup_splash: {startup_splash_label}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
     )

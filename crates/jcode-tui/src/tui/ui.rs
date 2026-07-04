@@ -22,7 +22,10 @@ use super::visual_debug::{
 };
 use super::{DisplayMessage, DisplayMessageRoleExt, ProcessingStatus, TuiState};
 use crate::message::ToolCall;
-use ratatui::{prelude::*, widgets::Paragraph};
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Borders, Paragraph},
+};
 use serde::Serialize;
 #[cfg(test)]
 use std::cell::{Cell, RefCell};
@@ -2618,7 +2621,8 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         return;
     }
 
-    let show_donut = !onboarding_welcome && super::idle_donut_active(app);
+    let show_startup_splash = startup_splash_visible(app);
+    let show_donut = !onboarding_welcome && !show_startup_splash && super::idle_donut_active(app);
     let donut_height: u16 = if show_donut { 14 } else { 0 };
     let notification_height: u16 = if app.has_notification() { 1 } else { 0 };
     // Elastic overscroll status line revealed when the user scrolls past the
@@ -2696,7 +2700,11 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             .collect();
     }
     let prep_elapsed = prep_start.elapsed();
-    let content_height = prepared.total_wrapped_lines().max(1) as u16;
+    let content_height = if show_startup_splash {
+        prepared.total_wrapped_lines().max(7) as u16
+    } else {
+        prepared.total_wrapped_lines().max(1) as u16
+    };
 
     // Use packed layout when content fits, scrolling layout otherwise
     let use_packed = content_height + fixed_height <= available_height;
@@ -2846,6 +2854,9 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             chat_scrollbar_visible,
         )
     };
+    if show_startup_splash {
+        draw_startup_splash(frame, messages_area);
+    }
 
     crate::tui::reset_pinned_diagram_debug_snapshot();
     // Render pinned diagram if we have one
@@ -3067,6 +3078,49 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         draw_start.elapsed(),
         Some(messages_draw.as_secs_f64() * 1000.0),
     );
+}
+
+fn startup_splash_visible(app: &dyn TuiState) -> bool {
+    crate::config::config().display.startup_splash == Some(true)
+        && app.display_messages().is_empty()
+        && !app.onboarding_welcome_active()
+}
+
+fn draw_startup_splash(frame: &mut Frame, area: Rect) {
+    if area.width < 20 || area.height < 5 {
+        return;
+    }
+
+    let panel_width = area.width.min(46);
+    let panel_height = area.height.min(7);
+    let panel = Rect {
+        x: area.x + area.width.saturating_sub(panel_width) / 2,
+        y: area.y + area.height.saturating_sub(panel_height) / 2,
+        width: panel_width,
+        height: panel_height,
+    };
+
+    let content = vec![
+        Line::from(Span::styled(
+            "jcode",
+            Style::default().fg(accent_color()).bold(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Personalized workspace ready.",
+            Style::default().fg(system_message_color()),
+        )),
+        Line::from(Span::styled(
+            "Type a prompt or command to begin.",
+            Style::default().fg(dim_color()),
+        )),
+    ];
+    let paragraph = Paragraph::new(content).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(dim_color())),
+    );
+    frame.render_widget(paragraph, panel);
 }
 
 pub(crate) fn split_native_scrollbar_area(area: Rect, enabled: bool) -> (Rect, Option<Rect>) {

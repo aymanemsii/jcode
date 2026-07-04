@@ -647,6 +647,21 @@ fn test_display_theme_defaults_to_none_and_deserializes() {
 }
 
 #[test]
+fn test_display_startup_splash_defaults_to_none_and_deserializes() {
+    assert_eq!(DisplayConfig::default().startup_splash, None);
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [display]
+        startup_splash = true
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.display.startup_splash, Some(true));
+}
+
+#[test]
 fn test_session_picker_resume_action_defaults_to_current_terminal() {
     assert_eq!(
         Config::default().keybindings.session_picker_enter,
