@@ -93,6 +93,17 @@ fn custom_theme_palettes(
             queued: theme.queued.as_deref(),
             asap: theme.asap.as_deref(),
             pending: theme.pending.as_deref(),
+            background: theme.background.as_deref(),
+            foreground: theme.foreground.as_deref(),
+            muted: theme.muted.as_deref(),
+            border: theme.border.as_deref(),
+            active_border: theme.active_border.as_deref(),
+            panel: theme.panel.as_deref(),
+            input: theme.input.as_deref(),
+            selection: theme.selection.as_deref(),
+            success: theme.success.as_deref(),
+            warning: theme.warning.as_deref(),
+            error: theme.error.as_deref(),
         })
         .collect()
 }

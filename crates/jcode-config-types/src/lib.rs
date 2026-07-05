@@ -887,7 +887,7 @@ pub struct DisplayConfig {
     pub compact_notifications: bool,
     /// Override the Alt/Option label shown in copy badges. Empty = auto (⌥ on macOS, Alt elsewhere).
     pub copy_badge_alt_label: String,
-    /// Built-in theme name. MVP: only affects the accent color fallback.
+    /// Built-in or custom theme name for semantic and UI chrome colors.
     pub theme: Option<String>,
     /// Optional global accent color override. Accepts "#RRGGBB" or "RRGGBB".
     pub accent_color: Option<String>,
@@ -897,8 +897,8 @@ pub struct DisplayConfig {
     pub native_scrollbars: NativeScrollbarConfig,
 }
 
-/// User-defined semantic theme palette. Every field is optional; missing or
-/// invalid values fall back field-by-field at theme resolution time.
+/// User-defined semantic and UI chrome theme palette. Every field is optional;
+/// missing or invalid values fall back field-by-field at theme resolution time.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(default)]
 pub struct CustomThemeConfig {
@@ -910,6 +910,17 @@ pub struct CustomThemeConfig {
     pub queued: Option<String>,
     pub asap: Option<String>,
     pub pending: Option<String>,
+    pub background: Option<String>,
+    pub foreground: Option<String>,
+    pub muted: Option<String>,
+    pub border: Option<String>,
+    pub active_border: Option<String>,
+    pub panel: Option<String>,
+    pub input: Option<String>,
+    pub selection: Option<String>,
+    pub success: Option<String>,
+    pub warning: Option<String>,
+    pub error: Option<String>,
 }
 
 impl Default for DisplayConfig {

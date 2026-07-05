@@ -58,6 +58,9 @@ impl Config {
 - Animation FPS: {}
 - Redraw FPS: {}
 - Copy badge Alt label: {}
+- Theme: {}
+- Accent color override: {}
+- Active palette: semantic colors + UI chrome fields
 
 **Features:**
 - Memory: {}
@@ -183,6 +186,8 @@ impl Config {
             } else {
                 self.display.copy_badge_alt_label.trim()
             },
+            self.display.theme.as_deref().unwrap_or("default"),
+            self.display.accent_color.as_deref().unwrap_or("(none)"),
             self.features.memory,
             self.features.swarm,
             self.features.message_timestamps,

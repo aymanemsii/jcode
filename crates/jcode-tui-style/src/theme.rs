@@ -31,6 +31,17 @@ static ACTIVE_SYSTEM_MESSAGE_RGB: AtomicU32 =
 static ACTIVE_QUEUED_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.queued));
 static ACTIVE_ASAP_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.asap));
 static ACTIVE_PENDING_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.pending));
+static ACTIVE_BACKGROUND_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.background));
+static ACTIVE_FOREGROUND_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.foreground));
+static ACTIVE_MUTED_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.muted));
+static ACTIVE_BORDER_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.border));
+static ACTIVE_ACTIVE_BORDER_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.active_border));
+static ACTIVE_PANEL_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.panel));
+static ACTIVE_INPUT_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.input));
+static ACTIVE_SELECTION_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.selection));
+static ACTIVE_SUCCESS_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.success));
+static ACTIVE_WARNING_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.warning));
+static ACTIVE_ERROR_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.error));
 
 pub const BUILT_IN_THEME_NAMES: &[&str] = &[
     "default",
@@ -61,6 +72,17 @@ pub struct ThemePalette {
     pub queued: (u8, u8, u8),
     pub asap: (u8, u8, u8),
     pub pending: (u8, u8, u8),
+    pub background: (u8, u8, u8),
+    pub foreground: (u8, u8, u8),
+    pub muted: (u8, u8, u8),
+    pub border: (u8, u8, u8),
+    pub active_border: (u8, u8, u8),
+    pub panel: (u8, u8, u8),
+    pub input: (u8, u8, u8),
+    pub selection: (u8, u8, u8),
+    pub success: (u8, u8, u8),
+    pub warning: (u8, u8, u8),
+    pub error: (u8, u8, u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +111,17 @@ pub struct CustomThemePalette<'a> {
     pub queued: Option<&'a str>,
     pub asap: Option<&'a str>,
     pub pending: Option<&'a str>,
+    pub background: Option<&'a str>,
+    pub foreground: Option<&'a str>,
+    pub muted: Option<&'a str>,
+    pub border: Option<&'a str>,
+    pub active_border: Option<&'a str>,
+    pub panel: Option<&'a str>,
+    pub input: Option<&'a str>,
+    pub selection: Option<&'a str>,
+    pub success: Option<&'a str>,
+    pub warning: Option<&'a str>,
+    pub error: Option<&'a str>,
 }
 
 const DEFAULT_PALETTE: ThemePalette = ThemePalette {
@@ -100,6 +133,17 @@ const DEFAULT_PALETTE: ThemePalette = ThemePalette {
     queued: (255, 193, 7),
     asap: (110, 210, 255),
     pending: (140, 140, 140),
+    background: (0, 0, 0),
+    foreground: (245, 245, 245),
+    muted: (80, 80, 80),
+    border: (80, 80, 80),
+    active_border: DEFAULT_ACCENT_RGB,
+    panel: (18, 18, 22),
+    input: (24, 24, 28),
+    selection: (48, 44, 86),
+    success: (129, 199, 132),
+    warning: (255, 193, 7),
+    error: (255, 110, 130),
 };
 
 const DARK_PALETTE: ThemePalette = ThemePalette {
@@ -111,6 +155,17 @@ const DARK_PALETTE: ThemePalette = ThemePalette {
     queued: (251, 191, 36),
     asap: (34, 211, 238),
     pending: (156, 163, 175),
+    background: (9, 9, 11),
+    foreground: (229, 231, 235),
+    muted: (113, 113, 122),
+    border: (39, 39, 42),
+    active_border: (125, 211, 252),
+    panel: (17, 17, 19),
+    input: (24, 24, 27),
+    selection: (30, 58, 138),
+    success: (52, 211, 153),
+    warning: (251, 191, 36),
+    error: (251, 113, 133),
 };
 
 const HIGH_CONTRAST_PALETTE: ThemePalette = ThemePalette {
@@ -122,6 +177,17 @@ const HIGH_CONTRAST_PALETTE: ThemePalette = ThemePalette {
     queued: (255, 255, 0),
     asap: (0, 255, 255),
     pending: (192, 192, 192),
+    background: (0, 0, 0),
+    foreground: (255, 255, 255),
+    muted: (192, 192, 192),
+    border: (255, 255, 255),
+    active_border: (255, 255, 0),
+    panel: (0, 0, 0),
+    input: (24, 24, 24),
+    selection: (0, 0, 180),
+    success: (0, 255, 0),
+    warning: (255, 255, 0),
+    error: (255, 0, 0),
 };
 
 const DRACULA_PALETTE: ThemePalette = ThemePalette {
@@ -133,6 +199,17 @@ const DRACULA_PALETTE: ThemePalette = ThemePalette {
     queued: (241, 250, 140),
     asap: (255, 184, 108),
     pending: (98, 114, 164),
+    background: (40, 42, 54),
+    foreground: (248, 248, 242),
+    muted: (98, 114, 164),
+    border: (68, 71, 90),
+    active_border: (189, 147, 249),
+    panel: (33, 34, 44),
+    input: (45, 47, 59),
+    selection: (68, 71, 90),
+    success: (80, 250, 123),
+    warning: (241, 250, 140),
+    error: (255, 85, 85),
 };
 
 const TOKYONIGHT_PALETTE: ThemePalette = ThemePalette {
@@ -144,6 +221,17 @@ const TOKYONIGHT_PALETTE: ThemePalette = ThemePalette {
     queued: (224, 175, 104),
     asap: (187, 154, 247),
     pending: (86, 95, 137),
+    background: (26, 27, 38),
+    foreground: (192, 202, 245),
+    muted: (86, 95, 137),
+    border: (65, 72, 104),
+    active_border: (122, 162, 247),
+    panel: (22, 22, 30),
+    input: (31, 35, 53),
+    selection: (40, 52, 89),
+    success: (158, 206, 106),
+    warning: (224, 175, 104),
+    error: (247, 118, 142),
 };
 
 const GRUVBOX_PALETTE: ThemePalette = ThemePalette {
@@ -155,6 +243,17 @@ const GRUVBOX_PALETTE: ThemePalette = ThemePalette {
     queued: (254, 128, 25),
     asap: (142, 192, 124),
     pending: (146, 131, 116),
+    background: (40, 40, 40),
+    foreground: (235, 219, 178),
+    muted: (146, 131, 116),
+    border: (80, 73, 69),
+    active_border: (250, 189, 47),
+    panel: (50, 48, 47),
+    input: (60, 56, 54),
+    selection: (69, 71, 52),
+    success: (184, 187, 38),
+    warning: (250, 189, 47),
+    error: (251, 73, 52),
 };
 
 const NORD_PALETTE: ThemePalette = ThemePalette {
@@ -166,6 +265,17 @@ const NORD_PALETTE: ThemePalette = ThemePalette {
     queued: (235, 203, 139),
     asap: (180, 142, 173),
     pending: (143, 188, 187),
+    background: (46, 52, 64),
+    foreground: (216, 222, 233),
+    muted: (129, 161, 193),
+    border: (67, 76, 94),
+    active_border: (136, 192, 208),
+    panel: (59, 66, 82),
+    input: (67, 76, 94),
+    selection: (76, 86, 106),
+    success: (163, 190, 140),
+    warning: (235, 203, 139),
+    error: (191, 97, 106),
 };
 
 const CATPPUCCIN_PALETTE: ThemePalette = ThemePalette {
@@ -177,6 +287,17 @@ const CATPPUCCIN_PALETTE: ThemePalette = ThemePalette {
     queued: (249, 226, 175),
     asap: (203, 166, 247),
     pending: (147, 153, 178),
+    background: (30, 30, 46),
+    foreground: (205, 214, 244),
+    muted: (147, 153, 178),
+    border: (69, 71, 90),
+    active_border: (137, 180, 250),
+    panel: (24, 24, 37),
+    input: (49, 50, 68),
+    selection: (69, 71, 90),
+    success: (166, 227, 161),
+    warning: (249, 226, 175),
+    error: (243, 139, 168),
 };
 
 const CATPPUCCIN_MACCHIATO_PALETTE: ThemePalette = ThemePalette {
@@ -188,6 +309,17 @@ const CATPPUCCIN_MACCHIATO_PALETTE: ThemePalette = ThemePalette {
     queued: (238, 212, 159),
     asap: (198, 160, 246),
     pending: (128, 135, 162),
+    background: (36, 39, 58),
+    foreground: (202, 211, 245),
+    muted: (128, 135, 162),
+    border: (73, 77, 100),
+    active_border: (138, 173, 244),
+    panel: (30, 32, 48),
+    input: (54, 58, 79),
+    selection: (73, 77, 100),
+    success: (166, 218, 149),
+    warning: (238, 212, 159),
+    error: (237, 135, 150),
 };
 
 const KANAGAWA_PALETTE: ThemePalette = ThemePalette {
@@ -199,6 +331,17 @@ const KANAGAWA_PALETTE: ThemePalette = ThemePalette {
     queued: (230, 195, 132),
     asap: (210, 126, 153),
     pending: (114, 144, 154),
+    background: (31, 31, 40),
+    foreground: (220, 215, 186),
+    muted: (114, 144, 154),
+    border: (84, 84, 109),
+    active_border: (126, 156, 216),
+    panel: (22, 22, 29),
+    input: (42, 42, 55),
+    selection: (54, 73, 99),
+    success: (152, 187, 108),
+    warning: (230, 195, 132),
+    error: (228, 104, 118),
 };
 
 const EVERFOREST_PALETTE: ThemePalette = ThemePalette {
@@ -210,6 +353,17 @@ const EVERFOREST_PALETTE: ThemePalette = ThemePalette {
     queued: (219, 188, 127),
     asap: (226, 150, 117),
     pending: (133, 146, 137),
+    background: (45, 53, 59),
+    foreground: (211, 198, 170),
+    muted: (133, 146, 137),
+    border: (79, 89, 84),
+    active_border: (167, 192, 128),
+    panel: (39, 46, 51),
+    input: (52, 63, 68),
+    selection: (65, 76, 65),
+    success: (131, 192, 146),
+    warning: (219, 188, 127),
+    error: (224, 108, 117),
 };
 
 const AYU_PALETTE: ThemePalette = ThemePalette {
@@ -221,6 +375,17 @@ const AYU_PALETTE: ThemePalette = ThemePalette {
     queued: (255, 163, 26),
     asap: (57, 186, 230),
     pending: (130, 139, 153),
+    background: (15, 20, 25),
+    foreground: (191, 200, 217),
+    muted: (130, 139, 153),
+    border: (54, 62, 70),
+    active_border: (255, 204, 102),
+    panel: (19, 26, 33),
+    input: (28, 36, 45),
+    selection: (38, 52, 71),
+    success: (180, 214, 130),
+    warning: (255, 204, 102),
+    error: (255, 51, 102),
 };
 
 const ONE_DARK_PALETTE: ThemePalette = ThemePalette {
@@ -232,6 +397,17 @@ const ONE_DARK_PALETTE: ThemePalette = ThemePalette {
     queued: (229, 192, 123),
     asap: (198, 120, 221),
     pending: (130, 137, 151),
+    background: (40, 44, 52),
+    foreground: (171, 178, 191),
+    muted: (130, 137, 151),
+    border: (76, 82, 99),
+    active_border: (97, 175, 239),
+    panel: (33, 37, 43),
+    input: (49, 54, 63),
+    selection: (62, 68, 81),
+    success: (152, 195, 121),
+    warning: (229, 192, 123),
+    error: (224, 108, 117),
 };
 
 const MATRIX_PALETTE: ThemePalette = ThemePalette {
@@ -243,6 +419,17 @@ const MATRIX_PALETTE: ThemePalette = ThemePalette {
     queued: (190, 255, 90),
     asap: (0, 255, 190),
     pending: (80, 130, 90),
+    background: (0, 8, 0),
+    foreground: (180, 255, 190),
+    muted: (80, 130, 90),
+    border: (0, 90, 35),
+    active_border: (0, 255, 65),
+    panel: (0, 18, 6),
+    input: (0, 28, 10),
+    selection: (0, 70, 30),
+    success: (80, 255, 120),
+    warning: (190, 255, 90),
+    error: (255, 80, 80),
 };
 
 const VERCEL_PALETTE: ThemePalette = ThemePalette {
@@ -254,6 +441,17 @@ const VERCEL_PALETTE: ThemePalette = ThemePalette {
     queued: (245, 166, 35),
     asap: (121, 40, 202),
     pending: (136, 136, 136),
+    background: (0, 0, 0),
+    foreground: (255, 255, 255),
+    muted: (136, 136, 136),
+    border: (51, 51, 51),
+    active_border: (255, 255, 255),
+    panel: (17, 17, 17),
+    input: (24, 24, 24),
+    selection: (38, 38, 38),
+    success: (80, 220, 160),
+    warning: (245, 166, 35),
+    error: (255, 64, 96),
 };
 
 const CURSOR_PALETTE: ThemePalette = ThemePalette {
@@ -265,6 +463,17 @@ const CURSOR_PALETTE: ThemePalette = ThemePalette {
     queued: (255, 197, 92),
     asap: (0, 212, 255),
     pending: (132, 142, 156),
+    background: (12, 14, 18),
+    foreground: (232, 237, 243),
+    muted: (132, 142, 156),
+    border: (43, 48, 58),
+    active_border: (0, 136, 255),
+    panel: (18, 21, 27),
+    input: (26, 30, 38),
+    selection: (22, 51, 87),
+    success: (102, 217, 170),
+    warning: (255, 197, 92),
+    error: (255, 106, 136),
 };
 
 pub fn user_color() -> Color {
@@ -280,7 +489,7 @@ pub fn file_link_color() -> Color {
     rgb(180, 200, 255)
 }
 pub fn dim_color() -> Color {
-    rgb(80, 80, 80)
+    muted_color()
 }
 pub fn accent_color() -> Color {
     let packed = CONFIGURED_ACCENT_RGB.load(Ordering::Relaxed);
@@ -427,6 +636,17 @@ fn active_palette() -> ThemePalette {
         queued: unpack_rgb(ACTIVE_QUEUED_RGB.load(Ordering::Relaxed)),
         asap: unpack_rgb(ACTIVE_ASAP_RGB.load(Ordering::Relaxed)),
         pending: unpack_rgb(ACTIVE_PENDING_RGB.load(Ordering::Relaxed)),
+        background: unpack_rgb(ACTIVE_BACKGROUND_RGB.load(Ordering::Relaxed)),
+        foreground: unpack_rgb(ACTIVE_FOREGROUND_RGB.load(Ordering::Relaxed)),
+        muted: unpack_rgb(ACTIVE_MUTED_RGB.load(Ordering::Relaxed)),
+        border: unpack_rgb(ACTIVE_BORDER_RGB.load(Ordering::Relaxed)),
+        active_border: unpack_rgb(ACTIVE_ACTIVE_BORDER_RGB.load(Ordering::Relaxed)),
+        panel: unpack_rgb(ACTIVE_PANEL_RGB.load(Ordering::Relaxed)),
+        input: unpack_rgb(ACTIVE_INPUT_RGB.load(Ordering::Relaxed)),
+        selection: unpack_rgb(ACTIVE_SELECTION_RGB.load(Ordering::Relaxed)),
+        success: unpack_rgb(ACTIVE_SUCCESS_RGB.load(Ordering::Relaxed)),
+        warning: unpack_rgb(ACTIVE_WARNING_RGB.load(Ordering::Relaxed)),
+        error: unpack_rgb(ACTIVE_ERROR_RGB.load(Ordering::Relaxed)),
     }
 }
 fn install_active_palette(palette: ThemePalette) {
@@ -437,6 +657,17 @@ fn install_active_palette(palette: ThemePalette) {
     ACTIVE_QUEUED_RGB.store(pack_rgb(palette.queued), Ordering::Relaxed);
     ACTIVE_ASAP_RGB.store(pack_rgb(palette.asap), Ordering::Relaxed);
     ACTIVE_PENDING_RGB.store(pack_rgb(palette.pending), Ordering::Relaxed);
+    ACTIVE_BACKGROUND_RGB.store(pack_rgb(palette.background), Ordering::Relaxed);
+    ACTIVE_FOREGROUND_RGB.store(pack_rgb(palette.foreground), Ordering::Relaxed);
+    ACTIVE_MUTED_RGB.store(pack_rgb(palette.muted), Ordering::Relaxed);
+    ACTIVE_BORDER_RGB.store(pack_rgb(palette.border), Ordering::Relaxed);
+    ACTIVE_ACTIVE_BORDER_RGB.store(pack_rgb(palette.active_border), Ordering::Relaxed);
+    ACTIVE_PANEL_RGB.store(pack_rgb(palette.panel), Ordering::Relaxed);
+    ACTIVE_INPUT_RGB.store(pack_rgb(palette.input), Ordering::Relaxed);
+    ACTIVE_SELECTION_RGB.store(pack_rgb(palette.selection), Ordering::Relaxed);
+    ACTIVE_SUCCESS_RGB.store(pack_rgb(palette.success), Ordering::Relaxed);
+    ACTIVE_WARNING_RGB.store(pack_rgb(palette.warning), Ordering::Relaxed);
+    ACTIVE_ERROR_RGB.store(pack_rgb(palette.error), Ordering::Relaxed);
 }
 fn color_from_rgb((r, g, b): (u8, u8, u8)) -> Color {
     rgb(r, g, b)
@@ -477,6 +708,17 @@ fn custom_theme_palette(custom: &CustomThemePalette<'_>) -> (ThemePalette, usize
             queued: parse(custom.queued, DEFAULT_PALETTE.queued),
             asap: parse(custom.asap, DEFAULT_PALETTE.asap),
             pending: parse(custom.pending, DEFAULT_PALETTE.pending),
+            background: parse(custom.background, DEFAULT_PALETTE.background),
+            foreground: parse(custom.foreground, DEFAULT_PALETTE.foreground),
+            muted: parse(custom.muted, DEFAULT_PALETTE.muted),
+            border: parse(custom.border, DEFAULT_PALETTE.border),
+            active_border: parse(custom.active_border, DEFAULT_PALETTE.active_border),
+            panel: parse(custom.panel, DEFAULT_PALETTE.panel),
+            input: parse(custom.input, DEFAULT_PALETTE.input),
+            selection: parse(custom.selection, DEFAULT_PALETTE.selection),
+            success: parse(custom.success, DEFAULT_PALETTE.success),
+            warning: parse(custom.warning, DEFAULT_PALETTE.warning),
+            error: parse(custom.error, DEFAULT_PALETTE.error),
         },
         invalid,
     )
@@ -499,6 +741,39 @@ pub fn asap_color() -> Color {
 }
 pub fn pending_color() -> Color {
     color_from_rgb(active_palette().pending)
+}
+pub fn background_color() -> Color {
+    color_from_rgb(active_palette().background)
+}
+pub fn foreground_color() -> Color {
+    color_from_rgb(active_palette().foreground)
+}
+pub fn muted_color() -> Color {
+    color_from_rgb(active_palette().muted)
+}
+pub fn border_color() -> Color {
+    color_from_rgb(active_palette().border)
+}
+pub fn active_border_color() -> Color {
+    color_from_rgb(active_palette().active_border)
+}
+pub fn panel_color() -> Color {
+    color_from_rgb(active_palette().panel)
+}
+pub fn input_color() -> Color {
+    color_from_rgb(active_palette().input)
+}
+pub fn selection_color() -> Color {
+    color_from_rgb(active_palette().selection)
+}
+pub fn success_color() -> Color {
+    color_from_rgb(active_palette().success)
+}
+pub fn warning_color() -> Color {
+    color_from_rgb(active_palette().warning)
+}
+pub fn error_color() -> Color {
+    color_from_rgb(active_palette().error)
 }
 pub fn user_text() -> Color {
     rgb(245, 245, 255)
@@ -911,6 +1186,17 @@ mod tests {
             queued: Some("#38BDF8"),
             asap: Some("#F97316"),
             pending: None,
+            background: Some("#09090B"),
+            foreground: None,
+            muted: Some("#71717A"),
+            border: Some("#27272A"),
+            active_border: Some("#8B5CF6"),
+            panel: None,
+            input: None,
+            selection: Some("#312E81"),
+            success: None,
+            warning: None,
+            error: None,
         }];
 
         set_accent_color_theme_and_custom_themes_from_config(None, Some("Aymane"), &themes);
@@ -923,6 +1209,12 @@ mod tests {
         assert_eq!(queued_color(), rgb(56, 189, 248));
         assert_eq!(asap_color(), rgb(249, 115, 22));
         assert_eq!(pending_color(), rgb(140, 140, 140));
+        assert_eq!(background_color(), rgb(9, 9, 11));
+        assert_eq!(muted_color(), rgb(113, 113, 122));
+        assert_eq!(border_color(), rgb(39, 39, 42));
+        assert_eq!(active_border_color(), rgb(139, 92, 246));
+        assert_eq!(selection_color(), rgb(49, 46, 129));
+        assert_eq!(panel_color(), rgb(18, 18, 22));
 
         set_accent_color_from_config(None);
     }
@@ -939,17 +1231,31 @@ mod tests {
             queued: None,
             asap: None,
             pending: None,
+            background: Some("#09090B"),
+            foreground: None,
+            muted: Some("nope"),
+            border: None,
+            active_border: None,
+            panel: None,
+            input: None,
+            selection: None,
+            success: None,
+            warning: None,
+            error: Some("#FB7185"),
         }];
 
         let resolved = resolve_theme_palette(Some("broken"), &themes);
 
         assert_eq!(resolved.name, "broken");
         assert_eq!(resolved.source, ThemeSource::Custom);
-        assert_eq!(resolved.invalid_custom_color_count, 2);
+        assert_eq!(resolved.invalid_custom_color_count, 3);
         assert_eq!(resolved.palette.accent, DEFAULT_PALETTE.accent);
         assert_eq!(resolved.palette.user, (125, 211, 252));
         assert_eq!(resolved.palette.ai, (192, 132, 252));
         assert_eq!(resolved.palette.tool, DEFAULT_PALETTE.tool);
+        assert_eq!(resolved.palette.background, (9, 9, 11));
+        assert_eq!(resolved.palette.muted, DEFAULT_PALETTE.muted);
+        assert_eq!(resolved.palette.error, (251, 113, 133));
     }
 
     #[test]
@@ -964,6 +1270,7 @@ mod tests {
             queued: None,
             asap: None,
             pending: None,
+            ..Default::default()
         }];
 
         let resolved = resolve_theme_palette(Some("dark"), &themes);
@@ -986,6 +1293,7 @@ mod tests {
             queued: None,
             asap: None,
             pending: None,
+            ..Default::default()
         }];
 
         set_accent_color_theme_and_custom_themes_from_config(

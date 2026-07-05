@@ -121,6 +121,17 @@ theme = "default"
 # queued = "#38BDF8"
 # asap = "#F97316"
 # pending = "#A78BFA"
+# background = "#09090B"
+# foreground = "#E5E7EB"
+# muted = "#71717A"
+# border = "#27272A"
+# active_border = "#8B5CF6"
+# panel = "#111113"
+# input = "#18181B"
+# selection = "#312E81"
+# success = "#34D399"
+# warning = "#FBBF24"
+# error = "#FB7185"
 
 # Show a minimal startup splash/background panel in the empty TUI state.
 # startup_splash = true

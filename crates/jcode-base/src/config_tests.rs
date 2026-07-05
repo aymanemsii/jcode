@@ -659,6 +659,9 @@ fn test_custom_themes_default_empty_and_deserialize_optional_fields() {
         accent = "#8B5CF6"
         assistant = "C084FC"
         queued = "#38BDF8"
+        background = "#09090B"
+        active_border = "#8B5CF6"
+        error = "#FB7185"
         "##,
     )
     .expect("config should deserialize");
@@ -672,6 +675,17 @@ fn test_custom_themes_default_empty_and_deserialize_optional_fields() {
     assert_eq!(theme.queued.as_deref(), Some("#38BDF8"));
     assert_eq!(theme.asap, None);
     assert_eq!(theme.pending, None);
+    assert_eq!(theme.background.as_deref(), Some("#09090B"));
+    assert_eq!(theme.foreground, None);
+    assert_eq!(theme.muted, None);
+    assert_eq!(theme.border, None);
+    assert_eq!(theme.active_border.as_deref(), Some("#8B5CF6"));
+    assert_eq!(theme.panel, None);
+    assert_eq!(theme.input, None);
+    assert_eq!(theme.selection, None);
+    assert_eq!(theme.success, None);
+    assert_eq!(theme.warning, None);
+    assert_eq!(theme.error.as_deref(), Some("#FB7185"));
 }
 
 #[test]
@@ -684,6 +698,17 @@ fn custom_theme_config_fields_default_to_none() {
     assert_eq!(CustomThemeConfig::default().queued, None);
     assert_eq!(CustomThemeConfig::default().asap, None);
     assert_eq!(CustomThemeConfig::default().pending, None);
+    assert_eq!(CustomThemeConfig::default().background, None);
+    assert_eq!(CustomThemeConfig::default().foreground, None);
+    assert_eq!(CustomThemeConfig::default().muted, None);
+    assert_eq!(CustomThemeConfig::default().border, None);
+    assert_eq!(CustomThemeConfig::default().active_border, None);
+    assert_eq!(CustomThemeConfig::default().panel, None);
+    assert_eq!(CustomThemeConfig::default().input, None);
+    assert_eq!(CustomThemeConfig::default().selection, None);
+    assert_eq!(CustomThemeConfig::default().success, None);
+    assert_eq!(CustomThemeConfig::default().warning, None);
+    assert_eq!(CustomThemeConfig::default().error, None);
 }
 
 #[test]

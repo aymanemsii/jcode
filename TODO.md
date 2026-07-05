@@ -685,3 +685,26 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 27 - Add Theme Palette V2 fields
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Expanded the theme palette with UI chrome fields for background, foreground, muted, border, active_border, panel, input, selection, success, warning, and error colors.
+* Added custom theme config support for the new optional fields.
+* Added safe field-level fallback behavior for missing and invalid custom colors.
+* Added reasonable UI chrome colors for built-in themes.
+* Routed a small, low-risk set of UI chrome styling through the centralized theme palette.
+* Preserved built-in theme behavior, custom named themes, reserved built-in names, and explicit valid display.accent_color as the highest-priority accent override.
+* Did not add wallpaper, project-local customization, import/export, config editing, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.
