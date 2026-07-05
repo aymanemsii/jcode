@@ -105,8 +105,9 @@ key = "off"
 timeout_secs = 90
 
 [display]
-# Built-in theme name: "default", "dark", or "high-contrast".
-# MVP: only affects the default accent color fallback.
+# Built-in theme name. Options: "default", "dark", "high-contrast", "dracula",
+# "tokyonight", "gruvbox", "nord", "catppuccin", "catppuccin-macchiato",
+# "kanagawa", "everforest", "ayu", "one-dark", "matrix", "vercel", or "cursor".
 theme = "default"
 
 # Show a minimal startup splash/background panel in the empty TUI state.

@@ -8,9 +8,41 @@ const NO_CONFIGURED_ACCENT: u32 = 0x0100_0000;
 const THEME_DEFAULT: u8 = 0;
 const THEME_DARK: u8 = 1;
 const THEME_HIGH_CONTRAST: u8 = 2;
+const THEME_DRACULA: u8 = 3;
+const THEME_TOKYONIGHT: u8 = 4;
+const THEME_GRUVBOX: u8 = 5;
+const THEME_NORD: u8 = 6;
+const THEME_CATPPUCCIN: u8 = 7;
+const THEME_CATPPUCCIN_MACCHIATO: u8 = 8;
+const THEME_KANAGAWA: u8 = 9;
+const THEME_EVERFOREST: u8 = 10;
+const THEME_AYU: u8 = 11;
+const THEME_ONE_DARK: u8 = 12;
+const THEME_MATRIX: u8 = 13;
+const THEME_VERCEL: u8 = 14;
+const THEME_CURSOR: u8 = 15;
 static CONFIGURED_ACCENT_RGB: AtomicU32 = AtomicU32::new(NO_CONFIGURED_ACCENT);
 static THEME_ACCENT_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_ACCENT_RGB));
 static ACTIVE_THEME: AtomicU32 = AtomicU32::new(THEME_DEFAULT as u32);
+
+pub const BUILT_IN_THEME_NAMES: &[&str] = &[
+    "default",
+    "dark",
+    "high-contrast",
+    "dracula",
+    "tokyonight",
+    "gruvbox",
+    "nord",
+    "catppuccin",
+    "catppuccin-macchiato",
+    "kanagawa",
+    "everforest",
+    "ayu",
+    "one-dark",
+    "matrix",
+    "vercel",
+    "cursor",
+];
 
 #[derive(Clone, Copy)]
 struct ThemePalette {
@@ -57,6 +89,149 @@ const HIGH_CONTRAST_PALETTE: ThemePalette = ThemePalette {
     pending: (192, 192, 192),
 };
 
+const DRACULA_PALETTE: ThemePalette = ThemePalette {
+    accent: (189, 147, 249),
+    user: (139, 233, 253),
+    ai: (80, 250, 123),
+    tool: (248, 248, 242),
+    system_message: (255, 121, 198),
+    queued: (241, 250, 140),
+    asap: (255, 184, 108),
+    pending: (98, 114, 164),
+};
+
+const TOKYONIGHT_PALETTE: ThemePalette = ThemePalette {
+    accent: (122, 162, 247),
+    user: (125, 207, 255),
+    ai: (158, 206, 106),
+    tool: (169, 177, 214),
+    system_message: (247, 118, 142),
+    queued: (224, 175, 104),
+    asap: (187, 154, 247),
+    pending: (86, 95, 137),
+};
+
+const GRUVBOX_PALETTE: ThemePalette = ThemePalette {
+    accent: (250, 189, 47),
+    user: (131, 165, 152),
+    ai: (184, 187, 38),
+    tool: (168, 153, 132),
+    system_message: (251, 73, 52),
+    queued: (254, 128, 25),
+    asap: (142, 192, 124),
+    pending: (146, 131, 116),
+};
+
+const NORD_PALETTE: ThemePalette = ThemePalette {
+    accent: (136, 192, 208),
+    user: (129, 161, 193),
+    ai: (163, 190, 140),
+    tool: (216, 222, 233),
+    system_message: (191, 97, 106),
+    queued: (235, 203, 139),
+    asap: (180, 142, 173),
+    pending: (143, 188, 187),
+};
+
+const CATPPUCCIN_PALETTE: ThemePalette = ThemePalette {
+    accent: (137, 180, 250),
+    user: (116, 199, 236),
+    ai: (166, 227, 161),
+    tool: (205, 214, 244),
+    system_message: (243, 139, 168),
+    queued: (249, 226, 175),
+    asap: (203, 166, 247),
+    pending: (147, 153, 178),
+};
+
+const CATPPUCCIN_MACCHIATO_PALETTE: ThemePalette = ThemePalette {
+    accent: (138, 173, 244),
+    user: (125, 196, 228),
+    ai: (166, 218, 149),
+    tool: (202, 211, 245),
+    system_message: (237, 135, 150),
+    queued: (238, 212, 159),
+    asap: (198, 160, 246),
+    pending: (128, 135, 162),
+};
+
+const KANAGAWA_PALETTE: ThemePalette = ThemePalette {
+    accent: (126, 156, 216),
+    user: (126, 174, 194),
+    ai: (152, 187, 108),
+    tool: (220, 215, 186),
+    system_message: (228, 104, 118),
+    queued: (230, 195, 132),
+    asap: (210, 126, 153),
+    pending: (114, 144, 154),
+};
+
+const EVERFOREST_PALETTE: ThemePalette = ThemePalette {
+    accent: (167, 192, 128),
+    user: (127, 187, 179),
+    ai: (131, 192, 146),
+    tool: (211, 198, 170),
+    system_message: (224, 108, 117),
+    queued: (219, 188, 127),
+    asap: (226, 150, 117),
+    pending: (133, 146, 137),
+};
+
+const AYU_PALETTE: ThemePalette = ThemePalette {
+    accent: (255, 204, 102),
+    user: (95, 180, 180),
+    ai: (180, 214, 130),
+    tool: (191, 200, 217),
+    system_message: (255, 51, 102),
+    queued: (255, 163, 26),
+    asap: (57, 186, 230),
+    pending: (130, 139, 153),
+};
+
+const ONE_DARK_PALETTE: ThemePalette = ThemePalette {
+    accent: (97, 175, 239),
+    user: (86, 182, 194),
+    ai: (152, 195, 121),
+    tool: (171, 178, 191),
+    system_message: (224, 108, 117),
+    queued: (229, 192, 123),
+    asap: (198, 120, 221),
+    pending: (130, 137, 151),
+};
+
+const MATRIX_PALETTE: ThemePalette = ThemePalette {
+    accent: (0, 255, 65),
+    user: (0, 220, 110),
+    ai: (80, 255, 120),
+    tool: (140, 200, 150),
+    system_message: (255, 80, 80),
+    queued: (190, 255, 90),
+    asap: (0, 255, 190),
+    pending: (80, 130, 90),
+};
+
+const VERCEL_PALETTE: ThemePalette = ThemePalette {
+    accent: (255, 255, 255),
+    user: (0, 112, 243),
+    ai: (80, 220, 160),
+    tool: (170, 170, 170),
+    system_message: (255, 64, 96),
+    queued: (245, 166, 35),
+    asap: (121, 40, 202),
+    pending: (136, 136, 136),
+};
+
+const CURSOR_PALETTE: ThemePalette = ThemePalette {
+    accent: (0, 136, 255),
+    user: (84, 180, 255),
+    ai: (102, 217, 170),
+    tool: (176, 185, 197),
+    system_message: (255, 106, 136),
+    queued: (255, 197, 92),
+    asap: (0, 212, 255),
+    pending: (132, 142, 156),
+};
+
 pub fn user_color() -> Color {
     color_from_rgb(active_palette().user)
 }
@@ -100,6 +275,19 @@ pub fn canonical_theme_name(theme: Option<&str>) -> Option<&'static str> {
         "" | "default" => Some("default"),
         "dark" => Some("dark"),
         "high-contrast" => Some("high-contrast"),
+        "dracula" => Some("dracula"),
+        "tokyonight" => Some("tokyonight"),
+        "gruvbox" => Some("gruvbox"),
+        "nord" => Some("nord"),
+        "catppuccin" => Some("catppuccin"),
+        "catppuccin-macchiato" => Some("catppuccin-macchiato"),
+        "kanagawa" => Some("kanagawa"),
+        "everforest" => Some("everforest"),
+        "ayu" => Some("ayu"),
+        "one-dark" => Some("one-dark"),
+        "matrix" => Some("matrix"),
+        "vercel" => Some("vercel"),
+        "cursor" => Some("cursor"),
         _ => None,
     }
 }
@@ -107,6 +295,19 @@ fn theme_id(theme: Option<&str>) -> u8 {
     match canonical_theme_name(theme).unwrap_or("default") {
         "dark" => THEME_DARK,
         "high-contrast" => THEME_HIGH_CONTRAST,
+        "dracula" => THEME_DRACULA,
+        "tokyonight" => THEME_TOKYONIGHT,
+        "gruvbox" => THEME_GRUVBOX,
+        "nord" => THEME_NORD,
+        "catppuccin" => THEME_CATPPUCCIN,
+        "catppuccin-macchiato" => THEME_CATPPUCCIN_MACCHIATO,
+        "kanagawa" => THEME_KANAGAWA,
+        "everforest" => THEME_EVERFOREST,
+        "ayu" => THEME_AYU,
+        "one-dark" => THEME_ONE_DARK,
+        "matrix" => THEME_MATRIX,
+        "vercel" => THEME_VERCEL,
+        "cursor" => THEME_CURSOR,
         _ => THEME_DEFAULT,
     }
 }
@@ -114,6 +315,19 @@ fn palette_for_theme_id(theme_id: u8) -> ThemePalette {
     match theme_id {
         THEME_DARK => DARK_PALETTE,
         THEME_HIGH_CONTRAST => HIGH_CONTRAST_PALETTE,
+        THEME_DRACULA => DRACULA_PALETTE,
+        THEME_TOKYONIGHT => TOKYONIGHT_PALETTE,
+        THEME_GRUVBOX => GRUVBOX_PALETTE,
+        THEME_NORD => NORD_PALETTE,
+        THEME_CATPPUCCIN => CATPPUCCIN_PALETTE,
+        THEME_CATPPUCCIN_MACCHIATO => CATPPUCCIN_MACCHIATO_PALETTE,
+        THEME_KANAGAWA => KANAGAWA_PALETTE,
+        THEME_EVERFOREST => EVERFOREST_PALETTE,
+        THEME_AYU => AYU_PALETTE,
+        THEME_ONE_DARK => ONE_DARK_PALETTE,
+        THEME_MATRIX => MATRIX_PALETTE,
+        THEME_VERCEL => VERCEL_PALETTE,
+        THEME_CURSOR => CURSOR_PALETTE,
         _ => DEFAULT_PALETTE,
     }
 }
@@ -436,7 +650,44 @@ mod tests {
             canonical_theme_name(Some("HIGH-CONTRAST")),
             Some("high-contrast")
         );
+        assert_eq!(canonical_theme_name(Some("Dracula")), Some("dracula"));
+        assert_eq!(canonical_theme_name(Some("TokyoNight")), Some("tokyonight"));
+        assert_eq!(
+            canonical_theme_name(Some("CATPPUCCIN-MACCHIATO")),
+            Some("catppuccin-macchiato")
+        );
+        assert_eq!(canonical_theme_name(Some("One-Dark")), Some("one-dark"));
+        for name in BUILT_IN_THEME_NAMES {
+            assert_eq!(canonical_theme_name(Some(name)), Some(*name));
+        }
         assert_eq!(canonical_theme_name(Some("unknown")), None);
+    }
+
+    #[test]
+    fn famous_themes_apply_to_central_semantic_colors() {
+        let _guard = theme_test_guard();
+
+        set_accent_color_and_theme_from_config(None, Some("dracula"));
+        assert_eq!(accent_color(), rgb(189, 147, 249));
+        assert_eq!(user_color(), rgb(139, 233, 253));
+        assert_eq!(ai_color(), rgb(80, 250, 123));
+        assert_eq!(tool_color(), rgb(248, 248, 242));
+        assert_eq!(system_message_color(), rgb(255, 121, 198));
+        assert_eq!(queued_color(), rgb(241, 250, 140));
+        assert_eq!(asap_color(), rgb(255, 184, 108));
+        assert_eq!(pending_color(), rgb(98, 114, 164));
+
+        set_accent_color_and_theme_from_config(None, Some("cursor"));
+        assert_eq!(accent_color(), rgb(0, 136, 255));
+        assert_eq!(user_color(), rgb(84, 180, 255));
+        assert_eq!(ai_color(), rgb(102, 217, 170));
+        assert_eq!(tool_color(), rgb(176, 185, 197));
+        assert_eq!(system_message_color(), rgb(255, 106, 136));
+        assert_eq!(queued_color(), rgb(255, 197, 92));
+        assert_eq!(asap_color(), rgb(0, 212, 255));
+        assert_eq!(pending_color(), rgb(132, 142, 156));
+
+        set_accent_color_from_config(None);
     }
 
     #[test]

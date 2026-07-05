@@ -420,6 +420,7 @@ fn render_config_show(config: &crate::config::Config) -> String {
     let configured_theme = config.display.theme.as_deref();
     let parsed_theme = configured_theme.and_then(parse_theme_name);
     let active_theme = parsed_theme.unwrap_or("default");
+    let built_in_themes = jcode_tui_style::theme::BUILT_IN_THEME_NAMES.join(", ");
     let theme_accent = jcode_tui_style::theme::color_to_hex(
         jcode_tui_style::theme::theme_default_accent_rgb(Some(active_theme)),
     );
@@ -473,18 +474,14 @@ display.accent_color: {configured_accent_label}\n\
 accent_color valid: {accent_valid_label}\n\
 active accent color: {active_accent}\n\
 display.startup_splash: {startup_splash_label}\n\
+built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
     )
 }
 
 fn parse_theme_name(value: &str) -> Option<&'static str> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "default" => Some("default"),
-        "dark" => Some("dark"),
-        "high-contrast" => Some("high-contrast"),
-        _ => None,
-    }
+    jcode_tui_style::theme::canonical_theme_name(Some(value))
 }
 
 fn parse_accent_color_hex(value: &str) -> Option<String> {

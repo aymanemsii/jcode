@@ -288,6 +288,20 @@ fn config_show_reports_valid_theme_as_accent_fallback() {
 }
 
 #[test]
+fn config_show_reports_famous_theme_canonical_name() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("Catppuccin-Macchiato".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.theme: catppuccin-macchiato"));
+    assert!(output.contains("theme valid: true"));
+    assert!(output.contains("active theme: catppuccin-macchiato"));
+    assert!(output.contains("theme accent color: #8AADF4"));
+    assert!(output.contains("built-in themes: default, dark, high-contrast, dracula, tokyonight, gruvbox, nord, catppuccin, catppuccin-macchiato, kanagawa, everforest, ayu, one-dark, matrix, vercel, cursor"));
+}
+
+#[test]
 fn config_show_reports_invalid_theme_as_default_theme() {
     let mut cfg = crate::config::Config::default();
     cfg.display.theme = Some("solarized".to_string());

@@ -642,3 +642,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 25 - Add famous built-in themes
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added famous built-in theme presets for `display.theme`, including Dracula, Tokyo Night, Gruvbox, Nord, Catppuccin, Kanagawa, Everforest, Ayu, One Dark, Matrix, Vercel, and Cursor-inspired themes.
+* Kept the themes limited to the existing central semantic palette.
+* Preserved default theme behavior and kept explicit valid `display.accent_color` as the highest-priority accent override.
+* Did not add custom theme files, wallpaper, project-local customization, config editing, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.
