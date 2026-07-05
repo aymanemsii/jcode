@@ -418,22 +418,49 @@ pub fn run_config_show_command() -> Result<()> {
 
 fn render_config_show(config: &crate::config::Config) -> String {
     let configured_theme = config.display.theme.as_deref();
-    let parsed_theme = configured_theme.and_then(parse_theme_name);
-    let active_theme = parsed_theme.unwrap_or("default");
-    let built_in_themes = jcode_tui_style::theme::BUILT_IN_THEME_NAMES.join(", ");
-    let theme_accent = jcode_tui_style::theme::color_to_hex(
-        jcode_tui_style::theme::theme_default_accent_rgb(Some(active_theme)),
+    let custom_themes = custom_theme_palettes(config);
+    let resolved_theme = jcode_tui_style::theme::resolve_theme_palette(
+        configured_theme,
+        &custom_themes,
     );
+    let active_theme = resolved_theme.name.as_str();
+    let theme_source = match resolved_theme.source {
+        jcode_tui_style::theme::ThemeSource::BuiltIn => "built-in",
+        jcode_tui_style::theme::ThemeSource::Custom => "custom",
+        jcode_tui_style::theme::ThemeSource::DefaultFallback => "default/fallback",
+    };
+    let built_in_themes = jcode_tui_style::theme::BUILT_IN_THEME_NAMES.join(", ");
+    let theme_accent = jcode_tui_style::theme::color_to_hex(resolved_theme.palette.accent);
     let configured_theme_label = match configured_theme.map(str::trim) {
         Some("") => "(empty)".to_string(),
-        Some(_) if parsed_theme.is_some() => active_theme.to_string(),
+        Some(_)
+            if !matches!(
+                resolved_theme.source,
+                jcode_tui_style::theme::ThemeSource::DefaultFallback
+            ) =>
+        {
+            active_theme.to_string()
+        }
         Some(value) => value.to_string(),
         None => "not configured".to_string(),
     };
     let theme_valid_label = match configured_theme {
-        Some(value) if parsed_theme.is_some() && !value.trim().is_empty() => "true",
+        Some(value)
+            if !matches!(
+                resolved_theme.source,
+                jcode_tui_style::theme::ThemeSource::DefaultFallback
+            ) && !value.trim().is_empty() =>
+        {
+            "true"
+        }
         Some(_) => "false",
         None => "not configured",
+    };
+    let custom_theme_invalid_label = match resolved_theme.source {
+        jcode_tui_style::theme::ThemeSource::Custom => {
+            resolved_theme.invalid_custom_color_count.to_string()
+        }
+        _ => "not applicable".to_string(),
     };
 
     let configured_accent = config.display.accent_color.as_deref();
@@ -469,6 +496,8 @@ fn render_config_show(config: &crate::config::Config) -> String {
 display.theme: {configured_theme_label}\n\
 theme valid: {theme_valid_label}\n\
 active theme: {active_theme}\n\
+theme source: {theme_source}\n\
+custom theme invalid colors: {custom_theme_invalid_label}\n\
 theme accent color: {theme_accent}\n\
 display.accent_color: {configured_accent_label}\n\
 accent_color valid: {accent_valid_label}\n\
@@ -480,8 +509,24 @@ fallback: {fallback_label}\n"
     )
 }
 
-fn parse_theme_name(value: &str) -> Option<&'static str> {
-    jcode_tui_style::theme::canonical_theme_name(Some(value))
+fn custom_theme_palettes(
+    config: &crate::config::Config,
+) -> Vec<jcode_tui_style::theme::CustomThemePalette<'_>> {
+    config
+        .themes
+        .iter()
+        .map(|(name, theme)| jcode_tui_style::theme::CustomThemePalette {
+            name: name.as_str(),
+            accent: theme.accent.as_deref(),
+            user: theme.user.as_deref(),
+            assistant: theme.assistant.as_deref(),
+            tool: theme.tool.as_deref(),
+            system: theme.system.as_deref(),
+            queued: theme.queued.as_deref(),
+            asap: theme.asap.as_deref(),
+            pending: theme.pending.as_deref(),
+        })
+        .collect()
 }
 
 fn parse_accent_color_hex(value: &str) -> Option<String> {

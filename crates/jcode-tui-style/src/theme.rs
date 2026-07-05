@@ -23,7 +23,14 @@ const THEME_VERCEL: u8 = 14;
 const THEME_CURSOR: u8 = 15;
 static CONFIGURED_ACCENT_RGB: AtomicU32 = AtomicU32::new(NO_CONFIGURED_ACCENT);
 static THEME_ACCENT_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_ACCENT_RGB));
-static ACTIVE_THEME: AtomicU32 = AtomicU32::new(THEME_DEFAULT as u32);
+static ACTIVE_USER_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.user));
+static ACTIVE_AI_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.ai));
+static ACTIVE_TOOL_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.tool));
+static ACTIVE_SYSTEM_MESSAGE_RGB: AtomicU32 =
+    AtomicU32::new(pack_rgb(DEFAULT_PALETTE.system_message));
+static ACTIVE_QUEUED_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.queued));
+static ACTIVE_ASAP_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.asap));
+static ACTIVE_PENDING_RGB: AtomicU32 = AtomicU32::new(pack_rgb(DEFAULT_PALETTE.pending));
 
 pub const BUILT_IN_THEME_NAMES: &[&str] = &[
     "default",
@@ -44,16 +51,44 @@ pub const BUILT_IN_THEME_NAMES: &[&str] = &[
     "cursor",
 ];
 
-#[derive(Clone, Copy)]
-struct ThemePalette {
-    accent: (u8, u8, u8),
-    user: (u8, u8, u8),
-    ai: (u8, u8, u8),
-    tool: (u8, u8, u8),
-    system_message: (u8, u8, u8),
-    queued: (u8, u8, u8),
-    asap: (u8, u8, u8),
-    pending: (u8, u8, u8),
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThemePalette {
+    pub accent: (u8, u8, u8),
+    pub user: (u8, u8, u8),
+    pub ai: (u8, u8, u8),
+    pub tool: (u8, u8, u8),
+    pub system_message: (u8, u8, u8),
+    pub queued: (u8, u8, u8),
+    pub asap: (u8, u8, u8),
+    pub pending: (u8, u8, u8),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeSource {
+    BuiltIn,
+    Custom,
+    DefaultFallback,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedThemePalette {
+    pub name: String,
+    pub source: ThemeSource,
+    pub palette: ThemePalette,
+    pub invalid_custom_color_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CustomThemePalette<'a> {
+    pub name: &'a str,
+    pub accent: Option<&'a str>,
+    pub user: Option<&'a str>,
+    pub assistant: Option<&'a str>,
+    pub tool: Option<&'a str>,
+    pub system: Option<&'a str>,
+    pub queued: Option<&'a str>,
+    pub asap: Option<&'a str>,
+    pub pending: Option<&'a str>,
 }
 
 const DEFAULT_PALETTE: ThemePalette = ThemePalette {
@@ -260,15 +295,66 @@ pub fn set_accent_color_from_config(value: Option<&str>) {
     set_accent_color_and_theme_from_config(value, None);
 }
 pub fn set_accent_color_and_theme_from_config(value: Option<&str>, theme: Option<&str>) {
-    let theme_id = theme_id(theme);
-    let theme_accent = pack_rgb(palette_for_theme_id(theme_id).accent);
+    set_accent_color_theme_and_custom_themes_from_config(value, theme, &[]);
+}
+pub fn set_accent_color_theme_and_custom_themes_from_config(
+    value: Option<&str>,
+    theme: Option<&str>,
+    custom_themes: &[CustomThemePalette<'_>],
+) {
+    let resolved = resolve_theme_palette(theme, custom_themes);
+    let theme_accent = pack_rgb(resolved.palette.accent);
     let configured_accent = value.and_then(parse_hex_rgb).unwrap_or(NO_CONFIGURED_ACCENT);
-    ACTIVE_THEME.store(theme_id as u32, Ordering::Relaxed);
     THEME_ACCENT_RGB.store(theme_accent, Ordering::Relaxed);
+    install_active_palette(resolved.palette);
     CONFIGURED_ACCENT_RGB.store(configured_accent, Ordering::Relaxed);
 }
 pub fn theme_default_accent_rgb(theme: Option<&str>) -> (u8, u8, u8) {
     palette_for_theme_id(theme_id(theme)).accent
+}
+pub fn resolve_theme_palette(
+    theme: Option<&str>,
+    custom_themes: &[CustomThemePalette<'_>],
+) -> ResolvedThemePalette {
+    let trimmed = theme.map(str::trim).unwrap_or("");
+    if trimmed.is_empty() {
+        return ResolvedThemePalette {
+            name: "default".to_string(),
+            source: ThemeSource::DefaultFallback,
+            palette: DEFAULT_PALETTE,
+            invalid_custom_color_count: 0,
+        };
+    }
+
+    if let Some(name) = canonical_theme_name(theme) {
+        return ResolvedThemePalette {
+            name: name.to_string(),
+            source: ThemeSource::BuiltIn,
+            palette: palette_for_theme_id(theme_id(Some(name))),
+            invalid_custom_color_count: 0,
+        };
+    }
+
+    if !trimmed.is_empty()
+        && let Some(custom) = custom_themes
+            .iter()
+            .find(|custom| custom.name.trim().eq_ignore_ascii_case(trimmed))
+    {
+        let (palette, invalid_custom_color_count) = custom_theme_palette(custom);
+        return ResolvedThemePalette {
+            name: custom.name.trim().to_ascii_lowercase(),
+            source: ThemeSource::Custom,
+            palette,
+            invalid_custom_color_count,
+        };
+    }
+
+    ResolvedThemePalette {
+        name: "default".to_string(),
+        source: ThemeSource::DefaultFallback,
+        palette: DEFAULT_PALETTE,
+        invalid_custom_color_count: 0,
+    }
 }
 pub fn canonical_theme_name(theme: Option<&str>) -> Option<&'static str> {
     match theme.map(str::trim).unwrap_or("").to_ascii_lowercase().as_str() {
@@ -332,7 +418,25 @@ fn palette_for_theme_id(theme_id: u8) -> ThemePalette {
     }
 }
 fn active_palette() -> ThemePalette {
-    palette_for_theme_id(ACTIVE_THEME.load(Ordering::Relaxed) as u8)
+    ThemePalette {
+        accent: unpack_rgb(THEME_ACCENT_RGB.load(Ordering::Relaxed)),
+        user: unpack_rgb(ACTIVE_USER_RGB.load(Ordering::Relaxed)),
+        ai: unpack_rgb(ACTIVE_AI_RGB.load(Ordering::Relaxed)),
+        tool: unpack_rgb(ACTIVE_TOOL_RGB.load(Ordering::Relaxed)),
+        system_message: unpack_rgb(ACTIVE_SYSTEM_MESSAGE_RGB.load(Ordering::Relaxed)),
+        queued: unpack_rgb(ACTIVE_QUEUED_RGB.load(Ordering::Relaxed)),
+        asap: unpack_rgb(ACTIVE_ASAP_RGB.load(Ordering::Relaxed)),
+        pending: unpack_rgb(ACTIVE_PENDING_RGB.load(Ordering::Relaxed)),
+    }
+}
+fn install_active_palette(palette: ThemePalette) {
+    ACTIVE_USER_RGB.store(pack_rgb(palette.user), Ordering::Relaxed);
+    ACTIVE_AI_RGB.store(pack_rgb(palette.ai), Ordering::Relaxed);
+    ACTIVE_TOOL_RGB.store(pack_rgb(palette.tool), Ordering::Relaxed);
+    ACTIVE_SYSTEM_MESSAGE_RGB.store(pack_rgb(palette.system_message), Ordering::Relaxed);
+    ACTIVE_QUEUED_RGB.store(pack_rgb(palette.queued), Ordering::Relaxed);
+    ACTIVE_ASAP_RGB.store(pack_rgb(palette.asap), Ordering::Relaxed);
+    ACTIVE_PENDING_RGB.store(pack_rgb(palette.pending), Ordering::Relaxed);
 }
 fn color_from_rgb((r, g, b): (u8, u8, u8)) -> Color {
     rgb(r, g, b)
@@ -349,6 +453,33 @@ fn parse_hex_rgb(value: &str) -> Option<u32> {
         return None;
     }
     u32::from_str_radix(hex, 16).ok()
+}
+fn custom_theme_palette(custom: &CustomThemePalette<'_>) -> (ThemePalette, usize) {
+    let mut invalid = 0;
+    let mut parse = |value: Option<&str>, fallback: (u8, u8, u8)| match value {
+        Some(value) => match parse_hex_rgb(value).map(unpack_rgb) {
+            Some(rgb) => rgb,
+            None => {
+                invalid += 1;
+                fallback
+            }
+        },
+        None => fallback,
+    };
+
+    (
+        ThemePalette {
+            accent: parse(custom.accent, DEFAULT_PALETTE.accent),
+            user: parse(custom.user, DEFAULT_PALETTE.user),
+            ai: parse(custom.assistant, DEFAULT_PALETTE.ai),
+            tool: parse(custom.tool, DEFAULT_PALETTE.tool),
+            system_message: parse(custom.system, DEFAULT_PALETTE.system_message),
+            queued: parse(custom.queued, DEFAULT_PALETTE.queued),
+            asap: parse(custom.asap, DEFAULT_PALETTE.asap),
+            pending: parse(custom.pending, DEFAULT_PALETTE.pending),
+        },
+        invalid,
+    )
 }
 fn unpack_rgb(packed: u32) -> (u8, u8, u8) {
     (
@@ -763,6 +894,109 @@ mod tests {
         assert_eq!(user_color(), rgb(147, 197, 253));
         assert_eq!(ai_color(), rgb(134, 239, 172));
         assert_eq!(tool_color(), rgb(148, 163, 184));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn custom_theme_applies_optional_fields_with_default_fallbacks() {
+        let _guard = theme_test_guard();
+        let themes = [CustomThemePalette {
+            name: "aymane",
+            accent: Some("#8B5CF6"),
+            user: Some("#7DD3FC"),
+            assistant: Some("#C084FC"),
+            tool: Some("#FBBF24"),
+            system: Some("#94A3B8"),
+            queued: Some("#38BDF8"),
+            asap: Some("#F97316"),
+            pending: None,
+        }];
+
+        set_accent_color_theme_and_custom_themes_from_config(None, Some("Aymane"), &themes);
+
+        assert_eq!(accent_color(), rgb(139, 92, 246));
+        assert_eq!(user_color(), rgb(125, 211, 252));
+        assert_eq!(ai_color(), rgb(192, 132, 252));
+        assert_eq!(tool_color(), rgb(251, 191, 36));
+        assert_eq!(system_message_color(), rgb(148, 163, 184));
+        assert_eq!(queued_color(), rgb(56, 189, 248));
+        assert_eq!(asap_color(), rgb(249, 115, 22));
+        assert_eq!(pending_color(), rgb(140, 140, 140));
+
+        set_accent_color_from_config(None);
+    }
+
+    #[test]
+    fn custom_theme_invalid_colors_fall_back_field_by_field() {
+        let themes = [CustomThemePalette {
+            name: "broken",
+            accent: Some("not-a-color"),
+            user: Some("#7DD3FC"),
+            assistant: Some("#C084FC"),
+            tool: Some("#bad"),
+            system: None,
+            queued: None,
+            asap: None,
+            pending: None,
+        }];
+
+        let resolved = resolve_theme_palette(Some("broken"), &themes);
+
+        assert_eq!(resolved.name, "broken");
+        assert_eq!(resolved.source, ThemeSource::Custom);
+        assert_eq!(resolved.invalid_custom_color_count, 2);
+        assert_eq!(resolved.palette.accent, DEFAULT_PALETTE.accent);
+        assert_eq!(resolved.palette.user, (125, 211, 252));
+        assert_eq!(resolved.palette.ai, (192, 132, 252));
+        assert_eq!(resolved.palette.tool, DEFAULT_PALETTE.tool);
+    }
+
+    #[test]
+    fn built_in_theme_names_are_reserved_over_custom_themes() {
+        let themes = [CustomThemePalette {
+            name: "dark",
+            accent: Some("#8B5CF6"),
+            user: None,
+            assistant: None,
+            tool: None,
+            system: None,
+            queued: None,
+            asap: None,
+            pending: None,
+        }];
+
+        let resolved = resolve_theme_palette(Some("dark"), &themes);
+
+        assert_eq!(resolved.name, "dark");
+        assert_eq!(resolved.source, ThemeSource::BuiltIn);
+        assert_eq!(resolved.palette.accent, DARK_PALETTE.accent);
+    }
+
+    #[test]
+    fn configured_accent_overrides_custom_theme_accent_only() {
+        let _guard = theme_test_guard();
+        let themes = [CustomThemePalette {
+            name: "aymane",
+            accent: Some("#8B5CF6"),
+            user: Some("#7DD3FC"),
+            assistant: Some("#C084FC"),
+            tool: None,
+            system: None,
+            queued: None,
+            asap: None,
+            pending: None,
+        }];
+
+        set_accent_color_theme_and_custom_themes_from_config(
+            Some("#123456"),
+            Some("aymane"),
+            &themes,
+        );
+
+        assert_eq!(accent_color(), rgb(18, 52, 86));
+        assert_eq!(user_color(), rgb(125, 211, 252));
+        assert_eq!(ai_color(), rgb(192, 132, 252));
 
         set_accent_color_from_config(None);
     }

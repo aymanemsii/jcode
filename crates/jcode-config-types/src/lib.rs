@@ -897,6 +897,21 @@ pub struct DisplayConfig {
     pub native_scrollbars: NativeScrollbarConfig,
 }
 
+/// User-defined semantic theme palette. Every field is optional; missing or
+/// invalid values fall back field-by-field at theme resolution time.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct CustomThemeConfig {
+    pub accent: Option<String>,
+    pub user: Option<String>,
+    pub assistant: Option<String>,
+    pub tool: Option<String>,
+    pub system: Option<String>,
+    pub queued: Option<String>,
+    pub asap: Option<String>,
+    pub pending: Option<String>,
+}
+
 impl Default for DisplayConfig {
     fn default() -> Self {
         Self {

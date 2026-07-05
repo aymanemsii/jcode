@@ -10,7 +10,7 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
 
-        let default_content = r#"# jcode configuration file
+        let default_content = r##"# jcode configuration file
 # Location: ~/.jcode/config.toml
 #
 # Environment variables override these settings.
@@ -109,6 +109,18 @@ timeout_secs = 90
 # "tokyonight", "gruvbox", "nord", "catppuccin", "catppuccin-macchiato",
 # "kanagawa", "everforest", "ayu", "one-dark", "matrix", "vercel", or "cursor".
 theme = "default"
+
+# Optional custom named themes. Built-in theme names are reserved.
+# Select one with [display] theme = "example".
+# [themes.example]
+# accent = "#8B5CF6"
+# user = "#7DD3FC"
+# assistant = "#C084FC"
+# tool = "#FBBF24"
+# system = "#94A3B8"
+# queued = "#38BDF8"
+# asap = "#F97316"
+# pending = "#A78BFA"
 
 # Show a minimal startup splash/background panel in the empty TUI state.
 # startup_splash = true
@@ -532,7 +544,7 @@ desktop_notifications = true
 # jade_relay_reply_enabled = false   # Deliver cloud prompts to one configured live session.
 # jade_relay_launch_enabled = false  # Allow cloud device commands to open headed local sessions.
 # jade_relay_launch_working_dir = "" # Optional default cwd for launched sessions.
-	"#;
+	"##;
 
         // Substitute platform-specific defaults from the keybinding registry.
         let p = jcode_config_types::KeybindingPlatform::current();

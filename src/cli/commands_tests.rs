@@ -256,6 +256,7 @@ fn config_show_reports_missing_accent_as_default() {
     assert!(output.contains("display.theme: not configured"));
     assert!(output.contains("theme valid: not configured"));
     assert!(output.contains("active theme: default"));
+    assert!(output.contains("theme source: default/fallback"));
     assert!(output.contains("theme accent color: #BA8BFF"));
     assert!(output.contains("display.accent_color: not configured"));
     assert!(output.contains("accent_color valid: not configured"));
@@ -282,6 +283,7 @@ fn config_show_reports_valid_theme_as_accent_fallback() {
     assert!(output.contains("display.theme: dark"));
     assert!(output.contains("theme valid: true"));
     assert!(output.contains("active theme: dark"));
+    assert!(output.contains("theme source: built-in"));
     assert!(output.contains("theme accent color: #7DD3FC"));
     assert!(output.contains("active accent color: #7DD3FC"));
     assert!(output.contains("display.startup_splash: true"));
@@ -302,6 +304,35 @@ fn config_show_reports_famous_theme_canonical_name() {
 }
 
 #[test]
+fn config_show_reports_custom_theme_source_and_invalid_color_count() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.theme = Some("Aymane".to_string());
+    cfg.themes.insert(
+        "aymane".to_string(),
+        crate::config::CustomThemeConfig {
+            accent: Some("#8B5CF6".to_string()),
+            user: Some("#7DD3FC".to_string()),
+            assistant: Some("#C084FC".to_string()),
+            tool: Some("not-a-color".to_string()),
+            system: None,
+            queued: Some("#38BDF8".to_string()),
+            asap: Some("#F97316".to_string()),
+            pending: None,
+        },
+    );
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.theme: aymane"));
+    assert!(output.contains("theme valid: true"));
+    assert!(output.contains("active theme: aymane"));
+    assert!(output.contains("theme source: custom"));
+    assert!(output.contains("custom theme invalid colors: 1"));
+    assert!(output.contains("theme accent color: #8B5CF6"));
+    assert!(output.contains("active accent color: #8B5CF6"));
+}
+
+#[test]
 fn config_show_reports_invalid_theme_as_default_theme() {
     let mut cfg = crate::config::Config::default();
     cfg.display.theme = Some("solarized".to_string());
@@ -311,6 +342,7 @@ fn config_show_reports_invalid_theme_as_default_theme() {
     assert!(output.contains("display.theme: solarized"));
     assert!(output.contains("theme valid: false"));
     assert!(output.contains("active theme: default"));
+    assert!(output.contains("theme source: default/fallback"));
     assert!(output.contains("theme accent color: #BA8BFF"));
     assert!(output.contains("active accent color: #BA8BFF"));
 }

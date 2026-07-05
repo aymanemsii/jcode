@@ -662,3 +662,26 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 26 - Add custom named themes MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added custom named theme support through a `[themes]` config table.
+* Supported custom semantic palette fields for accent, user, assistant, tool, system, queued, asap, and pending colors.
+* Preserved built-in themes and kept built-in names reserved.
+* Preserved explicit valid `display.accent_color` as the highest-priority accent override.
+* Handled missing and invalid custom theme color fields with safe field-level fallback behavior.
+* Updated `jcode config show` to report active theme source and custom theme fallback details.
+* Did not add theme import/export, project-local customization, config editing, wallpaper, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+* Do not mark validation as passed unless it was actually run outside Codex.

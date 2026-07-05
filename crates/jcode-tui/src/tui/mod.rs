@@ -59,19 +59,42 @@ use std::time::Duration;
 static ACCENT_COLOR_CONFIG_RELOAD_LISTENER: Once = Once::new();
 
 pub(crate) fn install_configured_accent_color() {
-    apply_configured_accent_color(&crate::config::config().display);
+    apply_configured_accent_color(crate::config::config());
     ACCENT_COLOR_CONFIG_RELOAD_LISTENER.call_once(|| {
         crate::config::on_config_reloaded(|| {
-            apply_configured_accent_color(&crate::config::config().display);
+            apply_configured_accent_color(crate::config::config());
         });
     });
 }
 
-fn apply_configured_accent_color(display: &crate::config::DisplayConfig) {
-    jcode_tui_style::theme::set_accent_color_and_theme_from_config(
+fn apply_configured_accent_color(config: &crate::config::Config) {
+    let display = &config.display;
+    let custom_themes = custom_theme_palettes(config);
+    jcode_tui_style::theme::set_accent_color_theme_and_custom_themes_from_config(
         display.accent_color.as_deref(),
         display.theme.as_deref(),
+        &custom_themes,
     );
+}
+
+fn custom_theme_palettes(
+    config: &crate::config::Config,
+) -> Vec<jcode_tui_style::theme::CustomThemePalette<'_>> {
+    config
+        .themes
+        .iter()
+        .map(|(name, theme)| jcode_tui_style::theme::CustomThemePalette {
+            name: name.as_str(),
+            accent: theme.accent.as_deref(),
+            user: theme.user.as_deref(),
+            assistant: theme.assistant.as_deref(),
+            tool: theme.tool.as_deref(),
+            system: theme.system.as_deref(),
+            queued: theme.queued.as_deref(),
+            asap: theme.asap.as_deref(),
+            pending: theme.pending.as_deref(),
+        })
+        .collect()
 }
 
 pub(crate) fn scheduled_notification_text(

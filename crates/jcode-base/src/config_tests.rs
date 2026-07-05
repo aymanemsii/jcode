@@ -1,5 +1,5 @@
 use super::{
-    AmbientConfig, Config, DiffDisplayMode, DisplayConfig, ProviderConfig,
+    AmbientConfig, Config, CustomThemeConfig, DiffDisplayMode, DisplayConfig, ProviderConfig,
     SessionPickerResumeAction, SwarmSpawnMode, ToolConfig, config_env_fingerprint,
     populate_context_limits_from_config_ref,
 };
@@ -644,6 +644,46 @@ fn test_display_theme_defaults_to_none_and_deserializes() {
     .expect("config should deserialize");
 
     assert_eq!(cfg.display.theme.as_deref(), Some("Dark"));
+}
+
+#[test]
+fn test_custom_themes_default_empty_and_deserialize_optional_fields() {
+    assert!(Config::default().themes.is_empty());
+
+    let cfg: Config = toml::from_str(
+        r##"
+        [display]
+        theme = "aymane"
+
+        [themes.aymane]
+        accent = "#8B5CF6"
+        assistant = "C084FC"
+        queued = "#38BDF8"
+        "##,
+    )
+    .expect("config should deserialize");
+
+    let theme = cfg.themes.get("aymane").expect("custom theme exists");
+    assert_eq!(theme.accent.as_deref(), Some("#8B5CF6"));
+    assert_eq!(theme.user, None);
+    assert_eq!(theme.assistant.as_deref(), Some("C084FC"));
+    assert_eq!(theme.tool, None);
+    assert_eq!(theme.system, None);
+    assert_eq!(theme.queued.as_deref(), Some("#38BDF8"));
+    assert_eq!(theme.asap, None);
+    assert_eq!(theme.pending, None);
+}
+
+#[test]
+fn custom_theme_config_fields_default_to_none() {
+    assert_eq!(CustomThemeConfig::default().accent, None);
+    assert_eq!(CustomThemeConfig::default().user, None);
+    assert_eq!(CustomThemeConfig::default().assistant, None);
+    assert_eq!(CustomThemeConfig::default().tool, None);
+    assert_eq!(CustomThemeConfig::default().system, None);
+    assert_eq!(CustomThemeConfig::default().queued, None);
+    assert_eq!(CustomThemeConfig::default().asap, None);
+    assert_eq!(CustomThemeConfig::default().pending, None);
 }
 
 #[test]

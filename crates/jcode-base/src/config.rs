@@ -5,13 +5,13 @@
 
 pub use jcode_config_types::{
     AgentsConfig, AmbientConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig, CompactionConfig,
-    CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
-    DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, HooksConfig, KeybindingsConfig,
-    LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode, NamedProviderAuth,
-    NamedProviderConfig, NamedProviderModelConfig, NamedProviderType, NativeScrollbarConfig,
-    NotificationsConfig, PowerConfig, ProviderConfig, ReasoningDisplayMode, SafetyConfig,
-    SessionPickerResumeAction, SwarmSpawnMode, TerminalConfig, UpdateChannel, WebSearchConfig,
-    WebSearchEngine,
+    CompactionMode, CrossProviderFailoverMode, CustomThemeConfig, DiagramDisplayMode,
+    DiagramPanePosition, DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig,
+    HooksConfig, KeybindingsConfig, LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode,
+    NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig, NamedProviderType,
+    NativeScrollbarConfig, NotificationsConfig, PowerConfig, ProviderConfig, ReasoningDisplayMode,
+    SafetyConfig, SessionPickerResumeAction, SwarmSpawnMode, TerminalConfig, UpdateChannel,
+    WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -467,6 +467,14 @@ pub struct Config {
     /// base_url = "https://llm.example.com/v1"
     /// api_key_env = "MY_GATEWAY_API_KEY"
     pub providers: BTreeMap<String, NamedProviderConfig>,
+
+    /// User-defined named themes, keyed by theme name.
+    ///
+    /// Example:
+    /// [themes.aymane]
+    /// accent = "#8B5CF6"
+    /// assistant = "#C084FC"
+    pub themes: BTreeMap<String, CustomThemeConfig>,
 
     /// Agent-specific model defaults
     pub agents: AgentsConfig,
