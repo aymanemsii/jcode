@@ -276,6 +276,19 @@ fn config_show_reports_missing_accent_as_default() {
 }
 
 #[test]
+fn config_edit_preserves_visual_as_exact_program_path() {
+    let _saved = SavedEnv::capture(&["VISUAL", "EDITOR"]);
+    let editor_path = r"C:\Users\AYMANE~1\AppData\Local\Temp\fake-editor.cmd";
+    crate::env::set_var("VISUAL", editor_path);
+    crate::env::remove_var("EDITOR");
+
+    let editor = resolve_config_editor().expect("resolve visual editor");
+
+    assert_eq!(editor.program, editor_path);
+    assert!(editor.args.is_empty());
+}
+
+#[test]
 fn config_show_reports_valid_theme_as_accent_fallback() {
     let mut cfg = crate::config::Config::default();
     cfg.display.theme = Some("Dark".to_string());
