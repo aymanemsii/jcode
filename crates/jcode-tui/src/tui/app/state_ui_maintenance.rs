@@ -138,8 +138,8 @@ impl App {
         let action = ClientMaintenanceAction::Update;
         match status {
             UpdateStatus::Checking => {
-                // Background update checks run at startup for normal sessions. Keep the
-                // UI quiet unless there is an update to report or work to perform.
+                // Explicit update checks stay quiet until there is an update to
+                // report or work to perform.
             }
             UpdateStatus::Available { current, latest } => {
                 self.set_status_notice(format!("Update available: {} → {}", current, latest));
@@ -149,7 +149,7 @@ impl App {
                         action,
                         format!("{} → {} available", current, latest),
                         format!(
-                            "Current: `{}`\nLatest: `{}`\n\nRun `/update` to install, or wait while auto-update continues if enabled.",
+                            "Current: `{}`\nLatest: `{}`\n\nRun `/update` to install.",
                             current, latest
                         ),
                     ),

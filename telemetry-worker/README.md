@@ -1,6 +1,10 @@
 # jcode Telemetry Worker
 
-Cloudflare Worker that receives anonymous telemetry events from jcode.
+Note: Aymane's jcode fork disables client telemetry. The client no longer posts
+events to this worker; see `docs/NETWORK_PRIVACY.md` for the fork's network and
+privacy policy. This directory remains as historical telemetry infrastructure.
+
+Cloudflare Worker that historically received anonymous telemetry events from jcode.
 
 The headline number is **Total users**: distinct, non-CI `telemetry_id`s that
 ever installed jcode OR did meaningful work in it. Run it with:
@@ -177,4 +181,4 @@ wrangler d1 execute jcode-telemetry --command "SELECT AVG(first_assistant_respon
 - **D1 100-column cap**: production `events` has 96 columns and D1 refuses `ALTER TABLE ADD COLUMN` past 100 (`too many columns`). Migration 0005's per-turn/session-cadence columns never applied to production `events`; migration 0013 moved those fields into `turn_details`/`session_details`, and the worker writes them there. Do not add new columns to `events`; add them to the detail tables.
 - Raw events remain the source of truth within their retention windows. The `daily_active_users` table is an ingest-time rollup for cheap dashboard queries and is the durable record beyond those windows.
 - The worker uses `INSERT OR IGNORE` keyed by `event_id`; rollups and detail rows are updated only when the canonical raw event insert succeeds, so client retries do not inflate counts.
-- Telemetry still undercounts users who opt out (`JCODE_NO_TELEMETRY`, `DO_NOT_TRACK`, `~/.jcode/no_telemetry`) or whose network blocks telemetry, and may overcount one person using multiple machines.
+- Historical telemetry undercounted users who opted out (`JCODE_NO_TELEMETRY`, `DO_NOT_TRACK`, `~/.jcode/no_telemetry`) or whose network blocked telemetry, and may have overcounted one person using multiple machines. Aymane's fork now disables client telemetry instead of relying on opt-out controls.

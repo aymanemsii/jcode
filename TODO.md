@@ -766,3 +766,24 @@ Validation:
 
 * Documentation-only change.
 * Manual review will be run separately after this change.
+
+## Task 31 - Remove telemetry and audit network behavior
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Removed or disabled telemetry behavior for this fork.
+* Removed the user-facing telemetry notice/banner.
+* Ensured telemetry collection and sending are inactive by default.
+* Audited outbound network-capable paths and documented the fork's network/privacy policy.
+* Added `docs/NETWORK_PRIVACY.md` explaining that external requests should be limited to configured AI providers and explicit user-enabled tools/actions.
+* Did not change AI model/provider behavior, Queue behavior, server protocol behavior, Cargo files, broad app identity, or rename behavior.
+
+Validation:
+
+* Manual validation will be run separately after this change.

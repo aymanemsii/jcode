@@ -161,21 +161,7 @@ fn record_source_update_duration(duration: Duration) {
 }
 
 pub fn should_auto_update() -> bool {
-    if std::env::var("JCODE_NO_AUTO_UPDATE").is_ok() {
-        return false;
-    }
-
-    if !is_release_build() {
-        return false;
-    }
-
-    if let Ok(exe) = std::env::current_exe()
-        && is_inside_git_repo(&exe)
-    {
-        return false;
-    }
-
-    true
+    false
 }
 
 pub fn run_git_pull_ff_only(repo_dir: &Path, quiet: bool) -> Result<()> {

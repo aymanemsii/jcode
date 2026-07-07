@@ -20,8 +20,6 @@ use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-const TELEMETRY_ENDPOINT: &str = "https://jcode-telemetry.jeremyhuang55555.workers.dev/v1/event";
-const ASYNC_SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const BLOCKING_INSTALL_TIMEOUT: Duration = Duration::from_millis(1200);
 const BLOCKING_LIFECYCLE_TIMEOUT: Duration = Duration::from_millis(800);
 const TELEMETRY_SCHEMA_VERSION: u32 = 5;
@@ -260,24 +258,13 @@ enum DeliveryMode {
 }
 
 pub fn is_enabled() -> bool {
-    if std::env::var("JCODE_NO_TELEMETRY").is_ok() || std::env::var("DO_NOT_TRACK").is_ok() {
-        logging::debug("telemetry disabled by environment");
-        return false;
-    }
-    if let Ok(dir) = storage::jcode_dir()
-        && dir.join("no_telemetry").exists()
-    {
-        logging::debug("telemetry disabled by no_telemetry marker");
-        return false;
-    }
-    true
+    false
 }
 
-/// Marker file recording that the user opted in to sharing prompt and
-/// transcript content with telemetry. This is a separate, more sensitive
-/// consent than the anonymous usage metrics gated by [`is_enabled`], so it is
-/// off by default and only enabled when the user explicitly opts in (e.g. via
-/// the first-run onboarding flow).
+/// Legacy marker path for old telemetry content-sharing state.
+///
+/// Telemetry is disabled in this fork, so this path is not written by current
+/// code. Keep the helper only for low-risk API compatibility.
 fn share_content_marker_path() -> Option<std::path::PathBuf> {
     storage::jcode_dir()
         .ok()
@@ -285,49 +272,15 @@ fn share_content_marker_path() -> Option<std::path::PathBuf> {
 }
 
 /// Whether the user has opted in to sharing prompt/transcript content.
-/// Always false when base telemetry is disabled.
+/// Always false because telemetry is disabled in this fork.
 pub fn content_sharing_enabled() -> bool {
-    if !is_enabled() {
-        return false;
-    }
-    if std::env::var("JCODE_NO_TELEMETRY").is_ok() || std::env::var("DO_NOT_TRACK").is_ok() {
-        return false;
-    }
-    share_content_marker_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+    false
 }
 
-/// Persist the user's prompt/transcript content-sharing choice. Writing the
-/// marker opts in; removing it opts out. Returns whether the write succeeded.
-pub fn set_content_sharing_enabled(enabled: bool) -> bool {
-    let Some(path) = share_content_marker_path() else {
-        return false;
-    };
-    if enabled {
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        match std::fs::write(&path, b"1") {
-            Ok(()) => {
-                logging::debug("telemetry content sharing opted in");
-                true
-            }
-            Err(err) => {
-                logging::debug(&format!("failed to write content-sharing marker: {err}"));
-                false
-            }
-        }
-    } else {
-        match std::fs::remove_file(&path) {
-            Ok(()) => true,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
-            Err(err) => {
-                logging::debug(&format!("failed to remove content-sharing marker: {err}"));
-                false
-            }
-        }
-    }
+/// Legacy API retained as a no-op. Telemetry content sharing cannot be enabled
+/// in this fork.
+pub fn set_content_sharing_enabled(_enabled: bool) -> bool {
+    false
 }
 
 fn telemetry_envelope() -> (u32, String, bool, bool, bool) {
@@ -854,58 +807,12 @@ pub fn record_command_family(command: &str) {
     maybe_emit_session_start();
 }
 
-fn post_payload(payload: serde_json::Value, timeout: Duration) -> bool {
-    let client = match reqwest::blocking::Client::builder()
-        .user_agent(jcode_provider_core::JCODE_USER_AGENT)
-        .timeout(timeout)
-        .build()
-    {
-        Ok(client) => client,
-        Err(err) => {
-            logging::error(&format!("failed to build telemetry HTTP client: {err}"));
-            return false;
-        }
-    };
-    match client.post(TELEMETRY_ENDPOINT).json(&payload).send() {
-        Ok(response) => match response.error_for_status() {
-            Ok(_) => true,
-            Err(err) => {
-                logging::warn(&format!("telemetry endpoint rejected payload: {err}"));
-                false
-            }
-        },
-        Err(err) => {
-            logging::warn(&format!("telemetry payload send failed: {err}"));
-            false
-        }
-    }
+fn post_payload(_payload: serde_json::Value, _timeout: Duration) -> bool {
+    false
 }
 
-fn send_payload(payload: serde_json::Value, mode: DeliveryMode) -> bool {
-    match mode {
-        DeliveryMode::Background => {
-            logging::debug("queueing telemetry payload for background delivery");
-            std::thread::spawn(move || {
-                let _ = post_payload(payload, ASYNC_SEND_TIMEOUT);
-            });
-            true
-        }
-        DeliveryMode::Blocking(timeout) => {
-            logging::debug(&format!(
-                "sending telemetry payload with blocking timeout={}ms",
-                timeout.as_millis()
-            ));
-            if tokio::runtime::Handle::try_current().is_ok() {
-                let (tx, rx) = std::sync::mpsc::sync_channel(1);
-                std::thread::spawn(move || {
-                    let _ = tx.send(post_payload(payload, timeout));
-                });
-                rx.recv_timeout(timeout).unwrap_or(false)
-            } else {
-                post_payload(payload, timeout)
-            }
-        }
-    }
+fn send_payload(_payload: serde_json::Value, _mode: DeliveryMode) -> bool {
+    false
 }
 
 fn current_error_counts(state: &SessionTelemetry) -> ErrorCounts {
@@ -1823,13 +1730,6 @@ pub fn current_provider_model() -> Option<(String, String)> {
 }
 
 fn show_first_run_notice() {
-    eprintln!("\x1b[90m");
-    eprintln!("  jcode collects anonymous usage statistics (install count, version, OS,");
-    eprintln!("  session activity, tool counts, and crash/exit reasons). No code, filenames,");
-    eprintln!("  prompts, or personal data is sent.");
-    eprintln!("  To opt out: export JCODE_NO_TELEMETRY=1");
-    eprintln!("  Details: https://github.com/1jehuang/jcode/blob/master/TELEMETRY.md");
-    eprintln!("\x1b[0m");
 }
 
 #[cfg(test)]
