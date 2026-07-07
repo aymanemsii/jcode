@@ -728,3 +728,21 @@ Result:
 Validation:
 
 * Manual validation will be run separately after this change.
+
+## Task 29 - Document customization v2 workflow
+
+Task Type: Documentation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `docs/JCODE_CUSTOMIZATION.md` documenting customization v2 configuration, built-in themes, custom named themes, Theme Palette V2 fields, accent override precedence, startup splash personalization, config visibility, fallback behavior, and deferred work.
+* Kept the slice documentation-only.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
