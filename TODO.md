@@ -1,5 +1,25 @@
 # TODO
 
+## Task 30 - Add config edit command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `jcode config edit` for opening the global user config file in the user's preferred editor.
+* Created the config directory/file when missing.
+* Used `$VISUAL`, `$EDITOR`, and platform fallback behavior for editor selection.
+* Updated customization docs with the edit command.
+* Kept the command limited to global config editing without project-local customization, theme import/export, wallpaper, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 1 - Investigate why `jcode.exe` stays alive after `/quit`
 
 Task Type: Investigation

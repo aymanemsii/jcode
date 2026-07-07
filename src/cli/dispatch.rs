@@ -245,6 +245,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         },
         Some(Command::Config(subcmd)) => match subcmd {
             ConfigCommand::Show => commands::run_config_show_command()?,
+            ConfigCommand::Edit => commands::run_config_edit_command()?,
         },
         Some(Command::Memory(subcmd)) => {
             commands::run_memory_command(map_memory_subcommand(subcmd))?;

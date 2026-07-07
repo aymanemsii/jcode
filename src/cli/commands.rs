@@ -416,6 +416,90 @@ pub fn run_config_show_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_config_edit_command() -> Result<()> {
+    let config_path = ensure_global_config_file()?;
+    let editor = resolve_config_editor()?;
+    let mut command = ProcessCommand::new(&editor.program);
+    command.args(&editor.args).arg(&config_path);
+
+    let status = command.status().map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to launch editor `{}` for {}: {}",
+            editor.display(),
+            config_path.display(),
+            err
+        )
+    })?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "Editor `{}` exited unsuccessfully while editing {}{}",
+            editor.display(),
+            config_path.display(),
+            status
+                .code()
+                .map(|code| format!(" (exit code {code})"))
+                .unwrap_or_default()
+        );
+    }
+
+    Ok(())
+}
+
+fn ensure_global_config_file() -> Result<PathBuf> {
+    let config_path = crate::config::Config::path()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine jcode config path"))?;
+
+    if config_path.exists() {
+        return Ok(config_path);
+    }
+
+    crate::config::Config::create_default_config_file()
+}
+
+#[derive(Debug)]
+struct EditorCommand {
+    program: String,
+    args: Vec<String>,
+}
+
+impl EditorCommand {
+    fn display(&self) -> String {
+        self.program.clone()
+    }
+}
+
+fn resolve_config_editor() -> Result<EditorCommand> {
+    if let Some(editor) = non_empty(std::env::var("VISUAL").ok()) {
+        return Ok(editor_command(editor));
+    }
+    if let Some(editor) = non_empty(std::env::var("EDITOR").ok()) {
+        return Ok(editor_command(editor));
+    }
+
+    #[cfg(windows)]
+    {
+        Ok(EditorCommand {
+            program: "notepad".to_string(),
+            args: Vec::new(),
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        anyhow::bail!(
+            "No editor configured. Set VISUAL or EDITOR, then run `jcode config edit` again."
+        )
+    }
+}
+
+fn editor_command(program: String) -> EditorCommand {
+    EditorCommand {
+        program,
+        args: Vec::new(),
+    }
+}
+
 fn render_config_show(config: &crate::config::Config) -> String {
     let configured_theme = config.display.theme.as_deref();
     let custom_themes = custom_theme_palettes(config);

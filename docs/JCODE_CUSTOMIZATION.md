@@ -18,6 +18,18 @@ $JCODE_HOME/config.toml
 
 Customization is configured through TOML sections such as `[display]` and `[themes.<name>]`.
 
+## Config Editing
+
+Use:
+
+```text
+jcode config edit
+```
+
+The command opens the global user config file in your editor. It creates the config directory and `config.toml` if they do not already exist.
+
+Editor selection uses `$VISUAL` first, then `$EDITOR`. On Windows, jcode falls back to Notepad when neither variable is set. On macOS and Linux, set `VISUAL` or `EDITOR` before running the command.
+
 ## Built-In Themes
 
 The active theme is selected with `display.theme`:
@@ -164,6 +176,7 @@ The current customization system includes:
 * Theme Palette V2
 * Startup splash personalization
 * Config visibility
+* Config editing command
 
 ## Deferred
 
@@ -171,7 +184,6 @@ The following customization areas are intentionally deferred:
 
 * Wallpaper/image background
 * Project-local customization
-* Config editing command
 * Theme import/export
 * Full TUI recolor sweep
 * Broad layout redesign

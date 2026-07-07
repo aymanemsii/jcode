@@ -86,6 +86,15 @@ fn config_show_subcommand_parses() {
 }
 
 #[test]
+fn config_edit_subcommand_parses() {
+    let args = Args::try_parse_from(["jcode", "config", "edit"]).unwrap();
+    match args.command {
+        Some(Command::Config(ConfigCommand::Edit)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+}
+
+#[test]
 fn session_rename_subcommand_parses() {
     let args = Args::try_parse_from([
         "jcode",

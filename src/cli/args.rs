@@ -984,6 +984,8 @@ pub(crate) enum ProviderCommand {
 pub(crate) enum ConfigCommand {
     /// Show safe display/customization configuration
     Show,
+    /// Open the global user config file in an editor
+    Edit,
 }
 
 #[derive(Subcommand, Debug)]
