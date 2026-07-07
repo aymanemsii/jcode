@@ -708,3 +708,23 @@ Validation:
 
 * Manual validation will be run separately after this change.
 * Do not mark validation as passed unless it was actually run outside Codex.
+
+## Task 28 - Add startup splash personalization
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added optional startup splash title, subtitle, and footer customization through display config.
+* Preserved existing startup splash visibility behavior.
+* Added safe fallback behavior for missing or blank splash text fields.
+* Updated config visibility and default config examples.
+* Kept the slice limited to startup splash personalization without wallpaper, project-local customization, import/export, config editing, Queue changes, server protocol changes, or broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.

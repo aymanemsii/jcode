@@ -893,6 +893,12 @@ pub struct DisplayConfig {
     pub accent_color: Option<String>,
     /// Show a minimal startup splash in the empty TUI state when explicitly enabled.
     pub startup_splash: Option<bool>,
+    /// Optional startup splash title. Blank values fall back to the built-in title.
+    pub startup_splash_title: Option<String>,
+    /// Optional startup splash subtitle. Blank values fall back to the built-in subtitle.
+    pub startup_splash_subtitle: Option<String>,
+    /// Optional startup splash footer. Blank values fall back to the built-in footer.
+    pub startup_splash_footer: Option<String>,
     /// Native terminal scrollbar configuration for scrollable panes
     pub native_scrollbars: NativeScrollbarConfig,
 }
@@ -951,6 +957,9 @@ impl Default for DisplayConfig {
             theme: None,
             accent_color: None,
             startup_splash: None,
+            startup_splash_title: None,
+            startup_splash_subtitle: None,
+            startup_splash_footer: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }
     }

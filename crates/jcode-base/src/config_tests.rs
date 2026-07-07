@@ -714,16 +714,34 @@ fn custom_theme_config_fields_default_to_none() {
 #[test]
 fn test_display_startup_splash_defaults_to_none_and_deserializes() {
     assert_eq!(DisplayConfig::default().startup_splash, None);
+    assert_eq!(DisplayConfig::default().startup_splash_title, None);
+    assert_eq!(DisplayConfig::default().startup_splash_subtitle, None);
+    assert_eq!(DisplayConfig::default().startup_splash_footer, None);
 
     let cfg: Config = toml::from_str(
         r#"
         [display]
         startup_splash = true
+        startup_splash_title = "jcode // Aymane"
+        startup_splash_subtitle = "Build fast. Break nothing."
+        startup_splash_footer = "custom mode enabled"
         "#,
     )
     .expect("config should deserialize");
 
     assert_eq!(cfg.display.startup_splash, Some(true));
+    assert_eq!(
+        cfg.display.startup_splash_title.as_deref(),
+        Some("jcode // Aymane")
+    );
+    assert_eq!(
+        cfg.display.startup_splash_subtitle.as_deref(),
+        Some("Build fast. Break nothing.")
+    );
+    assert_eq!(
+        cfg.display.startup_splash_footer.as_deref(),
+        Some("custom mode enabled")
+    );
 }
 
 #[test]

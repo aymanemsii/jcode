@@ -262,6 +262,9 @@ fn config_show_reports_missing_accent_as_default() {
     assert!(output.contains("accent_color valid: not configured"));
     assert!(output.contains("active accent color: #BA8BFF"));
     assert!(output.contains("display.startup_splash: not configured"));
+    assert!(output.contains("display.startup_splash_title: not configured"));
+    assert!(output.contains("display.startup_splash_subtitle: not configured"));
+    assert!(output.contains("display.startup_splash_footer: not configured"));
     assert!(output.contains("built-in default accent color: #BA8BFF"));
     assert!(
         output.contains(
@@ -287,6 +290,22 @@ fn config_show_reports_valid_theme_as_accent_fallback() {
     assert!(output.contains("theme accent color: #7DD3FC"));
     assert!(output.contains("active accent color: #7DD3FC"));
     assert!(output.contains("display.startup_splash: true"));
+}
+
+#[test]
+fn config_show_reports_startup_splash_text_compactly() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.startup_splash = Some(true);
+    cfg.display.startup_splash_title = Some("jcode // Aymane".to_string());
+    cfg.display.startup_splash_subtitle = Some("  ".to_string());
+    cfg.display.startup_splash_footer = Some("custom mode enabled".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.startup_splash: true"));
+    assert!(output.contains("display.startup_splash_title: jcode // Aymane"));
+    assert!(output.contains("display.startup_splash_subtitle: (empty/fallback)"));
+    assert!(output.contains("display.startup_splash_footer: custom mode enabled"));
 }
 
 #[test]
@@ -318,6 +337,7 @@ fn config_show_reports_custom_theme_source_and_invalid_color_count() {
             queued: Some("#38BDF8".to_string()),
             asap: Some("#F97316".to_string()),
             pending: None,
+            ..Default::default()
         },
     );
 

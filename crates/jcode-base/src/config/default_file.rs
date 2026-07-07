@@ -135,6 +135,11 @@ theme = "default"
 
 # Show a minimal startup splash/background panel in the empty TUI state.
 # startup_splash = true
+# Optional startup splash text. Used only when startup_splash = true.
+# Blank values are ignored and fall back to the built-in splash text.
+# startup_splash_title = "jcode // Aymane"
+# startup_splash_subtitle = "Build fast. Break nothing."
+# startup_splash_footer = "custom mode enabled"
 
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"

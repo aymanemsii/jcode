@@ -3100,20 +3100,27 @@ fn draw_startup_splash(frame: &mut Frame, area: Rect) {
         height: panel_height,
     };
 
+    let display = &crate::config::config().display;
+    let title = startup_splash_text(display.startup_splash_title.as_deref(), "jcode");
+    let subtitle = startup_splash_text(
+        display.startup_splash_subtitle.as_deref(),
+        "Personalized workspace ready.",
+    );
+    let footer = startup_splash_text(
+        display.startup_splash_footer.as_deref(),
+        "Type a prompt or command to begin.",
+    );
     let content = vec![
         Line::from(Span::styled(
-            "jcode",
+            title,
             Style::default().fg(accent_color()).bold(),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            "Personalized workspace ready.",
+            subtitle,
             Style::default().fg(system_message_color()),
         )),
-        Line::from(Span::styled(
-            "Type a prompt or command to begin.",
-            Style::default().fg(dim_color()),
-        )),
+        Line::from(Span::styled(footer, Style::default().fg(dim_color()))),
     ];
     let paragraph = Paragraph::new(content).block(
         Block::default()
@@ -3121,6 +3128,13 @@ fn draw_startup_splash(frame: &mut Frame, area: Rect) {
             .border_style(Style::default().fg(dim_color())),
     );
     frame.render_widget(paragraph, panel);
+}
+
+fn startup_splash_text<'a>(configured: Option<&'a str>, fallback: &'a str) -> &'a str {
+    match configured.map(str::trim) {
+        Some(value) if !value.is_empty() => value,
+        _ => fallback,
+    }
 }
 
 pub(crate) fn split_native_scrollbar_area(area: Rect, enabled: bool) -> (Rect, Option<Rect>) {

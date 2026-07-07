@@ -490,6 +490,12 @@ fn render_config_show(config: &crate::config::Config) -> String {
         Some(false) => "false",
         None => "not configured",
     };
+    let startup_splash_title_label =
+        compact_optional_text_label(config.display.startup_splash_title.as_deref());
+    let startup_splash_subtitle_label =
+        compact_optional_text_label(config.display.startup_splash_subtitle.as_deref());
+    let startup_splash_footer_label =
+        compact_optional_text_label(config.display.startup_splash_footer.as_deref());
 
     format!(
         "Display customization config:\n\
@@ -503,10 +509,21 @@ display.accent_color: {configured_accent_label}\n\
 accent_color valid: {accent_valid_label}\n\
 active accent color: {active_accent}\n\
 display.startup_splash: {startup_splash_label}\n\
+display.startup_splash_title: {startup_splash_title_label}\n\
+display.startup_splash_subtitle: {startup_splash_subtitle_label}\n\
+display.startup_splash_footer: {startup_splash_footer_label}\n\
 built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
     )
+}
+
+fn compact_optional_text_label(value: Option<&str>) -> &str {
+    match value.map(str::trim) {
+        Some("") => "(empty/fallback)",
+        Some(value) => value,
+        None => "not configured",
+    }
 }
 
 fn custom_theme_palettes(
