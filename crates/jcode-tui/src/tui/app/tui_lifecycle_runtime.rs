@@ -88,10 +88,14 @@ impl App {
         let suffix = if is_canary { " [self-dev]" } else { "" };
         let server_name = self.remote_server_short_name.as_deref().unwrap_or("jcode");
         let icon = connection_type_icon(self.connection_type.as_deref()).unwrap_or(session_icon);
+        let app_title = crate::config::config()
+            .app
+            .terminal_title()
+            .unwrap_or("jcode");
         let server_label = if server_name.eq_ignore_ascii_case("jcode") {
-            "jcode".to_string()
+            app_title.to_string()
         } else {
-            format!("jcode/{}", server_name.to_lowercase())
+            format!("{}/{}", app_title, server_name.to_lowercase())
         };
         if server_name.eq_ignore_ascii_case("jcode") {
             crate::process_title::set_client_display_title(&session_name, is_canary);

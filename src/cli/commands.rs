@@ -501,6 +501,9 @@ fn editor_command(program: String) -> EditorCommand {
 }
 
 fn render_config_show(config: &crate::config::Config) -> String {
+    let app_name_label = compact_optional_text_label(config.app.name.as_deref());
+    let app_terminal_title_label =
+        compact_optional_text_label(config.app.terminal_title.as_deref());
     let configured_theme = config.display.theme.as_deref();
     let custom_themes = custom_theme_palettes(config);
     let resolved_theme = jcode_tui_style::theme::resolve_theme_palette(
@@ -583,6 +586,8 @@ fn render_config_show(config: &crate::config::Config) -> String {
 
     format!(
         "Display customization config:\n\
+app.name: {app_name_label}\n\
+app.terminal_title: {app_terminal_title_label}\n\
 display.theme: {configured_theme_label}\n\
 theme valid: {theme_valid_label}\n\
 active theme: {active_theme}\n\

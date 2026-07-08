@@ -1,5 +1,25 @@
 # TODO
 
+## Task 32 - Add app identity config
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added optional app identity config through `[app]` with `name` and `terminal_title` fields.
+* Added safe fallback behavior for missing or blank identity fields.
+* Used `app.name` as a fallback startup splash title when no explicit splash title is configured.
+* Updated config visibility and customization docs.
+* Kept the slice limited to configurable identity without hard-renaming the binary, config directory, environment variables, crates, packages, Queue behavior, server protocol behavior, wallpaper, top bar, or broad app branding changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 30 - Add config edit command
 
 Task Type: Implementation

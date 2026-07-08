@@ -16,6 +16,13 @@ impl Config {
 # Environment variables override these settings.
 # Run `/config` in jcode to see current settings.
 
+[app]
+# Optional app identity overrides. Blank values are ignored.
+# These do not rename the binary, config directory, environment variables,
+# crates, packages, or documentation globally.
+# name = "AymaneCode"
+# terminal_title = "AymaneCode"
+
 [keybindings]
 # Scroll keys (vim-style by default)
 # Supports: ctrl, alt, shift modifiers + any key

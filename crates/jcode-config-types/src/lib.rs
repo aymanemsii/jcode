@@ -447,6 +447,32 @@ pub struct AuthConfig {
     pub trusted_external_source_paths: Vec<String>,
 }
 
+/// Optional app identity overrides for this fork.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AppIdentityConfig {
+    /// Optional display name. Blank values are ignored by callers.
+    pub name: Option<String>,
+    /// Optional terminal/window title. Blank values are ignored by callers.
+    pub terminal_title: Option<String>,
+}
+
+impl AppIdentityConfig {
+    pub fn name(&self) -> Option<&str> {
+        self.name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn terminal_title(&self) -> Option<&str> {
+        self.terminal_title
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+}
+
 /// Agent-specific model defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

@@ -253,6 +253,8 @@ fn config_show_reports_missing_accent_as_default() {
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("app.name: not configured"));
+    assert!(output.contains("app.terminal_title: not configured"));
     assert!(output.contains("display.theme: not configured"));
     assert!(output.contains("theme valid: not configured"));
     assert!(output.contains("active theme: default"));
@@ -319,6 +321,18 @@ fn config_show_reports_startup_splash_text_compactly() {
     assert!(output.contains("display.startup_splash_title: jcode // Aymane"));
     assert!(output.contains("display.startup_splash_subtitle: (empty/fallback)"));
     assert!(output.contains("display.startup_splash_footer: custom mode enabled"));
+}
+
+#[test]
+fn config_show_reports_app_identity_compactly() {
+    let mut cfg = crate::config::Config::default();
+    cfg.app.name = Some("AymaneCode".to_string());
+    cfg.app.terminal_title = Some("  ".to_string());
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("app.name: AymaneCode"));
+    assert!(output.contains("app.terminal_title: (empty/fallback)"));
 }
 
 #[test]

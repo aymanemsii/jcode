@@ -4,14 +4,14 @@
 //! Environment variables override config file settings.
 
 pub use jcode_config_types::{
-    AgentsConfig, AmbientConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig, CompactionConfig,
-    CompactionMode, CrossProviderFailoverMode, CustomThemeConfig, DiagramDisplayMode,
-    DiagramPanePosition, DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig,
-    HooksConfig, KeybindingsConfig, LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode,
-    NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig, NamedProviderType,
-    NativeScrollbarConfig, NotificationsConfig, PowerConfig, ProviderConfig, ReasoningDisplayMode,
-    SafetyConfig, SessionPickerResumeAction, SwarmSpawnMode, TerminalConfig, UpdateChannel,
-    WebSearchConfig, WebSearchEngine,
+    AgentsConfig, AmbientConfig, AppIdentityConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig,
+    CompactionConfig, CompactionMode, CrossProviderFailoverMode, CustomThemeConfig,
+    DiagramDisplayMode, DiagramPanePosition, DiffDisplayMode, DisplayConfig, FeatureConfig,
+    GatewayConfig, HooksConfig, KeybindingsConfig, LaunchHotkeyEntry, LaunchHotkeysConfig,
+    MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
+    NamedProviderType, NativeScrollbarConfig, NotificationsConfig, PowerConfig, ProviderConfig,
+    ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction, SwarmSpawnMode,
+    TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -432,6 +432,9 @@ pub fn on_config_reloaded(listener: fn()) {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
+    /// Optional app identity/display-name overrides
+    pub app: AppIdentityConfig,
+
     /// Keybinding configuration
     pub keybindings: KeybindingsConfig,
 

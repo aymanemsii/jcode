@@ -745,6 +745,38 @@ fn test_display_startup_splash_defaults_to_none_and_deserializes() {
 }
 
 #[test]
+fn test_app_identity_defaults_to_none_and_deserializes() {
+    assert_eq!(Config::default().app.name, None);
+    assert_eq!(Config::default().app.terminal_title, None);
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [app]
+        name = "AymaneCode"
+        terminal_title = "AymaneCode"
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.app.name.as_deref(), Some("AymaneCode"));
+    assert_eq!(cfg.app.terminal_title.as_deref(), Some("AymaneCode"));
+    assert_eq!(cfg.app.name(), Some("AymaneCode"));
+    assert_eq!(cfg.app.terminal_title(), Some("AymaneCode"));
+
+    let blank_cfg: Config = toml::from_str(
+        r#"
+        [app]
+        name = "  "
+        terminal_title = ""
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(blank_cfg.app.name(), None);
+    assert_eq!(blank_cfg.app.terminal_title(), None);
+}
+
+#[test]
 fn test_session_picker_resume_action_defaults_to_current_terminal() {
     assert_eq!(
         Config::default().keybindings.session_picker_enter,

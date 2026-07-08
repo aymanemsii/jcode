@@ -3100,8 +3100,13 @@ fn draw_startup_splash(frame: &mut Frame, area: Rect) {
         height: panel_height,
     };
 
-    let display = &crate::config::config().display;
-    let title = startup_splash_text(display.startup_splash_title.as_deref(), "jcode");
+    let config = crate::config::config();
+    let display = &config.display;
+    let title = startup_splash_title_text(
+        display.startup_splash_title.as_deref(),
+        config.app.name(),
+        "jcode",
+    );
     let subtitle = startup_splash_text(
         display.startup_splash_subtitle.as_deref(),
         "Personalized workspace ready.",
@@ -3135,6 +3140,14 @@ fn startup_splash_text<'a>(configured: Option<&'a str>, fallback: &'a str) -> &'
         Some(value) if !value.is_empty() => value,
         _ => fallback,
     }
+}
+
+fn startup_splash_title_text<'a>(
+    configured: Option<&'a str>,
+    app_name: Option<&'a str>,
+    fallback: &'a str,
+) -> &'a str {
+    startup_splash_text(configured, app_name.unwrap_or(fallback))
 }
 
 pub(crate) fn split_native_scrollbar_area(area: Rect, enabled: bool) -> (Rect, Option<Rect>) {

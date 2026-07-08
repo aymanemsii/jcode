@@ -16,7 +16,23 @@ When `JCODE_HOME` is set, jcode reads the config from:
 $JCODE_HOME/config.toml
 ```
 
-Customization is configured through TOML sections such as `[display]` and `[themes.<name>]`.
+Customization is configured through TOML sections such as `[app]`, `[display]`, and `[themes.<name>]`.
+
+## App Identity
+
+Optional app identity settings live under `[app]`:
+
+```toml
+[app]
+name = "AymaneCode"
+terminal_title = "AymaneCode"
+```
+
+Both fields are optional. Missing, empty, or whitespace-only values fall back to the current jcode behavior.
+
+`app.name` is currently used as the default startup splash title only when `display.startup_splash_title` is missing or blank. An explicit non-blank `display.startup_splash_title` always wins.
+
+`app.terminal_title` customizes the active TUI terminal/window title where jcode already updates that title. It does not rename the binary, config directory, `JCODE_HOME`, crates, packages, or documentation globally.
 
 ## Config Editing
 
@@ -145,6 +161,8 @@ startup_splash_footer = "custom mode enabled"
 
 Blank title, subtitle, or footer values fall back safely to the built-in splash text. Missing fields also use built-in fallback text.
 
+If `startup_splash_title` is missing or blank and `[app] name` is set to a non-blank value, the splash title uses `app.name`. Otherwise it falls back to the built-in `jcode` title.
+
 The splash only appears on the empty startup screen when the onboarding welcome is inactive. It does not replace active conversation content.
 
 ## Config Visibility
@@ -162,6 +180,7 @@ The command reports safe display/customization visibility details, including:
 * Theme source
 * Custom invalid color count
 * Active accent color
+* App identity fields
 * Startup splash fields
 
 This command is read-only and intended for diagnosing which customization settings are active.
@@ -174,6 +193,7 @@ The current customization system includes:
 * Built-in themes
 * Custom named themes
 * Theme Palette V2
+* App identity config
 * Startup splash personalization
 * Config visibility
 * Config editing command
