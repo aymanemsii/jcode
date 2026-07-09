@@ -60,6 +60,36 @@ credentials, providers, auth, privacy/network settings, execution settings, and
 everything else not listed above. Project-local config is intentionally not a
 place for secrets or command execution behavior.
 
+### Workspace Commands
+
+Use:
+
+```text
+jcode workspace show
+jcode workspace init
+jcode workspace edit
+```
+
+`jcode workspace show` reports whether `./.jcode/workspace.toml` exists in the
+current directory, then shows the workspace path, `workspace.name`, and the
+supported project-local display fields when present.
+
+`jcode workspace init` creates `./.jcode/workspace.toml` with safe visual-only
+defaults and refuses to overwrite an existing file:
+
+```toml
+[workspace]
+name = "<current-directory-name>"
+
+[display]
+theme = "cursor"
+top_bar = true
+```
+
+`jcode workspace edit` creates the same local file if needed, then opens it in
+the editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS and
+Linux, set `VISUAL` or `EDITOR` first.
+
 ## App Identity
 
 Optional app identity settings live under `[app]`:
@@ -260,6 +290,7 @@ The current customization system includes:
 * Startup splash personalization
 * Optional top status bar
 * Project-local visual workspace customization
+* Workspace show/init/edit commands
 * Config visibility
 * Config editing command
 
@@ -268,7 +299,6 @@ The current customization system includes:
 The following customization areas are intentionally deferred:
 
 * Wallpaper/image background
-* Workspace init/edit commands
 * Parent-directory workspace discovery
 * Project-local app identity or terminal title
 * Theme import/export

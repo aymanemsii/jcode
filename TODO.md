@@ -1,5 +1,25 @@
 # TODO
 
+## Task 36 - Add workspace commands MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `jcode workspace show`, `jcode workspace init`, and `jcode workspace edit`.
+* Made workspace commands operate only on `./.jcode/workspace.toml` in the current directory.
+* Seeded new workspace configs with safe visual-only defaults.
+* Reused config editor behavior for workspace editing while preserving Windows path handling.
+* Kept project-local customization limited to visual/workspace identity fields without secrets, provider settings, auth settings, network settings, Queue changes, server protocol changes, or parent-directory discovery.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 35 - Add project-local customization MVP
 
 Task Type: Implementation

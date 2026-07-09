@@ -418,7 +418,7 @@ pub fn run_config_show_command() -> Result<()> {
 
 pub fn run_config_edit_command() -> Result<()> {
     let config_path = ensure_global_config_file()?;
-    let editor = resolve_config_editor()?;
+    let editor = resolve_config_editor("jcode config edit")?;
     let mut command = ProcessCommand::new(&editor.program);
     command.args(&editor.args).arg(&config_path);
 
@@ -457,6 +457,117 @@ fn ensure_global_config_file() -> Result<PathBuf> {
     crate::config::Config::create_default_config_file()
 }
 
+pub fn run_workspace_show_command() -> Result<()> {
+    print!("{}", render_workspace_show()?);
+    Ok(())
+}
+
+pub fn run_workspace_init_command() -> Result<()> {
+    let workspace_path = create_workspace_config_file(false)?;
+    println!("Created workspace config at {}", workspace_path.display());
+    Ok(())
+}
+
+pub fn run_workspace_edit_command() -> Result<()> {
+    let workspace_path = ensure_workspace_config_file()?;
+    let editor = resolve_config_editor("jcode workspace edit")?;
+    let mut command = ProcessCommand::new(&editor.program);
+    command.args(&editor.args).arg(&workspace_path);
+
+    let status = command.status().map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to launch editor `{}` for {}: {}",
+            editor.display(),
+            workspace_path.display(),
+            err
+        )
+    })?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "Editor `{}` exited unsuccessfully while editing {}{}",
+            editor.display(),
+            workspace_path.display(),
+            status
+                .code()
+                .map(|code| format!(" (exit code {code})"))
+                .unwrap_or_default()
+        );
+    }
+
+    Ok(())
+}
+
+fn ensure_workspace_config_file() -> Result<PathBuf> {
+    let workspace_path = workspace_config_path()?;
+    if workspace_path.exists() {
+        return Ok(workspace_path);
+    }
+    create_workspace_config_file(false)
+}
+
+fn create_workspace_config_file(overwrite: bool) -> Result<PathBuf> {
+    let workspace_path = workspace_config_path()?;
+    if workspace_path.exists() && !overwrite {
+        anyhow::bail!(
+            "Workspace config already exists at {}. Edit it with `jcode workspace edit`.",
+            workspace_path.display()
+        );
+    }
+
+    if let Some(parent) = workspace_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| {
+            anyhow::anyhow!(
+                "Failed to create workspace config directory {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+
+    let contents = workspace_default_config_contents();
+    std::fs::write(&workspace_path, contents).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to write workspace config file {}: {err}",
+            workspace_path.display()
+        )
+    })?;
+    Ok(workspace_path)
+}
+
+fn workspace_config_path() -> Result<PathBuf> {
+    crate::config::Config::workspace_path().ok_or_else(|| {
+        anyhow::anyhow!("Could not determine current-directory workspace config path")
+    })
+}
+
+fn workspace_default_config_contents() -> String {
+    let name = std::env::current_dir()
+        .ok()
+        .and_then(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "workspace".to_string());
+
+    format!(
+        "[workspace]\nname = \"{}\"\n\n[display]\ntheme = \"cursor\"\ntop_bar = true\n",
+        toml_basic_string_escape(&name)
+    )
+}
+
+fn toml_basic_string_escape(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
 #[derive(Debug)]
 struct EditorCommand {
     program: String,
@@ -469,7 +580,7 @@ impl EditorCommand {
     }
 }
 
-fn resolve_config_editor() -> Result<EditorCommand> {
+fn resolve_config_editor(retry_command: &'static str) -> Result<EditorCommand> {
     if let Some(editor) = non_empty(std::env::var("VISUAL").ok()) {
         return Ok(editor_command(editor));
     }
@@ -488,7 +599,7 @@ fn resolve_config_editor() -> Result<EditorCommand> {
     #[cfg(not(windows))]
     {
         anyhow::bail!(
-            "No editor configured. Set VISUAL or EDITOR, then run `jcode config edit` again."
+            "No editor configured. Set VISUAL or EDITOR, then run `{retry_command}` again."
         )
     }
 }
@@ -623,6 +734,85 @@ built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
     )
+}
+
+fn render_workspace_show() -> Result<String> {
+    let workspace_path = workspace_config_path()?;
+    if !workspace_path.exists() {
+        return Ok(format!(
+            "Workspace config: not found\n\
+path: {}\n\
+\n\
+Create one with `jcode workspace init`, or open a new local workspace file with `jcode workspace edit`.\n",
+            workspace_path.display()
+        ));
+    }
+
+    let content = std::fs::read_to_string(&workspace_path).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to read workspace config file {}: {err}",
+            workspace_path.display()
+        )
+    })?;
+    let value = toml::from_str::<toml::Value>(&content).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to parse workspace config file {}: {err}",
+            workspace_path.display()
+        )
+    })?;
+
+    Ok(render_workspace_show_from_value(&workspace_path, &value))
+}
+
+fn render_workspace_show_from_value(path: &Path, value: &toml::Value) -> String {
+    format!(
+        "Workspace config: found\n\
+path: {}\n\
+workspace.name: {}\n\
+\n\
+Supported project-local display fields:\n\
+display.theme: {}\n\
+display.accent_color: {}\n\
+display.startup_splash_title: {}\n\
+display.startup_splash_subtitle: {}\n\
+display.startup_splash_footer: {}\n\
+display.top_bar: {}\n",
+        path.display(),
+        toml_string_label(value, &["workspace", "name"]),
+        toml_string_label(value, &["display", "theme"]),
+        toml_string_label(value, &["display", "accent_color"]),
+        toml_string_label(value, &["display", "startup_splash_title"]),
+        toml_string_label(value, &["display", "startup_splash_subtitle"]),
+        toml_string_label(value, &["display", "startup_splash_footer"]),
+        toml_bool_label(value, &["display", "top_bar"]),
+    )
+}
+
+fn toml_string_label(value: &toml::Value, path: &[&str]) -> String {
+    match toml_value_at_path(value, path) {
+        Some(toml::Value::String(value)) if value.trim().is_empty() => {
+            "(empty/fallback)".to_string()
+        }
+        Some(toml::Value::String(value)) => value.clone(),
+        Some(_) => "(invalid type)".to_string(),
+        None => "not configured".to_string(),
+    }
+}
+
+fn toml_bool_label(value: &toml::Value, path: &[&str]) -> &'static str {
+    match toml_value_at_path(value, path) {
+        Some(toml::Value::Boolean(true)) => "true",
+        Some(toml::Value::Boolean(false)) => "false",
+        Some(_) => "(invalid type)",
+        None => "not configured",
+    }
+}
+
+fn toml_value_at_path<'a>(mut value: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {
+    for key in path {
+        value = value.as_table()?.get(*key)?;
+    }
+    Some(value)
 }
 
 fn compact_optional_text_label(value: Option<&str>) -> &str {

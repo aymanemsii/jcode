@@ -314,10 +314,61 @@ fn config_edit_preserves_visual_as_exact_program_path() {
     crate::env::set_var("VISUAL", editor_path);
     crate::env::remove_var("EDITOR");
 
-    let editor = resolve_config_editor().expect("resolve visual editor");
+    let editor = resolve_config_editor("jcode config edit").expect("resolve visual editor");
 
     assert_eq!(editor.program, editor_path);
     assert!(editor.args.is_empty());
+}
+
+#[test]
+fn workspace_default_config_is_visual_only() {
+    let output = workspace_default_config_contents();
+
+    assert!(output.contains("[workspace]"));
+    assert!(output.contains("name = "));
+    assert!(output.contains("[display]"));
+    assert!(output.contains("theme = \"cursor\""));
+    assert!(output.contains("top_bar = true"));
+    assert!(!output.contains("api_key"));
+    assert!(!output.contains("token"));
+    assert!(!output.contains("provider"));
+    assert!(!output.contains("auth"));
+    assert!(!output.contains("network"));
+    assert!(!output.contains("execution"));
+}
+
+#[test]
+fn workspace_show_reports_allowlisted_fields() {
+    let value = toml::from_str::<toml::Value>(
+        r##"
+[workspace]
+name = "jcode"
+
+[display]
+theme = "cursor"
+accent_color = "#0088FF"
+startup_splash_title = "jcode dev mode"
+startup_splash_subtitle = "local source build"
+startup_splash_footer = "workspace customization enabled"
+top_bar = true
+"##,
+    )
+    .expect("valid workspace toml");
+
+    let output =
+        render_workspace_show_from_value(std::path::Path::new(".jcode/workspace.toml"), &value);
+
+    assert!(output.contains("Workspace config: found"));
+    assert!(output.contains("path: .jcode/workspace.toml"));
+    assert!(output.contains("workspace.name: jcode"));
+    assert!(output.contains("display.theme: cursor"));
+    assert!(output.contains("display.accent_color: #0088FF"));
+    assert!(output.contains("display.startup_splash_title: jcode dev mode"));
+    assert!(output.contains("display.startup_splash_subtitle: local source build"));
+    assert!(output.contains("display.startup_splash_footer: workspace customization enabled"));
+    assert!(output.contains("display.top_bar: true"));
+    assert!(!output.contains("api_key"));
+    assert!(!output.contains("token"));
 }
 
 #[test]

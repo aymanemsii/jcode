@@ -167,9 +167,10 @@ workspace file was loaded.
 
 `jcode config show` should remain safe and avoid printing secrets. Since project-local customization should not include secrets, this should be straightforward for workspace fields.
 
-## Future Commands
+## Workspace Commands
 
-Future workspace-focused commands could make the feature easier to understand:
+Workspace-focused commands make the current-directory project-local file easier
+to inspect and manage:
 
 ```text
 jcode workspace show
@@ -177,11 +178,32 @@ jcode workspace init
 jcode workspace edit
 ```
 
-`jcode workspace show` should show the loaded workspace file, effective workspace values, and source layering.
+`jcode workspace show` reports whether `./.jcode/workspace.toml` exists in the
+current directory. When present, it prints the file path, `workspace.name`, and
+the supported project-local `display.*` fields. When missing, it prints the path
+that would be used and suggests `jcode workspace init` or `jcode workspace edit`.
 
-`jcode workspace init` should create `./.jcode/workspace.toml` with a minimal safe template.
+`jcode workspace init` creates `./.jcode/workspace.toml`, creating `./.jcode/`
+first when needed. It does not overwrite an existing file. The generated file is
+visual-only:
 
-`jcode workspace edit` should open the project-local workspace file in the user's editor. It should create only the local `.jcode` directory and `workspace.toml`, not modify global config.
+```toml
+[workspace]
+name = "<current-directory-name>"
+
+[display]
+theme = "cursor"
+top_bar = true
+```
+
+`jcode workspace edit` opens `./.jcode/workspace.toml` in the user's editor. If
+the file is missing, it creates the same safe default first. Editor selection
+matches `jcode config edit`: `VISUAL`, then `EDITOR`, then Notepad on Windows,
+with a helpful error on macOS/Linux if no editor is configured.
+
+All workspace commands are current-directory only. They do not search parent
+directories, modify global config, add secrets, or change provider, auth,
+network, execution, Queue, or server protocol behavior.
 
 ## Risks
 
@@ -205,8 +227,9 @@ The implemented MVP:
 * Merges workspace values over global config at the field level for the allowlisted fields.
 * Reuses existing validation and fallback behavior for themes, accent colors, splash text, and `top_bar`.
 * Updates `jcode config show` to report the loaded workspace path, workspace name, and project-local display overrides.
+* Adds `jcode workspace show`, `jcode workspace init`, and `jcode workspace edit`.
 * Rejects non-allowlisted project-local sections instead of treating them as config.
 
 The MVP does not include upward discovery, secrets, provider/model settings,
 auth settings, network/privacy settings, automatic execution, workspace
-commands, Queue integration, server protocol changes, or Cargo version changes.
+Queue integration, server protocol changes, or Cargo version changes.

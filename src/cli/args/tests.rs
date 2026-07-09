@@ -95,6 +95,27 @@ fn config_edit_subcommand_parses() {
 }
 
 #[test]
+fn workspace_subcommands_parse() {
+    let args = Args::try_parse_from(["jcode", "workspace", "show"]).unwrap();
+    match args.command {
+        Some(Command::Workspace(WorkspaceCommand::Show)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "workspace", "init"]).unwrap();
+    match args.command {
+        Some(Command::Workspace(WorkspaceCommand::Init)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "workspace", "edit"]).unwrap();
+    match args.command {
+        Some(Command::Workspace(WorkspaceCommand::Edit)) => {}
+        other => panic!("unexpected command: {:?}", other),
+    }
+}
+
+#[test]
 fn session_rename_subcommand_parses() {
     let args = Args::try_parse_from([
         "jcode",

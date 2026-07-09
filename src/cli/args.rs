@@ -270,6 +270,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Config(ConfigCommand),
 
+    /// Project-local workspace customization commands
+    #[command(subcommand)]
+    Workspace(WorkspaceCommand),
+
     /// Memory management commands
     #[command(subcommand)]
     Memory(MemoryCommand),
@@ -985,6 +989,16 @@ pub(crate) enum ConfigCommand {
     /// Show safe display/customization configuration
     Show,
     /// Open the global user config file in an editor
+    Edit,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum WorkspaceCommand {
+    /// Show current-directory project-local workspace customization
+    Show,
+    /// Create ./.jcode/workspace.toml with safe visual-only defaults
+    Init,
+    /// Open ./.jcode/workspace.toml in an editor, creating it first if missing
     Edit,
 }
 
