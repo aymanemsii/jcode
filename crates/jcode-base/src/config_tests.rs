@@ -745,6 +745,21 @@ fn test_display_startup_splash_defaults_to_none_and_deserializes() {
 }
 
 #[test]
+fn test_display_top_bar_defaults_to_none_and_deserializes() {
+    assert_eq!(DisplayConfig::default().top_bar, None);
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [display]
+        top_bar = true
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.display.top_bar, Some(true));
+}
+
+#[test]
 fn test_app_identity_defaults_to_none_and_deserializes() {
     assert_eq!(Config::default().app.name, None);
     assert_eq!(Config::default().app.terminal_title, None);

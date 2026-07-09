@@ -445,6 +445,8 @@ mod layout_support;
 mod status_support;
 #[path = "ui_theme.rs"]
 mod theme_support;
+#[path = "ui_top_bar.rs"]
+mod top_bar;
 use super::color_support::rgb;
 pub(crate) use layout_support::align_if_unset;
 use layout_support::{
@@ -2339,6 +2341,28 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     } else {
         None
     };
+
+    let (top_bar_area, area) = if top_bar::top_bar_enabled() && area.height > 1 {
+        (
+            Some(Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: 1,
+            }),
+            Rect {
+                x: area.x,
+                y: area.y + 1,
+                width: area.width,
+                height: area.height.saturating_sub(1),
+            },
+        )
+    } else {
+        (None, area)
+    };
+    if let Some(top_bar_area) = top_bar_area {
+        top_bar::draw_top_bar(frame, top_bar_area, app);
+    }
 
     // Check diagram display mode and get active diagrams early so we can
     // determine the horizontal split before computing input width etc.

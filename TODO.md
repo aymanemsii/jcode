@@ -807,3 +807,23 @@ Result:
 Validation:
 
 * Manual validation will be run separately after this change.
+
+## Task 33 - Add top status bar MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added an optional one-line top status bar controlled by display config.
+* Displayed safe MVP fields such as app name, session fallback, active theme, and repo/current directory when available.
+* Styled the bar through the existing Theme Palette V2 colors.
+* Preserved startup splash and onboarding behavior.
+* Deferred token usage, multi-session controls, Queue integration, project-local customization, wallpaper, and split-pane behavior.
+
+Validation:
+
+* Manual validation will be run separately after this change.

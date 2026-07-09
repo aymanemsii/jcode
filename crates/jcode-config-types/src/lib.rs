@@ -925,6 +925,8 @@ pub struct DisplayConfig {
     pub startup_splash_subtitle: Option<String>,
     /// Optional startup splash footer. Blank values fall back to the built-in footer.
     pub startup_splash_footer: Option<String>,
+    /// Show a one-line status bar at the top of the TUI when explicitly enabled.
+    pub top_bar: Option<bool>,
     /// Native terminal scrollbar configuration for scrollable panes
     pub native_scrollbars: NativeScrollbarConfig,
 }
@@ -986,6 +988,7 @@ impl Default for DisplayConfig {
             startup_splash_title: None,
             startup_splash_subtitle: None,
             startup_splash_footer: None,
+            top_bar: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }
     }

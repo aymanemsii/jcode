@@ -583,6 +583,7 @@ fn render_config_show(config: &crate::config::Config) -> String {
         compact_optional_text_label(config.display.startup_splash_subtitle.as_deref());
     let startup_splash_footer_label =
         compact_optional_text_label(config.display.startup_splash_footer.as_deref());
+    let top_bar_label = compact_optional_bool_label(config.display.top_bar);
 
     format!(
         "Display customization config:\n\
@@ -601,6 +602,7 @@ display.startup_splash: {startup_splash_label}\n\
 display.startup_splash_title: {startup_splash_title_label}\n\
 display.startup_splash_subtitle: {startup_splash_subtitle_label}\n\
 display.startup_splash_footer: {startup_splash_footer_label}\n\
+display.top_bar: {top_bar_label}\n\
 built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
@@ -611,6 +613,14 @@ fn compact_optional_text_label(value: Option<&str>) -> &str {
     match value.map(str::trim) {
         Some("") => "(empty/fallback)",
         Some(value) => value,
+        None => "not configured",
+    }
+}
+
+fn compact_optional_bool_label(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "true",
+        Some(false) => "false",
         None => "not configured",
     }
 }

@@ -148,6 +148,9 @@ theme = "default"
 # startup_splash_subtitle = "Build fast. Break nothing."
 # startup_splash_footer = "custom mode enabled"
 
+# Show a one-line top status bar with safe local session fields.
+# top_bar = true
+
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"
 

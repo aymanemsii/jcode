@@ -165,6 +165,25 @@ If `startup_splash_title` is missing or blank and `[app] name` is set to a non-b
 
 The splash only appears on the empty startup screen when the onboarding welcome is inactive. It does not replace active conversation content.
 
+## Top Status Bar
+
+The optional top status bar is configured under `[display]`:
+
+```toml
+[display]
+top_bar = true
+```
+
+When enabled, jcode renders one line at the top of the TUI:
+
+```text
+AymaneCode | session: main | theme: dracula | repo: jcode
+```
+
+The bar shows only safe MVP fields: app name, session name with a `main` fallback, active theme name with a `default` fallback, and the current repo/current-directory basename when available.
+
+Token usage, multi-session controls, Queue integration, project-local customization, wallpaper, and split-pane controls are deferred.
+
 ## Config Visibility
 
 Use:
@@ -182,6 +201,7 @@ The command reports safe display/customization visibility details, including:
 * Active accent color
 * App identity fields
 * Startup splash fields
+* Top status bar setting
 
 This command is read-only and intended for diagnosing which customization settings are active.
 
@@ -195,6 +215,7 @@ The current customization system includes:
 * Theme Palette V2
 * App identity config
 * Startup splash personalization
+* Optional top status bar
 * Config visibility
 * Config editing command
 
@@ -209,3 +230,4 @@ The following customization areas are intentionally deferred:
 * Broad layout redesign
 * Multi-session UI
 * Multi-agent UI
+* Token usage in the top status bar
