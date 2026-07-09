@@ -827,3 +827,23 @@ Result:
 Validation:
 
 * Manual validation will be run separately after this change.
+
+## Task 34 - Investigate project-local customization
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `docs/PROJECT_LOCAL_CUSTOMIZATION.md` documenting a safe plan for project-local workspace customization.
+* Proposed `./.jcode/workspace.toml` as the first project-local customization file.
+* Documented global vs project-local precedence, allowed visual fields, global-only fields, safety constraints, CLI visibility, future commands, and implementation risks.
+* Kept the slice documentation-only.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
