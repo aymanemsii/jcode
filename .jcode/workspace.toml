@@ -1,0 +1,10 @@
+[workspace]
+name = "jcode"
+
+[display]
+theme = "cursor"
+accent_color = "#0088FF"
+startup_splash_title = "jcode dev mode"
+startup_splash_subtitle = "local source build"
+startup_splash_footer = "workspace customization enabled"
+top_bar = true

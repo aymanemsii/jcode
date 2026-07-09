@@ -1,6 +1,35 @@
 use super::*;
 use crate::storage::jcode_dir;
+use serde::Deserialize;
 use std::path::PathBuf;
+
+const WORKSPACE_CONFIG_RELATIVE_PATH: &[&str] = &[".jcode", "workspace.toml"];
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct ProjectWorkspaceConfig {
+    workspace: WorkspaceIdentityConfig,
+    display: ProjectWorkspaceDisplayConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct ProjectWorkspaceDisplayConfig {
+    theme: Option<String>,
+    accent_color: Option<String>,
+    startup_splash_title: Option<String>,
+    startup_splash_subtitle: Option<String>,
+    startup_splash_footer: Option<String>,
+    top_bar: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct LoadedProjectWorkspaceConfig {
+    path: PathBuf,
+    config: ProjectWorkspaceConfig,
+}
+
+type ProjectWorkspaceLoadResult = anyhow::Result<Option<LoadedProjectWorkspaceConfig>>;
 
 impl Config {
     /// Get the config file path
@@ -8,9 +37,22 @@ impl Config {
         jcode_dir().ok().map(|d| d.join("config.toml"))
     }
 
+    /// Get the current-directory project-local workspace config path.
+    ///
+    /// MVP behavior intentionally checks only the process current working
+    /// directory. It does not search parent directories.
+    pub fn workspace_path() -> Option<PathBuf> {
+        let mut path = std::env::current_dir().ok()?;
+        for component in WORKSPACE_CONFIG_RELATIVE_PATH {
+            path.push(component);
+        }
+        Some(path)
+    }
+
     /// Load config from file, with environment variable overrides
     pub fn load() -> Self {
         let mut config = Self::load_from_file().unwrap_or_default();
+        config.apply_project_workspace_customization_lossy();
         config.apply_env_overrides();
         config
     }
@@ -21,6 +63,7 @@ impl Config {
     /// to distinguish a malformed config from an absent config.
     pub fn load_strict() -> anyhow::Result<Self> {
         let mut config = Self::load_from_file_strict()?.unwrap_or_default();
+        config.apply_project_workspace_customization_lossy();
         config.apply_env_overrides();
         Ok(config)
     }
@@ -52,6 +95,86 @@ impl Config {
         })?;
         config.display.apply_legacy_compat();
         Ok(Some(config))
+    }
+
+    fn load_project_workspace_config_strict() -> ProjectWorkspaceLoadResult {
+        let Some(path) = Self::workspace_path() else {
+            return Ok(None);
+        };
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let content = std::fs::read_to_string(&path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to read workspace config file {}: {}",
+                path.display(),
+                e
+            )
+        })?;
+        let config = toml::from_str::<ProjectWorkspaceConfig>(&content).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse workspace config file {}: {}",
+                path.display(),
+                e
+            )
+        })?;
+        Ok(Some(LoadedProjectWorkspaceConfig { path, config }))
+    }
+
+    fn apply_project_workspace_customization_lossy(&mut self) {
+        match Self::load_project_workspace_config_strict() {
+            Ok(Some(workspace)) => self.apply_project_workspace_customization(workspace),
+            Ok(None) => {}
+            Err(e) => {
+                if let Some(path) = Self::workspace_path().filter(|path| path.exists()) {
+                    self.workspace_config.path = Some(path);
+                }
+                crate::logging::error(&format!("Failed to load workspace config: {}", e));
+            }
+        }
+    }
+
+    fn apply_project_workspace_customization(&mut self, loaded: LoadedProjectWorkspaceConfig) {
+        self.workspace_config.path = Some(loaded.path);
+        self.workspace = loaded.config.workspace;
+
+        if let Some(value) = loaded.config.display.theme {
+            self.display.theme = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.theme".to_string());
+        }
+        if let Some(value) = loaded.config.display.accent_color {
+            self.display.accent_color = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.accent_color".to_string());
+        }
+        if let Some(value) = loaded.config.display.startup_splash_title {
+            self.display.startup_splash_title = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.startup_splash_title".to_string());
+        }
+        if let Some(value) = loaded.config.display.startup_splash_subtitle {
+            self.display.startup_splash_subtitle = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.startup_splash_subtitle".to_string());
+        }
+        if let Some(value) = loaded.config.display.startup_splash_footer {
+            self.display.startup_splash_footer = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.startup_splash_footer".to_string());
+        }
+        if let Some(value) = loaded.config.display.top_bar {
+            self.display.top_bar = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.top_bar".to_string());
+        }
     }
 
     /// Save config to file

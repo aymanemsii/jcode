@@ -1,5 +1,25 @@
 # TODO
 
+## Task 35 - Add project-local customization MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added visual-only project-local workspace customization through `./.jcode/workspace.toml`.
+* Supported workspace name and allowlisted display overrides for theme, accent color, startup splash text, and top bar.
+* Merged project-local visual fields over global config while keeping app identity, credentials, auth, provider, privacy, and network settings global-only.
+* Updated config visibility and customization docs.
+* Deferred workspace init/edit commands, parent-directory discovery, project-local app identity, Queue changes, server protocol changes, and broad config behavior changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 32 - Add app identity config
 
 Task Type: Implementation

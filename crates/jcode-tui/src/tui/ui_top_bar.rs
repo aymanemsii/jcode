@@ -29,7 +29,7 @@ pub(super) fn build_top_bar_fields(app: &dyn TuiState) -> TopBarFields {
     .name;
 
     TopBarFields {
-        app: sanitize_field(config.app.name(), "jcode"),
+        app: sanitize_field(config.workspace.name().or_else(|| config.app.name()), "jcode"),
         session: sanitize_field(app.session_display_name().as_deref(), TOP_BAR_SESSION_FALLBACK),
         theme: sanitize_field(Some(theme.as_str()), "default"),
         repo: repo_name(app.working_dir().as_deref()),

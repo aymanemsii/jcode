@@ -10,8 +10,8 @@ pub use jcode_config_types::{
     GatewayConfig, HooksConfig, KeybindingsConfig, LaunchHotkeyEntry, LaunchHotkeysConfig,
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
     NamedProviderType, NativeScrollbarConfig, NotificationsConfig, PowerConfig, ProviderConfig,
-    ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction, SwarmSpawnMode,
-    TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
+    ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction, SwarmSpawnMode, TerminalConfig,
+    UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -173,6 +173,9 @@ struct ConfigCacheFingerprint {
     path: Option<PathBuf>,
     modified: Option<SystemTime>,
     len: Option<u64>,
+    workspace_path: Option<PathBuf>,
+    workspace_modified: Option<SystemTime>,
+    workspace_len: Option<u64>,
     env: Vec<(String, String)>,
 }
 
@@ -180,12 +183,21 @@ impl ConfigCacheFingerprint {
     fn current() -> Self {
         let path = Config::path();
         let metadata = path.as_ref().and_then(|path| std::fs::metadata(path).ok());
+        let workspace_path = Config::workspace_path();
+        let workspace_metadata = workspace_path
+            .as_ref()
+            .and_then(|path| std::fs::metadata(path).ok());
         Self {
             path,
             modified: metadata
                 .as_ref()
                 .and_then(|metadata| metadata.modified().ok()),
             len: metadata.as_ref().map(std::fs::Metadata::len),
+            workspace_path,
+            workspace_modified: workspace_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.modified().ok()),
+            workspace_len: workspace_metadata.as_ref().map(std::fs::Metadata::len),
             env: config_env_fingerprint(),
         }
     }
@@ -319,6 +331,25 @@ fn describe_config_reload(
     if previous.len != next.len {
         parts.push(format!("len={:?}->{:?}", previous.len, next.len));
     }
+    if previous.workspace_path != next.workspace_path {
+        parts.push(format!(
+            "workspace_path={:?}->{:?}",
+            previous
+                .workspace_path
+                .as_ref()
+                .map(|p| p.display().to_string()),
+            next.workspace_path.as_ref().map(|p| p.display().to_string())
+        ));
+    }
+    if previous.workspace_modified != next.workspace_modified {
+        parts.push("workspace_modified_changed=true".to_string());
+    }
+    if previous.workspace_len != next.workspace_len {
+        parts.push(format!(
+            "workspace_len={:?}->{:?}",
+            previous.workspace_len, next.workspace_len
+        ));
+    }
     let env_changes = describe_env_changes(&previous.env, &next.env);
     if !env_changes.is_empty() {
         parts.push(format!("env=[{}]", env_changes.join(", ")));
@@ -432,6 +463,17 @@ pub fn on_config_reloaded(listener: fn()) {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
+    /// Effective project-local workspace identity.
+    ///
+    /// This is populated only from `./.jcode/workspace.toml` in the process
+    /// current directory. It is not loaded from or saved to global config.toml.
+    #[serde(skip)]
+    pub workspace: WorkspaceIdentityConfig,
+
+    /// Project-local workspace config visibility metadata.
+    #[serde(skip)]
+    pub workspace_config: WorkspaceConfigMetadata,
+
     /// Optional app identity/display-name overrides
     pub app: AppIdentityConfig,
 
@@ -514,6 +556,31 @@ pub struct Config {
 
     /// Global "launch a new jcode" hotkeys (macOS). Baked once by auto-import.
     pub launch_hotkeys: LaunchHotkeysConfig,
+}
+
+/// Project-local workspace identity.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkspaceIdentityConfig {
+    /// Optional project-local workspace display name. Blank values are ignored
+    /// by callers and do not replace global app identity.
+    pub name: Option<String>,
+}
+
+impl WorkspaceIdentityConfig {
+    pub fn name(&self) -> Option<&str> {
+        self.name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
+}
+
+/// Project-local workspace config source details for diagnostics.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkspaceConfigMetadata {
+    pub path: Option<PathBuf>,
+    pub display_overrides: Vec<String>,
 }
 
 /// Agent Client Protocol adapter configuration.

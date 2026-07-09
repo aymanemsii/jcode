@@ -1,6 +1,7 @@
 # Project-Local Customization
 
-This document investigates project-local workspace customization for jcode.
+This document describes the project-local workspace customization MVP in jcode
+and records the remaining deferred work.
 
 The current customization system is global. jcode reads user configuration from:
 
@@ -14,7 +15,8 @@ When `JCODE_HOME` is set, jcode reads:
 $JCODE_HOME/config.toml
 ```
 
-Project-local customization would let a repository carry a small, safe workspace identity layer without changing the user's global defaults.
+Project-local customization lets a repository carry a small, safe workspace
+identity layer without changing the user's global defaults.
 
 ## Why Project-Local Customization Is Useful
 
@@ -30,9 +32,10 @@ Useful outcomes include:
 
 The first version should stay visual and informational. It should not add project-local behavior that affects credentials, provider selection, network behavior, command execution, or auth.
 
-## Candidate File Path
+## File Path
 
-Recommended project-local path:
+jcode reads the project-local workspace file only from the current working
+directory:
 
 ```text
 ./.jcode/workspace.toml
@@ -49,9 +52,12 @@ $JCODE_HOME/config.toml
 
 Only reuse `./.jcode/config.toml` if there is a strong future reason to support a full layered config system and the loader can clearly separate project-safe keys from global-only keys.
 
-## Proposed Config Shape
+For the MVP, jcode does not search parent directories.
 
-Use a small TOML shape that mirrors existing customization concepts but avoids global identity and secret-bearing settings:
+## Config Shape
+
+The supported TOML shape mirrors existing visual customization concepts but
+avoids global identity and secret-bearing settings:
 
 ```toml
 [workspace]
@@ -83,9 +89,9 @@ top_bar = true
 
 `display.*` project-local values should use the same validation and fallback behavior as global display customization. Invalid colors, invalid theme names, or blank splash strings should fail closed to the next layer rather than preventing startup.
 
-## Proposed Precedence
+## Precedence
 
-Recommended precedence:
+Effective display customization is resolved at field level:
 
 1. Project-local workspace customization from `./.jcode/workspace.toml`
 2. Global user config from `~/.jcode/config.toml` or `$JCODE_HOME/config.toml`
@@ -95,9 +101,9 @@ This order lets a repository override only the small set of project-safe fields.
 
 Precedence should be field-level, not whole-file. For example, a project-local `display.theme` should not erase the global `display.startup_splash_footer` unless the workspace file explicitly sets that footer.
 
-## Project-Local Fields For The First Slice
+## Project-Local Fields
 
-Allow only visual and workspace identity fields first:
+The MVP allows only visual and workspace identity fields:
 
 * `workspace.name`
 * `display.theme`
@@ -139,12 +145,7 @@ The most important safety boundary is that a cloned repo should not be able to c
 
 ## Loading Strategy
 
-There are two plausible discovery strategies:
-
-* Current directory only: read `./.jcode/workspace.toml` from the process current working directory.
-* Upward discovery: start at the current working directory and walk upward until a `./.jcode/workspace.toml` file is found.
-
-Recommended MVP:
+jcode currently uses:
 
 ```text
 current directory only
@@ -152,20 +153,17 @@ current directory only
 
 Current-directory-only loading is safer and easier to explain. It avoids surprising users when jcode is launched from a subdirectory and silently loads a parent repository's settings. It also avoids extra filesystem traversal during startup.
 
-Upward discovery can be considered later, but it should be explicit, well-documented, and ideally paired with CLI visibility so users can see exactly which workspace file was loaded.
+Upward discovery remains deferred. If added later, it should be explicit,
+well-documented, and paired with CLI visibility so users can see exactly which
+workspace file was loaded.
 
 ## CLI Visibility
 
-Later, `jcode config show` should make layered values visible. It should report both global and project-local sources where applicable.
+`jcode config show` reports project-local customization compactly:
 
-Useful output concepts:
-
-* Global config path.
-* Whether a project-local workspace file was found.
-* Project-local workspace config path when loaded.
-* Effective value for each supported workspace/display field.
-* Source for each effective value: project, global, or default.
-* Ignored or invalid project-local values with safe summaries.
+* Project-local workspace config path when loaded, or `not found`.
+* `workspace.name` when present.
+* Which project-local display fields override global config.
 
 `jcode config show` should remain safe and avoid printing secrets. Since project-local customization should not include secrets, this should be straightforward for workspace fields.
 
@@ -198,15 +196,17 @@ Important risks:
 
 The MVP should reduce these risks by using a distinct filename, a small allowlist of fields, current-directory-only loading, and clear CLI visibility before broadening the feature.
 
-## Recommended First Implementation Slice
+## Implemented MVP
 
-Recommended first implementation after this investigation:
+The implemented MVP:
 
-1. Add a workspace config model that only contains `workspace.name` and the allowed `display.*` fields.
-2. Load `./.jcode/workspace.toml` from the current working directory only.
-3. Merge workspace values over global config at the field level for the allowlisted fields.
-4. Reuse existing validation and fallback behavior for themes, accent colors, splash text, and `top_bar`.
-5. Update `jcode config show` to report whether project-local config was loaded and show project/global/default sources for the allowlisted fields.
-6. Add documentation and focused unit tests for precedence, invalid values, and absent workspace files.
+* Adds a workspace config model containing `workspace.name` and the allowed `display.*` fields.
+* Loads only `./.jcode/workspace.toml` from the current working directory.
+* Merges workspace values over global config at the field level for the allowlisted fields.
+* Reuses existing validation and fallback behavior for themes, accent colors, splash text, and `top_bar`.
+* Updates `jcode config show` to report the loaded workspace path, workspace name, and project-local display overrides.
+* Rejects non-allowlisted project-local sections instead of treating them as config.
 
-Do not include upward discovery, secrets, provider/model settings, auth settings, network/privacy settings, automatic execution, workspace commands, Queue integration, server protocol changes, or Cargo version changes in the first implementation slice.
+The MVP does not include upward discovery, secrets, provider/model settings,
+auth settings, network/privacy settings, automatic execution, workspace
+commands, Queue integration, server protocol changes, or Cargo version changes.

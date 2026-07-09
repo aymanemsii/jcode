@@ -14,6 +14,10 @@ fn restore_env_var(key: &str, previous: Option<OsString>) {
     }
 }
 
+fn restore_current_dir(previous: &Path) {
+    std::env::set_current_dir(previous).expect("restore current dir");
+}
+
 #[test]
 fn test_openai_reasoning_effort_defaults_to_low() {
     assert_eq!(
@@ -757,6 +761,156 @@ fn test_display_top_bar_defaults_to_none_and_deserializes() {
     .expect("config should deserialize");
 
     assert_eq!(cfg.display.top_bar, Some(true));
+}
+
+#[test]
+fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let global_path = home.path().join("config.toml");
+    std::fs::write(
+        &global_path,
+        r##"
+        [app]
+        name = "GlobalApp"
+        terminal_title = "GlobalTitle"
+
+        [display]
+        theme = "dark"
+        accent_color = "#111111"
+        startup_splash_title = "global title"
+        startup_splash_footer = "global footer"
+        top_bar = false
+
+        [provider]
+        default_model = "global-model"
+        "##,
+    )
+    .expect("write global config");
+
+    let workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+    std::fs::write(
+        workspace_dir.join("workspace.toml"),
+        r##"
+        [workspace]
+        name = "LocalWorkspace"
+
+        [display]
+        theme = "cursor"
+        accent_color = "#0088FF"
+        startup_splash_subtitle = "local source build"
+        top_bar = true
+        "##,
+    )
+    .expect("write workspace config");
+
+    std::env::set_current_dir(project.path()).expect("set project cwd");
+    let cfg = Config::load();
+
+    assert_eq!(cfg.workspace.name(), Some("LocalWorkspace"));
+    assert_eq!(cfg.app.name.as_deref(), Some("GlobalApp"));
+    assert_eq!(cfg.app.terminal_title.as_deref(), Some("GlobalTitle"));
+    assert_eq!(cfg.provider.default_model.as_deref(), Some("global-model"));
+    assert_eq!(cfg.display.theme.as_deref(), Some("cursor"));
+    assert_eq!(cfg.display.accent_color.as_deref(), Some("#0088FF"));
+    assert_eq!(
+        cfg.display.startup_splash_title.as_deref(),
+        Some("global title")
+    );
+    assert_eq!(
+        cfg.display.startup_splash_subtitle.as_deref(),
+        Some("local source build")
+    );
+    assert_eq!(
+        cfg.display.startup_splash_footer.as_deref(),
+        Some("global footer")
+    );
+    assert_eq!(cfg.display.top_bar, Some(true));
+    assert_eq!(
+        cfg.workspace_config.display_overrides,
+        vec![
+            "display.theme".to_string(),
+            "display.accent_color".to_string(),
+            "display.startup_splash_subtitle".to_string(),
+            "display.top_bar".to_string()
+        ]
+    );
+
+    restore_current_dir(&prev_cwd);
+    restore_env_var("JCODE_HOME", prev_home);
+}
+
+#[test]
+fn project_workspace_config_is_current_directory_only() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+    std::fs::create_dir_all(&child).expect("create child dir");
+    std::fs::write(
+        workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"ParentWorkspace\"\n",
+    )
+    .expect("write parent workspace config");
+
+    std::env::set_current_dir(&child).expect("set child cwd");
+    let cfg = Config::load();
+
+    assert_eq!(cfg.workspace.name(), None);
+    assert_eq!(cfg.workspace_config.path, None);
+
+    restore_current_dir(&prev_cwd);
+    restore_env_var("JCODE_HOME", prev_home);
+}
+
+#[test]
+fn project_workspace_config_rejects_non_allowlisted_sections() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+    std::fs::write(
+        workspace_dir.join("workspace.toml"),
+        r#"
+        [workspace]
+        name = "UnsafeWorkspace"
+
+        [provider]
+        default_model = "repo-model"
+        "#,
+    )
+    .expect("write workspace config with disallowed section");
+
+    std::env::set_current_dir(project.path()).expect("set project cwd");
+    let cfg = Config::load();
+
+    assert_eq!(cfg.workspace.name(), None);
+    assert_eq!(cfg.provider.default_model, None);
+    assert_eq!(
+        cfg.workspace_config.path,
+        Some(project.path().join(".jcode").join("workspace.toml"))
+    );
+    assert!(cfg.workspace_config.display_overrides.is_empty());
+
+    restore_current_dir(&prev_cwd);
+    restore_env_var("JCODE_HOME", prev_home);
 }
 
 #[test]

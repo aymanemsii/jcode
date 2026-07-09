@@ -253,6 +253,9 @@ fn config_show_reports_missing_accent_as_default() {
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("workspace config: not found"));
+    assert!(output.contains("workspace.name: not configured"));
+    assert!(output.contains("project-local display overrides: none"));
     assert!(output.contains("app.name: not configured"));
     assert!(output.contains("app.terminal_title: not configured"));
     assert!(output.contains("display.theme: not configured"));
@@ -276,6 +279,32 @@ fn config_show_reports_missing_accent_as_default() {
     );
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
+}
+
+#[test]
+fn config_show_reports_project_local_workspace_customization() {
+    let mut cfg = crate::config::Config::default();
+    cfg.workspace.name = Some("jcode".to_string());
+    cfg.workspace_config.path = Some(std::path::PathBuf::from(".jcode/workspace.toml"));
+    cfg.workspace_config.display_overrides = vec![
+        "display.theme".to_string(),
+        "display.accent_color".to_string(),
+        "display.top_bar".to_string(),
+    ];
+    cfg.display.theme = Some("cursor".to_string());
+    cfg.display.accent_color = Some("#0088FF".to_string());
+    cfg.display.top_bar = Some(true);
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("workspace config: .jcode/workspace.toml"));
+    assert!(output.contains("workspace.name: jcode"));
+    assert!(output.contains(
+        "project-local display overrides: display.theme, display.accent_color, display.top_bar"
+    ));
+    assert!(output.contains("display.theme: cursor"));
+    assert!(output.contains("display.accent_color: #0088FF"));
+    assert!(output.contains("display.top_bar: true"));
 }
 
 #[test]

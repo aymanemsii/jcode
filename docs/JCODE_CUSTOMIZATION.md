@@ -18,6 +18,48 @@ $JCODE_HOME/config.toml
 
 Customization is configured through TOML sections such as `[app]`, `[display]`, and `[themes.<name>]`.
 
+## Project-Local Customization
+
+jcode also supports a visual-only project-local workspace file in the current
+working directory:
+
+```text
+./.jcode/workspace.toml
+```
+
+Supported MVP shape:
+
+```toml
+[workspace]
+name = "jcode"
+
+[display]
+theme = "cursor"
+accent_color = "#0088FF"
+startup_splash_title = "jcode dev mode"
+startup_splash_subtitle = "local source build"
+startup_splash_footer = "workspace customization enabled"
+top_bar = true
+```
+
+Only these project-local fields are supported:
+
+* `workspace.name`
+* `display.theme`
+* `display.accent_color`
+* `display.startup_splash_title`
+* `display.startup_splash_subtitle`
+* `display.startup_splash_footer`
+* `display.top_bar`
+
+Project-local values override global config at field level for those fields
+only. jcode does not search parent directories for this MVP.
+
+Global config remains the source for `app.name`, `app.terminal_title`,
+credentials, providers, auth, privacy/network settings, execution settings, and
+everything else not listed above. Project-local config is intentionally not a
+place for secrets or command execution behavior.
+
 ## App Identity
 
 Optional app identity settings live under `[app]`:
@@ -202,6 +244,7 @@ The command reports safe display/customization visibility details, including:
 * App identity fields
 * Startup splash fields
 * Top status bar setting
+* Project-local workspace config path, workspace name, and project-local display overrides
 
 This command is read-only and intended for diagnosing which customization settings are active.
 
@@ -216,6 +259,7 @@ The current customization system includes:
 * App identity config
 * Startup splash personalization
 * Optional top status bar
+* Project-local visual workspace customization
 * Config visibility
 * Config editing command
 
@@ -224,7 +268,9 @@ The current customization system includes:
 The following customization areas are intentionally deferred:
 
 * Wallpaper/image background
-* Project-local customization
+* Workspace init/edit commands
+* Parent-directory workspace discovery
+* Project-local app identity or terminal title
 * Theme import/export
 * Full TUI recolor sweep
 * Broad layout redesign

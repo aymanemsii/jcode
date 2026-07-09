@@ -501,6 +501,19 @@ fn editor_command(program: String) -> EditorCommand {
 }
 
 fn render_config_show(config: &crate::config::Config) -> String {
+    let workspace_config_label = config
+        .workspace_config
+        .path
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "not found".to_string());
+    let workspace_name_label = compact_optional_text_label(config.workspace.name.as_deref());
+    let workspace_display_overrides_label = if config.workspace_config.display_overrides.is_empty()
+    {
+        "none".to_string()
+    } else {
+        config.workspace_config.display_overrides.join(", ")
+    };
     let app_name_label = compact_optional_text_label(config.app.name.as_deref());
     let app_terminal_title_label =
         compact_optional_text_label(config.app.terminal_title.as_deref());
@@ -587,6 +600,9 @@ fn render_config_show(config: &crate::config::Config) -> String {
 
     format!(
         "Display customization config:\n\
+workspace config: {workspace_config_label}\n\
+workspace.name: {workspace_name_label}\n\
+project-local display overrides: {workspace_display_overrides_label}\n\
 app.name: {app_name_label}\n\
 app.terminal_title: {app_terminal_title_label}\n\
 display.theme: {configured_theme_label}\n\
