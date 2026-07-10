@@ -751,16 +751,22 @@ fn test_display_startup_splash_defaults_to_none_and_deserializes() {
 #[test]
 fn test_display_top_bar_defaults_to_none_and_deserializes() {
     assert_eq!(DisplayConfig::default().top_bar, None);
+    assert_eq!(DisplayConfig::default().top_bar_items, None);
 
     let cfg: Config = toml::from_str(
         r#"
         [display]
         top_bar = true
+        top_bar_items = ["theme", "repo"]
         "#,
     )
     .expect("config should deserialize");
 
     assert_eq!(cfg.display.top_bar, Some(true));
+    assert_eq!(
+        cfg.display.top_bar_items.as_deref(),
+        Some(["theme".to_string(), "repo".to_string()].as_slice())
+    );
 }
 
 #[test]
@@ -786,6 +792,7 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
         startup_splash_title = "global title"
         startup_splash_footer = "global footer"
         top_bar = false
+        top_bar_items = ["app", "session"]
 
         [provider]
         default_model = "global-model"
@@ -806,6 +813,7 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
         accent_color = "#0088FF"
         startup_splash_subtitle = "local source build"
         top_bar = true
+        top_bar_items = ["theme", "repo"]
         "##,
     )
     .expect("write workspace config");
@@ -833,12 +841,17 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
     );
     assert_eq!(cfg.display.top_bar, Some(true));
     assert_eq!(
+        cfg.display.top_bar_items.as_deref(),
+        Some(["theme".to_string(), "repo".to_string()].as_slice())
+    );
+    assert_eq!(
         cfg.workspace_config.display_overrides,
         vec![
             "display.theme".to_string(),
             "display.accent_color".to_string(),
             "display.startup_splash_subtitle".to_string(),
-            "display.top_bar".to_string()
+            "display.top_bar".to_string(),
+            "display.top_bar_items".to_string()
         ]
     );
 

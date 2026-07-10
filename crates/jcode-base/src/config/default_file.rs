@@ -150,6 +150,9 @@ theme = "default"
 
 # Show a one-line top status bar with safe local session fields.
 # top_bar = true
+# Optional ordered top bar items. Missing uses the default order.
+# Supported: "app", "session", "theme", "repo". An empty list renders no items.
+# top_bar_items = ["app", "session", "theme", "repo"]
 
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"

@@ -271,6 +271,8 @@ fn config_show_reports_missing_accent_as_default() {
     assert!(output.contains("display.startup_splash_subtitle: not configured"));
     assert!(output.contains("display.startup_splash_footer: not configured"));
     assert!(output.contains("display.top_bar: not configured"));
+    assert!(output.contains("display.top_bar_items: not configured"));
+    assert!(output.contains("display.top_bar_items_ignored: none"));
     assert!(output.contains("built-in default accent color: #BA8BFF"));
     assert!(
         output.contains(
@@ -290,21 +292,29 @@ fn config_show_reports_project_local_workspace_customization() {
         "display.theme".to_string(),
         "display.accent_color".to_string(),
         "display.top_bar".to_string(),
+        "display.top_bar_items".to_string(),
     ];
     cfg.display.theme = Some("cursor".to_string());
     cfg.display.accent_color = Some("#0088FF".to_string());
     cfg.display.top_bar = Some(true);
+    cfg.display.top_bar_items = Some(vec![
+        "app".to_string(),
+        "session".to_string(),
+        "theme".to_string(),
+        "repo".to_string(),
+    ]);
 
     let output = render_config_show(&cfg);
 
     assert!(output.contains("workspace config: .jcode/workspace.toml"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains(
-        "project-local display overrides: display.theme, display.accent_color, display.top_bar"
+        "project-local display overrides: display.theme, display.accent_color, display.top_bar, display.top_bar_items"
     ));
     assert!(output.contains("display.theme: cursor"));
     assert!(output.contains("display.accent_color: #0088FF"));
     assert!(output.contains("display.top_bar: true"));
+    assert!(output.contains("display.top_bar_items: app, session, theme, repo"));
 }
 
 #[test]
@@ -329,6 +339,7 @@ fn workspace_default_config_is_visual_only() {
     assert!(output.contains("[display]"));
     assert!(output.contains("theme = \"cursor\""));
     assert!(output.contains("top_bar = true"));
+    assert!(output.contains("top_bar_items = [\"app\", \"session\", \"theme\", \"repo\"]"));
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
     assert!(!output.contains("provider"));
@@ -351,6 +362,7 @@ startup_splash_title = "jcode dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
 top_bar = true
+top_bar_items = ["app", "session", "theme", "repo"]
 "##,
     )
     .expect("valid workspace toml");
@@ -367,6 +379,7 @@ top_bar = true
     assert!(output.contains("display.startup_splash_subtitle: local source build"));
     assert!(output.contains("display.startup_splash_footer: workspace customization enabled"));
     assert!(output.contains("display.top_bar: true"));
+    assert!(output.contains("display.top_bar_items: app, session, theme, repo"));
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
 }
@@ -387,6 +400,7 @@ fn config_show_reports_valid_theme_as_accent_fallback() {
     assert!(output.contains("active accent color: #7DD3FC"));
     assert!(output.contains("display.startup_splash: true"));
     assert!(output.contains("display.top_bar: not configured"));
+    assert!(output.contains("display.top_bar_items: not configured"));
 }
 
 #[test]
@@ -410,12 +424,21 @@ fn config_show_reports_top_bar_compactly() {
     let mut cfg = crate::config::Config::default();
 
     cfg.display.top_bar = Some(true);
+    cfg.display.top_bar_items = Some(vec![
+        "theme".to_string(),
+        "bogus".to_string(),
+        "repo".to_string(),
+    ]);
     let output = render_config_show(&cfg);
     assert!(output.contains("display.top_bar: true"));
+    assert!(output.contains("display.top_bar_items: theme, repo"));
+    assert!(output.contains("display.top_bar_items_ignored: bogus"));
 
     cfg.display.top_bar = Some(false);
+    cfg.display.top_bar_items = Some(Vec::new());
     let output = render_config_show(&cfg);
     assert!(output.contains("display.top_bar: false"));
+    assert!(output.contains("display.top_bar_items: (empty; renders no items)"));
 }
 
 #[test]

@@ -6,6 +6,7 @@ use ratatui::widgets::Paragraph;
 use std::path::Path;
 
 pub(super) const TOP_BAR_SESSION_FALLBACK: &str = "main";
+const DEFAULT_TOP_BAR_ITEMS: &[&str] = &["app", "session", "theme", "repo"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct TopBarFields {
@@ -37,10 +38,33 @@ pub(super) fn build_top_bar_fields(app: &dyn TuiState) -> TopBarFields {
 }
 
 pub(super) fn build_top_bar_text(fields: &TopBarFields) -> String {
-    format!(
-        "{} | session: {} | theme: {} | repo: {}",
-        fields.app, fields.session, fields.theme, fields.repo
-    )
+    let config = crate::config::config();
+    build_top_bar_text_for_items(fields, config.display.top_bar_items.as_deref())
+}
+
+fn build_top_bar_text_for_items(
+    fields: &TopBarFields,
+    configured_items: Option<&[String]>,
+) -> String {
+    let items = configured_items
+        .map(|items| items.iter().map(String::as_str).collect::<Vec<_>>())
+        .unwrap_or_else(|| DEFAULT_TOP_BAR_ITEMS.to_vec());
+
+    items
+        .into_iter()
+        .filter_map(|item| top_bar_item_text(fields, item))
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+fn top_bar_item_text(fields: &TopBarFields, item: &str) -> Option<String> {
+    match item.trim() {
+        "app" => Some(fields.app.clone()),
+        "session" => Some(format!("session: {}", fields.session)),
+        "theme" => Some(format!("theme: {}", fields.theme)),
+        "repo" => Some(format!("repo: {}", fields.repo)),
+        _ => None,
+    }
 }
 
 pub(super) fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, app: &dyn TuiState) {
@@ -60,10 +84,10 @@ pub(super) fn draw_top_bar(frame: &mut Frame<'_>, area: Rect, app: &dyn TuiState
 }
 
 fn styled_top_bar_spans(text: &str, fields: &TopBarFields) -> Vec<Span<'static>> {
-    if text.len() < fields.app.len() {
+    if !text.starts_with(&fields.app) {
         return vec![Span::styled(
             text.to_string(),
-            Style::default().fg(accent_color()).bg(panel_color()),
+            Style::default().fg(muted_color()).bg(panel_color()),
         )];
     }
 
@@ -127,9 +151,41 @@ mod tests {
         };
 
         assert_eq!(
-            build_top_bar_text(&fields),
+            build_top_bar_text_for_items(&fields, None),
             "AymaneCode | session: main | theme: dracula | repo: jcode"
         );
+    }
+
+    #[test]
+    fn build_top_bar_text_uses_configured_items_and_ignores_unknowns() {
+        let fields = TopBarFields {
+            app: "AymaneCode".to_string(),
+            session: "main".to_string(),
+            theme: "dracula".to_string(),
+            repo: "jcode".to_string(),
+        };
+        let items = vec![
+            "theme".to_string(),
+            "unknown".to_string(),
+            "repo".to_string(),
+        ];
+
+        assert_eq!(
+            build_top_bar_text_for_items(&fields, Some(&items)),
+            "theme: dracula | repo: jcode"
+        );
+    }
+
+    #[test]
+    fn build_top_bar_text_keeps_empty_config_empty() {
+        let fields = TopBarFields {
+            app: "AymaneCode".to_string(),
+            session: "main".to_string(),
+            theme: "dracula".to_string(),
+            repo: "jcode".to_string(),
+        };
+
+        assert_eq!(build_top_bar_text_for_items(&fields, Some(&[])), "");
     }
 
     #[test]

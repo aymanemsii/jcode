@@ -40,6 +40,7 @@ startup_splash_title = "jcode dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
 top_bar = true
+top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
 Only these project-local fields are supported:
@@ -51,6 +52,7 @@ Only these project-local fields are supported:
 * `display.startup_splash_subtitle`
 * `display.startup_splash_footer`
 * `display.top_bar`
+* `display.top_bar_items`
 
 Project-local values override global config at field level for those fields
 only. jcode does not search parent directories for this MVP.
@@ -84,6 +86,7 @@ name = "<current-directory-name>"
 [display]
 theme = "cursor"
 top_bar = true
+top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
 `jcode workspace edit` creates the same local file if needed, then opens it in
@@ -278,6 +281,7 @@ The optional top status bar is configured under `[display]`:
 ```toml
 [display]
 top_bar = true
+top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
 When enabled, jcode renders one line at the top of the TUI:
@@ -288,7 +292,25 @@ AymaneCode | session: main | theme: dracula | repo: jcode
 
 The bar shows only safe MVP fields: app name, session name with a `main` fallback, active theme name with a `default` fallback, and the current repo/current-directory basename when available.
 
-Token usage, multi-session controls, Queue integration, project-local customization, wallpaper, and split-pane controls are deferred.
+`display.top_bar_items` is optional. When it is missing, jcode preserves the
+default order: `app`, `session`, `theme`, `repo`.
+
+Supported MVP item names are:
+
+* `app`
+* `session`
+* `theme`
+* `repo`
+
+An explicitly empty list renders no items while `display.top_bar = true` still
+reserves the top bar line. Unknown item names are ignored safely and reported by
+`jcode config show` as ignored items.
+
+Project-local `./.jcode/workspace.toml` can override `display.top_bar_items`
+because it is visual-only.
+
+Token usage, multi-session controls, Queue integration beyond the current
+session label, wallpaper, and split-pane controls are deferred.
 
 ## Config Visibility
 
@@ -308,6 +330,7 @@ The command reports safe display/customization visibility details, including:
 * App identity fields
 * Startup splash fields
 * Top status bar setting
+* Top status bar item order and ignored item names
 * Project-local workspace config path, workspace name, and project-local display overrides
 
 This command is read-only and intended for diagnosing which customization settings are active.
@@ -323,6 +346,7 @@ The current customization system includes:
 * App identity config
 * Startup splash personalization
 * Optional top status bar
+* Configurable top status bar items
 * Project-local visual workspace customization
 * Workspace show/init/edit commands
 * Config visibility

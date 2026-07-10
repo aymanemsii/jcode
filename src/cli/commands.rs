@@ -583,7 +583,7 @@ fn workspace_default_config_contents() -> String {
         .unwrap_or_else(|| "workspace".to_string());
 
     format!(
-        "[workspace]\nname = \"{}\"\n\n[display]\ntheme = \"cursor\"\ntop_bar = true\n",
+        "[workspace]\nname = \"{}\"\n\n[display]\ntheme = \"cursor\"\ntop_bar = true\ntop_bar_items = [\"app\", \"session\", \"theme\", \"repo\"]\n",
         toml_basic_string_escape(&name)
     )
 }
@@ -743,6 +743,9 @@ fn render_config_show(config: &crate::config::Config) -> String {
     let startup_splash_footer_label =
         compact_optional_text_label(config.display.startup_splash_footer.as_deref());
     let top_bar_label = compact_optional_bool_label(config.display.top_bar);
+    let top_bar_items_label = compact_top_bar_items_label(config.display.top_bar_items.as_deref());
+    let top_bar_items_ignored_label =
+        compact_top_bar_items_ignored_label(config.display.top_bar_items.as_deref());
 
     format!(
         "Display customization config:\n\
@@ -765,6 +768,8 @@ display.startup_splash_title: {startup_splash_title_label}\n\
 display.startup_splash_subtitle: {startup_splash_subtitle_label}\n\
 display.startup_splash_footer: {startup_splash_footer_label}\n\
 display.top_bar: {top_bar_label}\n\
+display.top_bar_items: {top_bar_items_label}\n\
+display.top_bar_items_ignored: {top_bar_items_ignored_label}\n\
 built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
@@ -811,7 +816,8 @@ display.accent_color: {}\n\
 display.startup_splash_title: {}\n\
 display.startup_splash_subtitle: {}\n\
 display.startup_splash_footer: {}\n\
-display.top_bar: {}\n",
+display.top_bar: {}\n\
+display.top_bar_items: {}\n",
         path.display(),
         toml_string_label(value, &["workspace", "name"]),
         toml_string_label(value, &["display", "theme"]),
@@ -820,6 +826,7 @@ display.top_bar: {}\n",
         toml_string_label(value, &["display", "startup_splash_subtitle"]),
         toml_string_label(value, &["display", "startup_splash_footer"]),
         toml_bool_label(value, &["display", "top_bar"]),
+        toml_string_array_label(value, &["display", "top_bar_items"]),
     )
 }
 
@@ -1058,6 +1065,27 @@ fn toml_bool_label(value: &toml::Value, path: &[&str]) -> &'static str {
     }
 }
 
+fn toml_string_array_label(value: &toml::Value, path: &[&str]) -> String {
+    match toml_value_at_path(value, path) {
+        Some(toml::Value::Array(values)) => {
+            let strings = values
+                .iter()
+                .filter_map(toml::Value::as_str)
+                .map(str::trim)
+                .collect::<Vec<_>>();
+            if strings.len() != values.len() {
+                "(invalid type)".to_string()
+            } else if strings.is_empty() {
+                "(empty; renders no items)".to_string()
+            } else {
+                strings.join(", ")
+            }
+        }
+        Some(_) => "(invalid type)".to_string(),
+        None => "not configured".to_string(),
+    }
+}
+
 fn toml_value_at_path<'a>(mut value: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {
     for key in path {
         value = value.as_table()?.get(*key)?;
@@ -1079,6 +1107,53 @@ fn compact_optional_bool_label(value: Option<bool>) -> &'static str {
         Some(false) => "false",
         None => "not configured",
     }
+}
+
+fn compact_top_bar_items_label(items: Option<&[String]>) -> String {
+    let Some(items) = items else {
+        return "not configured".to_string();
+    };
+    if items.is_empty() {
+        return "(empty; renders no items)".to_string();
+    }
+
+    let supported = items
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| is_supported_top_bar_item(item))
+        .collect::<Vec<_>>();
+    if supported.is_empty() {
+        "(no supported items)".to_string()
+    } else {
+        supported.join(", ")
+    }
+}
+
+fn compact_top_bar_items_ignored_label(items: Option<&[String]>) -> String {
+    let Some(items) = items else {
+        return "none".to_string();
+    };
+    let ignored = items
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !is_supported_top_bar_item(item))
+        .map(|item| {
+            if item.is_empty() {
+                "(empty)".to_string()
+            } else {
+                item.to_string()
+            }
+        })
+        .collect::<Vec<_>>();
+    if ignored.is_empty() {
+        "none".to_string()
+    } else {
+        ignored.join(", ")
+    }
+}
+
+fn is_supported_top_bar_item(item: &str) -> bool {
+    matches!(item, "app" | "session" | "theme" | "repo")
 }
 
 fn custom_theme_palettes(

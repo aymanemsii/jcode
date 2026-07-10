@@ -1,5 +1,24 @@
 # TODO
 
+## Task 38 - Add top bar items config
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added configurable top bar items through `display.top_bar_items`.
+* Supported MVP items for app, session, theme, and repo.
+* Preserved the existing default top bar order when `top_bar_items` is not configured.
+* Kept the slice limited to reliable existing fields without model, provider, branch, queue, token usage, wallpaper, parent-directory discovery, Queue changes, server protocol changes, or Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 37 - Add theme commands MVP
 
 Task Type: Implementation

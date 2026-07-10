@@ -927,6 +927,8 @@ pub struct DisplayConfig {
     pub startup_splash_footer: Option<String>,
     /// Show a one-line status bar at the top of the TUI when explicitly enabled.
     pub top_bar: Option<bool>,
+    /// Ordered list of top bar item names. Missing uses the built-in default order.
+    pub top_bar_items: Option<Vec<String>>,
     /// Native terminal scrollbar configuration for scrollable panes
     pub native_scrollbars: NativeScrollbarConfig,
 }
@@ -989,6 +991,7 @@ impl Default for DisplayConfig {
             startup_splash_subtitle: None,
             startup_splash_footer: None,
             top_bar: None,
+            top_bar_items: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }
     }

@@ -21,6 +21,7 @@ struct ProjectWorkspaceDisplayConfig {
     startup_splash_subtitle: Option<String>,
     startup_splash_footer: Option<String>,
     top_bar: Option<bool>,
+    top_bar_items: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -174,6 +175,12 @@ impl Config {
             self.workspace_config
                 .display_overrides
                 .push("display.top_bar".to_string());
+        }
+        if let Some(value) = loaded.config.display.top_bar_items {
+            self.display.top_bar_items = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.top_bar_items".to_string());
         }
     }
 
