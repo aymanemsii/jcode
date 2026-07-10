@@ -498,6 +498,41 @@ pub fn run_workspace_edit_command() -> Result<()> {
     Ok(())
 }
 
+pub fn run_theme_list_command() -> Result<()> {
+    print!("{}", render_theme_list(crate::config::config()));
+    Ok(())
+}
+
+pub fn run_theme_current_command() -> Result<()> {
+    print!("{}", render_theme_current(crate::config::config()));
+    Ok(())
+}
+
+pub fn run_theme_preview_command(theme_name: Option<&str>) -> Result<()> {
+    let config = crate::config::config();
+    let requested = theme_name.and_then(|name| {
+        let trimmed = name.trim();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+
+    if let Some(name) = requested
+        && !theme_name_is_available(config, name)
+    {
+        anyhow::bail!(
+            "Unknown theme `{}`.\nAvailable themes:\n{}",
+            name,
+            available_theme_names(config)
+                .into_iter()
+                .map(|name| format!("  {name}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    print!("{}", render_theme_preview(config, requested));
+    Ok(())
+}
+
 fn ensure_workspace_config_file() -> Result<PathBuf> {
     let workspace_path = workspace_config_path()?;
     if workspace_path.exists() {
@@ -786,6 +821,221 @@ display.top_bar: {}\n",
         toml_string_label(value, &["display", "startup_splash_footer"]),
         toml_bool_label(value, &["display", "top_bar"]),
     )
+}
+
+fn render_theme_list(config: &crate::config::Config) -> String {
+    let mut output = String::from("Themes:\n\nBuilt-in themes:\n");
+    for name in jcode_tui_style::theme::BUILT_IN_THEME_NAMES {
+        output.push_str("  ");
+        output.push_str(name);
+        output.push('\n');
+    }
+
+    output.push_str("\nGlobal custom themes:\n");
+    if config.themes.is_empty() {
+        output.push_str("  none\n");
+    } else {
+        for name in config.themes.keys() {
+            output.push_str("  ");
+            output.push_str(name);
+            if jcode_tui_style::theme::canonical_theme_name(Some(name)).is_some() {
+                output.push_str(" (reserved built-in name; built-in wins)");
+            }
+            output.push('\n');
+        }
+    }
+
+    output.push('\n');
+    output.push_str(&workspace_theme_influence_summary(config));
+    output
+}
+
+fn render_theme_current(config: &crate::config::Config) -> String {
+    let custom_themes = custom_theme_palettes(config);
+    let resolved =
+        jcode_tui_style::theme::resolve_theme_palette(config.display.theme.as_deref(), &custom_themes);
+    let theme_accent = jcode_tui_style::theme::color_to_hex(resolved.palette.accent);
+    let active_accent = active_accent_color_hex(config, &theme_accent);
+
+    format!(
+        "Current theme:\n\
+active theme: {}\n\
+theme source: {}\n\
+theme valid: {}\n\
+active accent color: {}\n\
+project-local workspace config: {}\n\
+project-local theme overrides: {}\n",
+        resolved.name,
+        theme_source_label(resolved.source),
+        theme_valid_label(config.display.theme.as_deref(), resolved.source),
+        active_accent,
+        workspace_config_presence_label(config),
+        workspace_theme_override_label(config),
+    )
+}
+
+fn render_theme_preview(config: &crate::config::Config, requested: Option<&str>) -> String {
+    let custom_themes = custom_theme_palettes(config);
+    let resolved = jcode_tui_style::theme::resolve_theme_palette(
+        requested.or(config.display.theme.as_deref()),
+        &custom_themes,
+    );
+    let mut palette = resolved.palette;
+    let mut accent_note = "";
+    if requested.is_none()
+        && let Some(accent) = config
+            .display
+            .accent_color
+            .as_deref()
+            .and_then(parse_hex_rgb_tuple)
+    {
+        palette.accent = accent;
+        accent_note = " (display.accent_color override)";
+    }
+
+    format!(
+        "Theme preview: {}\n\
+source: {}\n\
+valid: {}\n\
+\n\
+accent: {}{}\n\
+user: {}\n\
+assistant: {}\n\
+tool: {}\n\
+system: {}\n\
+muted: {}\n\
+success: {}\n\
+warning: {}\n\
+error: {}\n\
+border: {}\n\
+active_border: {}\n\
+background: {}\n\
+panel: {}\n\
+input: {}\n",
+        resolved.name,
+        theme_source_label(resolved.source),
+        theme_valid_label(requested.or(config.display.theme.as_deref()), resolved.source),
+        jcode_tui_style::theme::color_to_hex(palette.accent),
+        accent_note,
+        jcode_tui_style::theme::color_to_hex(palette.user),
+        jcode_tui_style::theme::color_to_hex(palette.ai),
+        jcode_tui_style::theme::color_to_hex(palette.tool),
+        jcode_tui_style::theme::color_to_hex(palette.system_message),
+        jcode_tui_style::theme::color_to_hex(palette.muted),
+        jcode_tui_style::theme::color_to_hex(palette.success),
+        jcode_tui_style::theme::color_to_hex(palette.warning),
+        jcode_tui_style::theme::color_to_hex(palette.error),
+        jcode_tui_style::theme::color_to_hex(palette.border),
+        jcode_tui_style::theme::color_to_hex(palette.active_border),
+        jcode_tui_style::theme::color_to_hex(palette.background),
+        jcode_tui_style::theme::color_to_hex(palette.panel),
+        jcode_tui_style::theme::color_to_hex(palette.input),
+    )
+}
+
+fn theme_source_label(source: jcode_tui_style::theme::ThemeSource) -> &'static str {
+    match source {
+        jcode_tui_style::theme::ThemeSource::BuiltIn => "built-in",
+        jcode_tui_style::theme::ThemeSource::Custom => "custom",
+        jcode_tui_style::theme::ThemeSource::DefaultFallback => "default/fallback",
+    }
+}
+
+fn theme_valid_label(
+    configured_theme: Option<&str>,
+    source: jcode_tui_style::theme::ThemeSource,
+) -> &'static str {
+    match configured_theme {
+        Some(value)
+            if !matches!(
+                source,
+                jcode_tui_style::theme::ThemeSource::DefaultFallback
+            ) && !value.trim().is_empty() =>
+        {
+            "true"
+        }
+        Some(_) => "false",
+        None => "not configured",
+    }
+}
+
+fn active_accent_color_hex(config: &crate::config::Config, theme_accent: &str) -> String {
+    config
+        .display
+        .accent_color
+        .as_deref()
+        .and_then(parse_accent_color_hex)
+        .unwrap_or_else(|| theme_accent.to_string())
+}
+
+fn parse_hex_rgb_tuple(value: &str) -> Option<(u8, u8, u8)> {
+    let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
+    if hex.len() != 6 || !hex.as_bytes().iter().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+fn workspace_theme_influence_summary(config: &crate::config::Config) -> String {
+    let presence = workspace_config_presence_label(config);
+    let overrides = workspace_theme_override_label(config);
+    if overrides == "none" {
+        format!(
+            "Project-local workspace config: {presence}\nProject-local theme influence: none\n"
+        )
+    } else {
+        format!(
+            "Project-local workspace config: {presence}\nProject-local theme influence: {overrides} may affect current theme selection/accent\n"
+        )
+    }
+}
+
+fn workspace_config_presence_label(config: &crate::config::Config) -> String {
+    config
+        .workspace_config
+        .path
+        .as_ref()
+        .map(|path| format!("found ({})", path.display()))
+        .unwrap_or_else(|| "not found".to_string())
+}
+
+fn workspace_theme_override_label(config: &crate::config::Config) -> String {
+    let overrides = config
+        .workspace_config
+        .display_overrides
+        .iter()
+        .filter(|name| matches!(name.as_str(), "display.theme" | "display.accent_color"))
+        .cloned()
+        .collect::<Vec<_>>();
+    if overrides.is_empty() {
+        "none".to_string()
+    } else {
+        overrides.join(", ")
+    }
+}
+
+fn theme_name_is_available(config: &crate::config::Config, name: &str) -> bool {
+    jcode_tui_style::theme::canonical_theme_name(Some(name)).is_some()
+        || config
+            .themes
+            .keys()
+            .any(|custom| custom.trim().eq_ignore_ascii_case(name.trim()))
+}
+
+fn available_theme_names(config: &crate::config::Config) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for name in jcode_tui_style::theme::BUILT_IN_THEME_NAMES {
+        names.insert((*name).to_string());
+    }
+    for name in config.themes.keys() {
+        if jcode_tui_style::theme::canonical_theme_name(Some(name)).is_none() {
+            names.insert(name.to_string());
+        }
+    }
+    names.into_iter().collect()
 }
 
 fn toml_string_label(value: &toml::Value, path: &[&str]) -> String {

@@ -217,6 +217,40 @@ Built-in theme names are reserved. If a custom theme uses the same name as a bui
 
 This prevents local config from replacing the behavior of stable built-in theme names.
 
+## Theme Commands
+
+Use:
+
+```text
+jcode theme list
+jcode theme current
+jcode theme preview [theme-name]
+```
+
+`jcode theme list` prints the built-in theme names and any global custom themes
+defined under `[themes.<name>]`. If `./.jcode/workspace.toml` in the current
+directory overrides `display.theme` or `display.accent_color`, the command notes
+that project-local workspace customization may affect the current theme or
+accent.
+
+`jcode theme current` shows the active resolved theme from the same merged
+global-plus-current-directory workspace config used by `jcode config show`. It
+reports the active theme name, theme source, theme validity, active accent
+color, whether a project-local workspace config is present, and whether
+project-local `display.theme` or `display.accent_color` overrides are active.
+
+`jcode theme preview` previews the active theme. `jcode theme preview
+tokyonight` or another name previews that built-in or global custom theme. The
+preview prints compact Theme Palette V2 hex values for semantic colors and
+chrome fields including `accent`, `user`, `assistant`, `tool`, `system`,
+`muted`, `success`, `warning`, `error`, `border`, `active_border`,
+`background`, `panel`, and `input`.
+
+Unknown theme names return a non-zero error and print the available built-in and
+global custom theme names. Theme commands are read-only; they do not set themes,
+import/export themes, add project-local custom theme definitions, discover
+parent directories, or configure wallpaper.
+
 ## Startup Splash
 
 The startup splash is configured under `[display]`:

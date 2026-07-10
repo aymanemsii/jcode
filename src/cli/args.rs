@@ -274,6 +274,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Workspace(WorkspaceCommand),
 
+    /// Theme exploration commands
+    #[command(subcommand)]
+    Theme(ThemeCommand),
+
     /// Memory management commands
     #[command(subcommand)]
     Memory(MemoryCommand),
@@ -1000,6 +1004,19 @@ pub(crate) enum WorkspaceCommand {
     Init,
     /// Open ./.jcode/workspace.toml in an editor, creating it first if missing
     Edit,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ThemeCommand {
+    /// List built-in and global custom themes
+    List,
+    /// Show the active resolved theme
+    Current,
+    /// Preview a built-in or global custom theme
+    Preview {
+        /// Theme name to preview. Defaults to the active theme.
+        theme_name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

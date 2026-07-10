@@ -8,7 +8,7 @@ use std::time::Instant;
 use super::args::{
     AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, ConfigCommand,
     MemoryCommand, ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand,
-    SessionCommand, TranscriptModeArg, WorkspaceCommand,
+    SessionCommand, ThemeCommand, TranscriptModeArg, WorkspaceCommand,
 };
 use crate::{
     agent, auth, build, provider, provider_catalog, server, session, setup_hints, startup_profile,
@@ -251,6 +251,13 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             WorkspaceCommand::Show => commands::run_workspace_show_command()?,
             WorkspaceCommand::Init => commands::run_workspace_init_command()?,
             WorkspaceCommand::Edit => commands::run_workspace_edit_command()?,
+        },
+        Some(Command::Theme(subcmd)) => match subcmd {
+            ThemeCommand::List => commands::run_theme_list_command()?,
+            ThemeCommand::Current => commands::run_theme_current_command()?,
+            ThemeCommand::Preview { theme_name } => {
+                commands::run_theme_preview_command(theme_name.as_deref())?
+            }
         },
         Some(Command::Memory(subcmd)) => {
             commands::run_memory_command(map_memory_subcommand(subcmd))?;

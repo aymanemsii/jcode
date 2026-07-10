@@ -1,5 +1,25 @@
 # TODO
 
+## Task 37 - Add theme commands MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `jcode theme list`, `jcode theme current`, and `jcode theme preview`.
+* Listed built-in themes and global custom themes.
+* Reported the active resolved theme, theme source, accent color, and project-local workspace influence.
+* Added compact theme previews using Theme Palette V2 fields.
+* Kept the slice limited to theme exploration without theme setting, import/export, wallpaper, parent-directory discovery, Queue changes, server protocol changes, or Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 36 - Add workspace commands MVP
 
 Task Type: Implementation

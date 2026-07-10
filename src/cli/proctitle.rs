@@ -26,6 +26,7 @@ pub(crate) fn initial_title(args: &Args) -> String {
         Some(Command::Provider(_)) => "jcode provider".to_string(),
         Some(Command::Config(_)) => "jcode config".to_string(),
         Some(Command::Workspace(_)) => "jcode workspace".to_string(),
+        Some(Command::Theme(_)) => "jcode theme".to_string(),
         Some(Command::Memory(_)) => "jcode memory".to_string(),
         Some(Command::Session(_)) => "jcode session".to_string(),
         Some(Command::Ambient(subcommand)) => match subcommand {
