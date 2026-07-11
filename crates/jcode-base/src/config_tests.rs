@@ -770,6 +770,34 @@ fn test_display_top_bar_defaults_to_none_and_deserializes() {
 }
 
 #[test]
+fn test_display_background_defaults_to_none_and_deserializes() {
+    assert_eq!(DisplayConfig::default().background_style, None);
+    assert_eq!(DisplayConfig::default().background_opacity, None);
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [display]
+        background_style = "subtle-grid"
+        background_opacity = 0.15
+        "#,
+    )
+    .expect("config should deserialize");
+
+    assert_eq!(cfg.display.background_style.as_deref(), Some("subtle-grid"));
+    assert_eq!(cfg.display.background_opacity, Some(0.15));
+
+    let cfg: Config = toml::from_str(
+        r#"
+        [display]
+        background_opacity = "loud"
+        "#,
+    )
+    .expect("invalid opacity type should fall back during deserialization");
+
+    assert_eq!(cfg.display.background_opacity, None);
+}
+
+#[test]
 fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
     let _guard = crate::storage::lock_test_env();
     let prev_home = std::env::var_os("JCODE_HOME");
@@ -791,6 +819,8 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
         accent_color = "#111111"
         startup_splash_title = "global title"
         startup_splash_footer = "global footer"
+        background_style = "stars"
+        background_opacity = 0.25
         top_bar = false
         top_bar_items = ["app", "session"]
 
@@ -812,6 +842,8 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
         theme = "cursor"
         accent_color = "#0088FF"
         startup_splash_subtitle = "local source build"
+        background_style = "matrix"
+        background_opacity = 0.5
         top_bar = true
         top_bar_items = ["theme", "repo"]
         "##,
@@ -839,6 +871,8 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
         cfg.display.startup_splash_footer.as_deref(),
         Some("global footer")
     );
+    assert_eq!(cfg.display.background_style.as_deref(), Some("matrix"));
+    assert_eq!(cfg.display.background_opacity, Some(0.5));
     assert_eq!(cfg.display.top_bar, Some(true));
     assert_eq!(
         cfg.display.top_bar_items.as_deref(),
@@ -850,6 +884,8 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
             "display.theme".to_string(),
             "display.accent_color".to_string(),
             "display.startup_splash_subtitle".to_string(),
+            "display.background_style".to_string(),
+            "display.background_opacity".to_string(),
             "display.top_bar".to_string(),
             "display.top_bar_items".to_string()
         ]

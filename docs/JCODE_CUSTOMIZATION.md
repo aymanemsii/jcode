@@ -39,6 +39,8 @@ accent_color = "#0088FF"
 startup_splash_title = "jcode dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
+background_style = "subtle-grid"
+background_opacity = 0.15
 top_bar = true
 top_bar_items = ["app", "session", "theme", "repo"]
 ```
@@ -51,6 +53,8 @@ Only these project-local fields are supported:
 * `display.startup_splash_title`
 * `display.startup_splash_subtitle`
 * `display.startup_splash_footer`
+* `display.background_style`
+* `display.background_opacity`
 * `display.top_bar`
 * `display.top_bar_items`
 
@@ -274,6 +278,46 @@ If `startup_splash_title` is missing or blank and `[app] name` is set to a non-b
 
 The splash only appears on the empty startup screen when the onboarding welcome is inactive. It does not replace active conversation content.
 
+## Background / Wallpaper MVP
+
+Terminal-safe background customization is configured under `[display]`:
+
+```toml
+[display]
+background_style = "subtle-grid"
+background_opacity = 0.15
+```
+
+Supported MVP styles:
+
+* `none`
+* `subtle-grid`
+* `stars`
+* `matrix`
+
+Missing `background_style` behaves as `none`. Invalid or empty styles also fall
+back safely to `none` and do not prevent startup.
+
+`background_opacity` is a numeric intensity control from `0.0` to `1.0`.
+Missing values fall back to `0.15`. Out-of-range values are clamped to the valid
+range. Invalid numeric values fall back safely. Because terminals do not provide
+portable real alpha blending for text cells, opacity is simulated with pattern
+density and a Theme Palette V2 color blend toward the active theme background.
+
+The MVP renders only terminal text-cell patterns. It does not load image files,
+does not support PNG/JPG wallpapers, does not use terminal image protocols, and
+does not make network requests.
+
+Rendering is intentionally limited to the empty startup/chat area when no
+messages are present and onboarding is inactive. The optional startup splash is
+drawn over the background panel. jcode does not draw the background over
+messages, input text, dialogs, command palettes, onboarding, or active
+conversation content.
+
+Project-local `./.jcode/workspace.toml` can override
+`display.background_style` and `display.background_opacity` because they are
+visual-only fields.
+
 ## Top Status Bar
 
 The optional top status bar is configured under `[display]`:
@@ -329,6 +373,7 @@ The command reports safe display/customization visibility details, including:
 * Active accent color
 * App identity fields
 * Startup splash fields
+* Background style and opacity fields
 * Top status bar setting
 * Top status bar item order and ignored item names
 * Project-local workspace config path, workspace name, and project-local display overrides
@@ -345,6 +390,7 @@ The current customization system includes:
 * Theme Palette V2
 * App identity config
 * Startup splash personalization
+* Terminal-safe background MVP
 * Optional top status bar
 * Configurable top status bar items
 * Project-local visual workspace customization
@@ -356,7 +402,9 @@ The current customization system includes:
 
 The following customization areas are intentionally deferred:
 
-* Wallpaper/image background
+* Real image wallpaper/background files
+* Animated wallpaper/backgrounds
+* Terminal image protocol wallpaper
 * Parent-directory workspace discovery
 * Project-local app identity or terminal title
 * Theme import/export

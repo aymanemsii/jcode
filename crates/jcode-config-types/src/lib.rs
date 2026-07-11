@@ -925,6 +925,11 @@ pub struct DisplayConfig {
     pub startup_splash_subtitle: Option<String>,
     /// Optional startup splash footer. Blank values fall back to the built-in footer.
     pub startup_splash_footer: Option<String>,
+    /// Terminal-safe ambient background style. Missing or invalid values render no background.
+    pub background_style: Option<String>,
+    /// Background density/intensity control. Effective value is clamped to 0.0..=1.0.
+    #[serde(default, deserialize_with = "deserialize_optional_f32_lossy")]
+    pub background_opacity: Option<f32>,
     /// Show a one-line status bar at the top of the TUI when explicitly enabled.
     pub top_bar: Option<bool>,
     /// Ordered list of top bar item names. Missing uses the built-in default order.
@@ -990,11 +995,35 @@ impl Default for DisplayConfig {
             startup_splash_title: None,
             startup_splash_subtitle: None,
             startup_splash_footer: None,
+            background_style: None,
+            background_opacity: None,
             top_bar: None,
             top_bar_items: None,
             native_scrollbars: NativeScrollbarConfig::default(),
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OptionalF32Value {
+    Float(f32),
+    Signed(i64),
+    Unsigned(u64),
+    Ignored(serde::de::IgnoredAny),
+}
+
+pub fn deserialize_optional_f32_lossy<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<OptionalF32Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(OptionalF32Value::Float(value)) if value.is_finite() => Some(value),
+        Some(OptionalF32Value::Signed(value)) => Some(value as f32),
+        Some(OptionalF32Value::Unsigned(value)) => Some(value as f32),
+        _ => None,
+    })
 }
 
 impl DisplayConfig {

@@ -742,6 +742,14 @@ fn render_config_show(config: &crate::config::Config) -> String {
         compact_optional_text_label(config.display.startup_splash_subtitle.as_deref());
     let startup_splash_footer_label =
         compact_optional_text_label(config.display.startup_splash_footer.as_deref());
+    let background_style_label =
+        compact_background_style_label(config.display.background_style.as_deref());
+    let background_style_valid_label =
+        compact_background_style_valid_label(config.display.background_style.as_deref());
+    let background_opacity_label =
+        compact_background_opacity_label(config.display.background_opacity);
+    let active_background_opacity_label =
+        format!("{:.2}", resolved_background_opacity(config.display.background_opacity));
     let top_bar_label = compact_optional_bool_label(config.display.top_bar);
     let top_bar_items_label = compact_top_bar_items_label(config.display.top_bar_items.as_deref());
     let top_bar_items_ignored_label =
@@ -767,6 +775,10 @@ display.startup_splash: {startup_splash_label}\n\
 display.startup_splash_title: {startup_splash_title_label}\n\
 display.startup_splash_subtitle: {startup_splash_subtitle_label}\n\
 display.startup_splash_footer: {startup_splash_footer_label}\n\
+display.background_style: {background_style_label}\n\
+background_style valid: {background_style_valid_label}\n\
+display.background_opacity: {background_opacity_label}\n\
+active background_opacity: {active_background_opacity_label}\n\
 display.top_bar: {top_bar_label}\n\
 display.top_bar_items: {top_bar_items_label}\n\
 display.top_bar_items_ignored: {top_bar_items_ignored_label}\n\
@@ -816,6 +828,8 @@ display.accent_color: {}\n\
 display.startup_splash_title: {}\n\
 display.startup_splash_subtitle: {}\n\
 display.startup_splash_footer: {}\n\
+display.background_style: {}\n\
+display.background_opacity: {}\n\
 display.top_bar: {}\n\
 display.top_bar_items: {}\n",
         path.display(),
@@ -825,6 +839,8 @@ display.top_bar_items: {}\n",
         toml_string_label(value, &["display", "startup_splash_title"]),
         toml_string_label(value, &["display", "startup_splash_subtitle"]),
         toml_string_label(value, &["display", "startup_splash_footer"]),
+        toml_string_label(value, &["display", "background_style"]),
+        toml_float_label(value, &["display", "background_opacity"]),
         toml_bool_label(value, &["display", "top_bar"]),
         toml_string_array_label(value, &["display", "top_bar_items"]),
     )
@@ -1065,6 +1081,15 @@ fn toml_bool_label(value: &toml::Value, path: &[&str]) -> &'static str {
     }
 }
 
+fn toml_float_label(value: &toml::Value, path: &[&str]) -> String {
+    match toml_value_at_path(value, path) {
+        Some(toml::Value::Float(value)) => value.to_string(),
+        Some(toml::Value::Integer(value)) => value.to_string(),
+        Some(_) => "(invalid type)".to_string(),
+        None => "not configured".to_string(),
+    }
+}
+
 fn toml_string_array_label(value: &toml::Value, path: &[&str]) -> String {
     match toml_value_at_path(value, path) {
         Some(toml::Value::Array(values)) => {
@@ -1106,6 +1131,55 @@ fn compact_optional_bool_label(value: Option<bool>) -> &'static str {
         Some(true) => "true",
         Some(false) => "false",
         None => "not configured",
+    }
+}
+
+fn compact_background_style_label(value: Option<&str>) -> String {
+    match value.map(str::trim) {
+        Some("") => "(empty; active none)".to_string(),
+        Some(value) if supported_background_style(value).is_some() => {
+            supported_background_style(value).unwrap_or("none").to_string()
+        }
+        Some(value) => format!("{value} (active none)"),
+        None => "not configured (active none)".to_string(),
+    }
+}
+
+fn compact_background_style_valid_label(value: Option<&str>) -> &'static str {
+    match value.map(str::trim) {
+        Some(value) if supported_background_style(value).is_some() && !value.is_empty() => "true",
+        Some(_) => "false",
+        None => "not configured",
+    }
+}
+
+fn compact_background_opacity_label(value: Option<f32>) -> String {
+    match value {
+        Some(value) if value.is_finite() && (0.0..=1.0).contains(&value) => format!("{value:.2}"),
+        Some(value) if value.is_finite() => {
+            format!(
+                "{value:.2} (clamped to {:.2})",
+                resolved_background_opacity(Some(value))
+            )
+        }
+        Some(_) => "invalid (fallback 0.15)".to_string(),
+        None => "not configured (fallback 0.15)".to_string(),
+    }
+}
+
+fn resolved_background_opacity(value: Option<f32>) -> f32 {
+    value.filter(|value| value.is_finite())
+        .unwrap_or(0.15)
+        .clamp(0.0, 1.0)
+}
+
+fn supported_background_style(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "none" => Some("none"),
+        "subtle-grid" => Some("subtle-grid"),
+        "stars" => Some("stars"),
+        "matrix" => Some("matrix"),
+        _ => None,
     }
 }
 

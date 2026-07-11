@@ -460,10 +460,11 @@ use status_support::{
 };
 use theme_support::{
     accent_color, activity_indicator, activity_indicator_frame_index, ai_color, ai_text,
-    animated_tool_color, asap_color, blend_color, dim_color, file_link_color, header_icon_color,
-    header_name_color, header_session_color, pending_color, prompt_entry_bg_color,
-    prompt_entry_color, prompt_entry_shimmer_color, queued_color, rainbow_prompt_color,
-    system_message_color, tool_color, user_bg, user_color, user_text,
+    animated_tool_color, asap_color, background_color, blend_color, dim_color, file_link_color,
+    header_icon_color, header_name_color, header_session_color, muted_color, panel_color,
+    pending_color, prompt_entry_bg_color, prompt_entry_color, prompt_entry_shimmer_color,
+    queued_color, rainbow_prompt_color, system_message_color, tool_color, user_bg, user_color,
+    user_text,
 };
 
 pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};
@@ -2878,6 +2879,9 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             chat_scrollbar_visible,
         )
     };
+    if terminal_background_visible(app) {
+        draw_terminal_background(frame, messages_area);
+    }
     if show_startup_splash {
         draw_startup_splash(frame, messages_area);
     }
@@ -3108,6 +3112,127 @@ fn startup_splash_visible(app: &dyn TuiState) -> bool {
     crate::config::config().display.startup_splash == Some(true)
         && app.display_messages().is_empty()
         && !app.onboarding_welcome_active()
+}
+
+fn terminal_background_visible(app: &dyn TuiState) -> bool {
+    app.display_messages().is_empty()
+        && app.streaming_text().is_empty()
+        && !app.is_processing()
+        && !app.onboarding_welcome_active()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalBackgroundStyle {
+    None,
+    SubtleGrid,
+    Stars,
+    Matrix,
+}
+
+fn resolved_terminal_background_style(configured: Option<&str>) -> TerminalBackgroundStyle {
+    match configured.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("subtle-grid") => TerminalBackgroundStyle::SubtleGrid,
+        Some("stars") => TerminalBackgroundStyle::Stars,
+        Some("matrix") => TerminalBackgroundStyle::Matrix,
+        _ => TerminalBackgroundStyle::None,
+    }
+}
+
+fn resolved_terminal_background_opacity(configured: Option<f32>) -> f32 {
+    configured
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.15)
+        .clamp(0.0, 1.0)
+}
+
+fn draw_terminal_background(frame: &mut Frame, area: Rect) {
+    if area.width < 24 || area.height < 4 {
+        return;
+    }
+
+    let config = crate::config::config();
+    let style = resolved_terminal_background_style(config.display.background_style.as_deref());
+    if style == TerminalBackgroundStyle::None {
+        return;
+    }
+
+    let opacity = resolved_terminal_background_opacity(config.display.background_opacity);
+    if opacity <= 0.0 {
+        return;
+    }
+
+    let color = terminal_background_pattern_color(style, opacity);
+    let mut lines = Vec::with_capacity(area.height as usize);
+    for y in 0..area.height {
+        let mut row = String::with_capacity(area.width as usize);
+        for x in 0..area.width {
+            row.push(terminal_background_char(style, x, y, opacity));
+        }
+        lines.push(Line::from(Span::styled(row, Style::default().fg(color))));
+    }
+
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+fn terminal_background_pattern_color(style: TerminalBackgroundStyle, opacity: f32) -> Color {
+    let target = match style {
+        TerminalBackgroundStyle::None => background_color(),
+        TerminalBackgroundStyle::SubtleGrid => panel_color(),
+        TerminalBackgroundStyle::Stars => muted_color(),
+        TerminalBackgroundStyle::Matrix => accent_color(),
+    };
+    blend_color(background_color(), target, opacity.clamp(0.0, 1.0))
+}
+
+fn terminal_background_char(style: TerminalBackgroundStyle, x: u16, y: u16, opacity: f32) -> char {
+    let density = (opacity.clamp(0.0, 1.0) * 100.0).round() as u16;
+    match style {
+        TerminalBackgroundStyle::None => ' ',
+        TerminalBackgroundStyle::SubtleGrid => {
+            let step = if density >= 50 {
+                6
+            } else if density >= 25 {
+                8
+            } else {
+                10
+            };
+            if x % step == 0 && y % 4 == 0 {
+                '+'
+            } else if y % 4 == 0 {
+                '.'
+            } else if x % step == 0 {
+                '.'
+            } else {
+                ' '
+            }
+        }
+        TerminalBackgroundStyle::Stars => {
+            let threshold = density.clamp(1, 100);
+            let hash = ((x as u32 * 37) ^ (y as u32 * 91) ^ ((x as u32 + y as u32) * 17)) % 100;
+            if hash < threshold as u32 / 3 {
+                '*'
+            } else if hash < threshold as u32 {
+                '.'
+            } else {
+                ' '
+            }
+        }
+        TerminalBackgroundStyle::Matrix => {
+            let threshold = density.clamp(1, 100);
+            let hash = ((x as u32 * 19) + (y as u32 * 43) + ((x as u32 ^ y as u32) * 7)) % 100;
+            if hash < threshold as u32 / 2 {
+                if (x + y) % 2 == 0 {
+                    '0'
+                } else {
+                    '1'
+                }
+            } else if hash < threshold as u32 {
+                '.'
+            } else {
+                ' '
+            }
+        }
+    }
 }
 
 fn draw_startup_splash(frame: &mut Frame, area: Rect) {

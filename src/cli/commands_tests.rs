@@ -270,6 +270,10 @@ fn config_show_reports_missing_accent_as_default() {
     assert!(output.contains("display.startup_splash_title: not configured"));
     assert!(output.contains("display.startup_splash_subtitle: not configured"));
     assert!(output.contains("display.startup_splash_footer: not configured"));
+    assert!(output.contains("display.background_style: not configured (active none)"));
+    assert!(output.contains("background_style valid: not configured"));
+    assert!(output.contains("display.background_opacity: not configured (fallback 0.15)"));
+    assert!(output.contains("active background_opacity: 0.15"));
     assert!(output.contains("display.top_bar: not configured"));
     assert!(output.contains("display.top_bar_items: not configured"));
     assert!(output.contains("display.top_bar_items_ignored: none"));
@@ -291,11 +295,15 @@ fn config_show_reports_project_local_workspace_customization() {
     cfg.workspace_config.display_overrides = vec![
         "display.theme".to_string(),
         "display.accent_color".to_string(),
+        "display.background_style".to_string(),
+        "display.background_opacity".to_string(),
         "display.top_bar".to_string(),
         "display.top_bar_items".to_string(),
     ];
     cfg.display.theme = Some("cursor".to_string());
     cfg.display.accent_color = Some("#0088FF".to_string());
+    cfg.display.background_style = Some("subtle-grid".to_string());
+    cfg.display.background_opacity = Some(1.25);
     cfg.display.top_bar = Some(true);
     cfg.display.top_bar_items = Some(vec![
         "app".to_string(),
@@ -309,10 +317,14 @@ fn config_show_reports_project_local_workspace_customization() {
     assert!(output.contains("workspace config: .jcode/workspace.toml"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains(
-        "project-local display overrides: display.theme, display.accent_color, display.top_bar, display.top_bar_items"
+        "project-local display overrides: display.theme, display.accent_color, display.background_style, display.background_opacity, display.top_bar, display.top_bar_items"
     ));
     assert!(output.contains("display.theme: cursor"));
     assert!(output.contains("display.accent_color: #0088FF"));
+    assert!(output.contains("display.background_style: subtle-grid"));
+    assert!(output.contains("background_style valid: true"));
+    assert!(output.contains("display.background_opacity: 1.25 (clamped to 1.00)"));
+    assert!(output.contains("active background_opacity: 1.00"));
     assert!(output.contains("display.top_bar: true"));
     assert!(output.contains("display.top_bar_items: app, session, theme, repo"));
 }
@@ -361,6 +373,8 @@ accent_color = "#0088FF"
 startup_splash_title = "jcode dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
+background_style = "subtle-grid"
+background_opacity = 0.15
 top_bar = true
 top_bar_items = ["app", "session", "theme", "repo"]
 "##,
@@ -378,6 +392,8 @@ top_bar_items = ["app", "session", "theme", "repo"]
     assert!(output.contains("display.startup_splash_title: jcode dev mode"));
     assert!(output.contains("display.startup_splash_subtitle: local source build"));
     assert!(output.contains("display.startup_splash_footer: workspace customization enabled"));
+    assert!(output.contains("display.background_style: subtle-grid"));
+    assert!(output.contains("display.background_opacity: 0.15"));
     assert!(output.contains("display.top_bar: true"));
     assert!(output.contains("display.top_bar_items: app, session, theme, repo"));
     assert!(!output.contains("api_key"));
@@ -563,6 +579,20 @@ fn config_show_reports_empty_accent_as_invalid() {
     assert!(output.contains("active accent color: #BA8BFF"));
     assert!(output.contains("display.startup_splash: false"));
     assert!(output.contains("display.top_bar: not configured"));
+}
+
+#[test]
+fn config_show_reports_invalid_background_style_and_opacity_clamp() {
+    let mut cfg = crate::config::Config::default();
+    cfg.display.background_style = Some("wallpaper".to_string());
+    cfg.display.background_opacity = Some(-0.25);
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("display.background_style: wallpaper (active none)"));
+    assert!(output.contains("background_style valid: false"));
+    assert!(output.contains("display.background_opacity: -0.25 (clamped to 0.00)"));
+    assert!(output.contains("active background_opacity: 0.00"));
 }
 
 fn test_todo(

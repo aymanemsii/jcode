@@ -20,6 +20,9 @@ struct ProjectWorkspaceDisplayConfig {
     startup_splash_title: Option<String>,
     startup_splash_subtitle: Option<String>,
     startup_splash_footer: Option<String>,
+    background_style: Option<String>,
+    #[serde(default, deserialize_with = "jcode_config_types::deserialize_optional_f32_lossy")]
+    background_opacity: Option<f32>,
     top_bar: Option<bool>,
     top_bar_items: Option<Vec<String>>,
 }
@@ -169,6 +172,18 @@ impl Config {
             self.workspace_config
                 .display_overrides
                 .push("display.startup_splash_footer".to_string());
+        }
+        if let Some(value) = loaded.config.display.background_style {
+            self.display.background_style = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.background_style".to_string());
+        }
+        if let Some(value) = loaded.config.display.background_opacity {
+            self.display.background_opacity = Some(value);
+            self.workspace_config
+                .display_overrides
+                .push("display.background_opacity".to_string());
         }
         if let Some(value) = loaded.config.display.top_bar {
             self.display.top_bar = Some(value);

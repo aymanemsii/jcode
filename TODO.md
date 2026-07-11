@@ -1,5 +1,26 @@
 # TODO
 
+## Task 39 - Add terminal-safe background MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added terminal-safe background customization through display.background_style and display.background_opacity.
+* Supported MVP styles for none, subtle-grid, stars, and matrix.
+* Added safe fallback behavior for missing or invalid background styles and opacity values.
+* Allowed project-local workspace customization to override background style and opacity as visual-only fields.
+* Rendered backgrounds only in safe terminal areas without image files, terminal image protocols, network access, Queue changes, server protocol changes, or broad TUI refactors.
+* Deferred real image wallpaper, animated wallpaper, wallpaper file paths, parent-directory workspace discovery, and broader UI background routing.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 38 - Add top bar items config
 
 Task Type: Implementation

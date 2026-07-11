@@ -69,6 +69,8 @@ accent_color = "#0088FF"
 startup_splash_title = "jcode dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
+background_style = "subtle-grid"
+background_opacity = 0.15
 top_bar = true
 ```
 
@@ -82,12 +84,13 @@ name = "jcode"
 theme = "cursor"
 accent_color = "#0088FF"
 startup_splash_title = "jcode dev mode"
+background_style = "stars"
 top_bar = true
 ```
 
 `workspace.name` should be the project-local label used by workspace-aware UI surfaces. It should not replace `app.name`, rename the binary, rename config directories, or change installed channel behavior.
 
-`display.*` project-local values should use the same validation and fallback behavior as global display customization. Invalid colors, invalid theme names, or blank splash strings should fail closed to the next layer rather than preventing startup.
+`display.*` project-local values should use the same validation and fallback behavior as global display customization. Invalid colors, invalid theme names, blank splash strings, invalid background styles, or out-of-range background opacity values should fail closed to a safe fallback rather than preventing startup.
 
 ## Precedence
 
@@ -111,9 +114,11 @@ The MVP allows only visual and workspace identity fields:
 * `display.startup_splash_title`
 * `display.startup_splash_subtitle`
 * `display.startup_splash_footer`
+* `display.background_style`
+* `display.background_opacity`
 * `display.top_bar`
 
-These fields are appropriate because they are visible, low-risk, and already connected to the customization work in this fork. They help identify the current repository without changing model behavior, authentication, network access, or command execution.
+These fields are appropriate because they are visible, low-risk, and already connected to the customization work in this fork. Background style and opacity are visual-only terminal text-cell settings; they do not introduce image files, terminal image protocols, network access, or command execution. These fields help identify the current repository without changing model behavior, authentication, network access, or command execution.
 
 ## Global-Only Fields For Now
 
@@ -225,7 +230,7 @@ The implemented MVP:
 * Adds a workspace config model containing `workspace.name` and the allowed `display.*` fields.
 * Loads only `./.jcode/workspace.toml` from the current working directory.
 * Merges workspace values over global config at the field level for the allowlisted fields.
-* Reuses existing validation and fallback behavior for themes, accent colors, splash text, and `top_bar`.
+* Reuses existing validation and fallback behavior for themes, accent colors, splash text, terminal-safe background fields, and `top_bar`.
 * Updates `jcode config show` to report the loaded workspace path, workspace name, and project-local display overrides.
 * Adds `jcode workspace show`, `jcode workspace init`, and `jcode workspace edit`.
 * Rejects non-allowlisted project-local sections instead of treating them as config.
