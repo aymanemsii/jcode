@@ -87,8 +87,8 @@ fn resolve_tail_follow_scroll(max_scroll: usize, viewport_height: usize) -> usiz
 }
 
 fn selection_bg_for(base_bg: Option<Color>) -> Color {
-    let fallback = rgb(32, 38, 48);
-    blend_color(base_bg.unwrap_or(fallback), accent_color(), 0.34)
+    let fallback = selection_color();
+    blend_color(base_bg.unwrap_or(fallback), selection_color(), 0.34)
 }
 
 fn selection_fg_for(base_fg: Option<Color>) -> Option<Color> {
@@ -767,9 +767,9 @@ pub(super) fn draw_messages(
 
             if let Some(success) = copy_badge_ui.feedback_for_key(key, copy_badge_now) {
                 let feedback_style = if success {
-                    Style::default().fg(ai_color()).bold()
+                    Style::default().fg(success_color()).bold()
                 } else {
-                    Style::default().fg(Color::Red).bold()
+                    Style::default().fg(error_color()).bold()
                 };
                 let feedback_text = if success {
                     " ✓ Copied!"

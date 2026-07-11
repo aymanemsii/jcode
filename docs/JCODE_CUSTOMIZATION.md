@@ -207,6 +207,11 @@ Custom themes support the Theme Palette V2 fields shown above:
 * Message and status colors: `accent`, `user`, `assistant`, `tool`, `system`, `queued`, `asap`, `pending`
 * UI chrome colors: `background`, `foreground`, `muted`, `border`, `active_border`, `panel`, `input`, `selection`, `success`, `warning`, `error`
 
+Theme Palette V2 now routes more visible TUI chrome through the active theme,
+including low-risk input, status, panel/border, selection, notice, warning,
+success, error, label, and muted/help text styling. Specialized renderers may
+still keep local colors when their behavior needs separate review.
+
 Missing or invalid custom theme color fields fall back safely at the field level.
 
 ## Theme Precedence

@@ -459,12 +459,13 @@ use status_support::{
     binary_age, format_status_for_debug, is_running_stable_release, semver, shorten_model_name,
 };
 use theme_support::{
-    accent_color, activity_indicator, activity_indicator_frame_index, ai_color, ai_text,
-    animated_tool_color, asap_color, background_color, blend_color, dim_color, file_link_color,
-    header_icon_color, header_name_color, header_session_color, muted_color, panel_color,
+    accent_color, active_border_color, activity_indicator, activity_indicator_frame_index,
+    ai_color, ai_text, animated_tool_color, asap_color, background_color, blend_color,
+    border_color, dim_color, error_color, file_link_color, foreground_color, header_icon_color,
+    header_name_color, header_session_color, input_color, muted_color, panel_color,
     pending_color, prompt_entry_bg_color, prompt_entry_color, prompt_entry_shimmer_color,
-    queued_color, rainbow_prompt_color, system_message_color, tool_color, user_bg, user_color,
-    user_text,
+    queued_color, rainbow_prompt_color, selection_color, success_color, system_message_color,
+    tool_color, user_bg, user_color, user_text, warning_color,
 };
 
 pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};

@@ -1263,9 +1263,9 @@ fn render_message_into(
                 Line::from(vec![
                     Span::styled(
                         if centered { "✗ " } else { "  ✗ " },
-                        Style::default().fg(Color::Red),
+                        Style::default().fg(error_color()),
                     ),
-                    Span::styled(msg.content.clone(), Style::default().fg(Color::Red)),
+                    Span::styled(msg.content.clone(), Style::default().fg(error_color())),
                 ])
                 .alignment(align),
             );

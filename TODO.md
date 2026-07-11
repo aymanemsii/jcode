@@ -1,5 +1,24 @@
 # TODO
 
+## Task 41 - Broaden TUI color routing MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Routed more low-risk TUI chrome through Theme Palette V2 colors.
+* Expanded theme usage for obvious UI areas such as input/status/panels/borders/notices where safe.
+* Preserved layout behavior, message rendering behavior, keybindings, Queue behavior, server protocol behavior, wallpaper behavior, and multi-session behavior.
+* Kept the slice incremental and avoided broad TUI refactors.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 40 - Investigate real wallpaper support
 
 Task Type: Investigation

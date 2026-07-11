@@ -3,7 +3,8 @@ use super::tools_ui::{get_tool_summary, summarize_batch_running_tools_compact};
 use super::visual_debug::{self, FrameCaptureBuilder};
 use super::{
     ProcessingStatus, TuiState, accent_color, ai_color, animated_tool_color, asap_color, dim_color,
-    pending_color, queued_color, rainbow_prompt_color, user_color,
+    error_color, foreground_color, input_color, muted_color, pending_color, queued_color,
+    rainbow_prompt_color, selection_color, success_color, user_color, warning_color,
 };
 use crate::message::ConnectionPhase;
 use crate::tui::app;
@@ -111,7 +112,7 @@ fn command_suggestion_lines(
     let mut lines = Vec::new();
     if suggestions.len() == 1 {
         let (cmd, desc) = &suggestions[0];
-        let base = Style::default().fg(rgb(255, 213, 128));
+        let base = Style::default().fg(warning_color());
         let mut spans = highlight(cmd, base);
         spans.push(Span::styled(format!("  {}", desc), base));
         lines.push(Line::from(spans));
@@ -132,14 +133,14 @@ fn command_suggestion_lines(
         for (i, (cmd, desc)) in limited.iter().enumerate() {
             let is_selected = i == selected_visible;
             let description_style = if is_selected {
-                Style::default().fg(rgb(255, 213, 128))
+                Style::default().fg(warning_color())
             } else {
                 Style::default().fg(dim_color())
             };
             let command_style = if is_selected {
-                Style::default().fg(rgb(255, 213, 128))
+                Style::default().fg(warning_color())
             } else {
-                Style::default().fg(rgb(128, 203, 196))
+                Style::default().fg(accent_color())
             };
             let mut spans = highlight(cmd, command_style);
             spans.push(Span::styled(format!("  {}", desc), description_style));
@@ -646,10 +647,10 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
     let line = if let Some(build_progress) = crate::build::read_build_progress() {
         let spinner = super::activity_indicator(elapsed, 12.5);
         Line::from(vec![
-            Span::styled(spinner, Style::default().fg(rgb(255, 193, 7))),
+            Span::styled(spinner, Style::default().fg(warning_color())),
             Span::styled(
                 format!(" {}", build_progress),
-                Style::default().fg(rgb(255, 193, 7)),
+                Style::default().fg(warning_color()),
             ),
         ])
     } else if let Some(remaining) = app.rate_limit_remaining() {
@@ -667,13 +668,13 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
             format!("{}s", secs)
         };
         Line::from(vec![
-            Span::styled(spinner, Style::default().fg(rgb(255, 193, 7))),
+            Span::styled(spinner, Style::default().fg(warning_color())),
             Span::styled(
                 format!(
                     " Rate limited. Auto-retry in {}...{}",
                     time_str, queued_suffix
                 ),
-                Style::default().fg(rgb(255, 193, 7)),
+                Style::default().fg(warning_color()),
             ),
         ])
     } else if app.is_processing() {
@@ -700,12 +701,12 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 );
                 append_transport_context(&mut label, app);
                 let label_color = match phase {
-                    crate::message::ConnectionPhase::Retrying { .. } => rgb(255, 193, 7),
+                    crate::message::ConnectionPhase::Retrying { .. } => warning_color(),
                     crate::message::ConnectionPhase::Authenticating if elapsed > 10.0 => {
-                        rgb(255, 193, 7)
+                        warning_color()
                     }
                     crate::message::ConnectionPhase::Connecting if elapsed > 10.0 => {
-                        rgb(255, 193, 7)
+                        warning_color()
                     }
                     _ => dim_color(),
                 };
@@ -766,14 +767,14 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
             }
             ProcessingStatus::WaitingForNetwork { listener } => {
                 let mut spans = vec![
-                    Span::styled("↻ ", Style::default().fg(rgb(255, 193, 7))),
+                    Span::styled("↻ ", Style::default().fg(warning_color())),
                     Span::styled(
                         format!(
                             "network disconnected, waiting to retry · {} · {}",
                             listener,
                             format_elapsed(elapsed)
                         ),
-                        Style::default().fg(rgb(255, 193, 7)),
+                        Style::default().fg(warning_color()),
                     ),
                 ];
                 push_queued_suffix(&mut spans, &queued_suffix);
@@ -855,7 +856,7 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 if let Some(notice) = experimental_notice {
                     spans.push(Span::styled(
                         format!(" · ⚠ {}", notice),
-                        Style::default().fg(rgb(255, 193, 7)).bold(),
+                        Style::default().fg(warning_color()).bold(),
                     ));
                 }
 
@@ -887,13 +888,13 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                     };
                     spans.push(Span::styled(
                         format!(" · ⚠ {} cache miss", miss_str),
-                        Style::default().fg(rgb(255, 193, 7)),
+                        Style::default().fg(warning_color()),
                     ));
                 }
 
                 spans.push(Span::styled(
                     " · Alt+B bg",
-                    Style::default().fg(rgb(100, 100, 100)),
+                    Style::default().fg(muted_color()),
                 ));
 
                 push_queued_suffix(&mut spans, &queued_suffix);
@@ -916,9 +917,9 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 .unwrap_or(1_000_000);
             let warning_color =
                 if total >= severe_token_threshold || app.session_compaction_count() >= 3 {
-                    rgb(255, 100, 100)
+                    error_color()
                 } else {
-                    rgb(255, 193, 7)
+                    warning_color()
                 };
             Line::from(vec![
                 Span::styled("⚠ ", Style::default().fg(warning_color)),
@@ -983,7 +984,7 @@ fn streaming_status_spans(
     spans.push(Span::styled(
         format!(" {}", status_text),
         Style::default().fg(if has_warning {
-            rgb(255, 193, 7)
+            warning_color()
         } else {
             dim_color()
         }),
@@ -1424,7 +1425,7 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
         } else {
             format!("{} selection · drag to copy", pane_label)
         };
-        spans.push(Span::styled(label, Style::default().fg(rgb(140, 220, 200))));
+        spans.push(Span::styled(label, Style::default().fg(selection_color())));
     }
 
     if let Some(flicker_notice) = super::recent_flicker_ui_notice() {
@@ -1450,19 +1451,19 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
         push_sep(&mut spans);
         spans.push(Span::styled(
             flicker_notice.summary,
-            Style::default().fg(rgb(255, 193, 7)),
+            Style::default().fg(warning_color()),
         ));
         push_sep(&mut spans);
         spans.push(Span::styled(
             flicker_notice.hint,
-            Style::default().fg(rgb(140, 180, 255)),
+            Style::default().fg(accent_color()),
         ));
         spans.push(Span::raw(" "));
         if let Some(success) = copy_badge_ui.feedback_for_key(key, copy_badge_now) {
             let feedback_style = if success {
-                Style::default().fg(ai_color()).bold()
+                Style::default().fg(success_color()).bold()
             } else {
-                Style::default().fg(Color::Red).bold()
+                Style::default().fg(error_color()).bold()
             };
             let feedback_text = if success {
                 "✓ Copied! "
@@ -1500,7 +1501,7 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
             push_sep(&mut spans);
             spans.push(Span::styled(
                 schedule_notice,
-                Style::default().fg(rgb(140, 180, 255)),
+                Style::default().fg(accent_color()),
             ));
         }
 
@@ -1521,7 +1522,7 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
                 push_sep(&mut spans);
                 spans.push(Span::styled(
                     format!("🧊 cache cold{}", tokens_str),
-                    Style::default().fg(rgb(140, 180, 255)),
+                    Style::default().fg(accent_color()),
                 ));
             } else if cache_info.remaining_secs <= 60 {
                 let tokens_str = cache_info
@@ -1537,7 +1538,7 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
                 push_sep(&mut spans);
                 spans.push(Span::styled(
                     format!("⏳ cache {}s{}", cache_info.remaining_secs, tokens_str),
-                    Style::default().fg(rgb(255, 193, 7)),
+                    Style::default().fg(warning_color()),
                 ));
             }
         }
@@ -1547,7 +1548,7 @@ pub(super) fn build_notification_spans(app: &dyn TuiState) -> Vec<Span<'static>>
         push_sep(&mut spans);
         spans.push(Span::styled(
             "📋 stash",
-            Style::default().fg(rgb(255, 193, 7)),
+            Style::default().fg(warning_color()),
         ));
     }
 
@@ -1579,14 +1580,14 @@ pub(super) fn draw_overscroll_status(frame: &mut Frame, app: &dyn TuiState, area
     }
     let data = app.info_widget_data();
 
-    let sep = || Span::styled(" · ", Style::default().fg(rgb(100, 100, 110)));
+    let sep = || Span::styled(" · ", Style::default().fg(muted_color()));
 
     // The countdown is the priority affordance: it explains the line exists and
     // is going away. Build it first so it always gets space on the right edge.
     let countdown: Option<Span> = app.chat_overscroll_remaining().map(|secs| {
         Span::styled(
             format!("(overscroll {:.1})", secs.max(0.0)),
-            Style::default().fg(rgb(150, 150, 165)).italic(),
+            Style::default().fg(muted_color()).italic(),
         )
     });
 
@@ -1628,7 +1629,7 @@ pub(super) fn draw_overscroll_status(frame: &mut Frame, app: &dyn TuiState, area
         }
         spans.push(Span::styled(
             overscroll_provider_display(&provider),
-            Style::default().fg(rgb(140, 180, 255)),
+            Style::default().fg(accent_color()),
         ));
     }
 
@@ -1661,7 +1662,7 @@ pub(super) fn draw_overscroll_status(frame: &mut Frame, app: &dyn TuiState, area
         if !spans.is_empty() {
             spans.push(sep());
         }
-        spans.push(Span::styled(" ", Style::default().fg(rgb(140, 180, 255))));
+        spans.push(Span::styled(" ", Style::default().fg(accent_color())));
         spans.push(Span::styled(dir, Style::default().fg(rgb(140, 140, 150))));
     }
 
@@ -1765,7 +1766,7 @@ fn overscroll_truncate_spans(spans: Vec<Span<'static>>, max_width: usize) -> Vec
         }
         break;
     }
-    out.push(Span::styled("…", Style::default().fg(rgb(100, 100, 110))));
+    out.push(Span::styled("…", Style::default().fg(muted_color())));
     out
 }
 
@@ -1823,7 +1824,7 @@ fn overscroll_auth_label(
             Some(("API key", rgb(180, 180, 190)))
         }
         AuthMethod::OpenRouterApiKey | AuthMethod::OpenCodeApiKey => {
-            Some(("API key", rgb(140, 180, 255)))
+            Some(("API key", accent_color()))
         }
         AuthMethod::AnthropicOAuth => Some(("OAuth", rgb(255, 160, 100))),
         AuthMethod::OpenAIOAuth => Some(("OAuth", rgb(100, 200, 180))),
@@ -1890,7 +1891,7 @@ fn overscroll_context_bar(used: usize, limit: usize, cells: usize) -> Vec<Span<'
     // Match the info widget usage bar palette (based on remaining context).
     let left_pct = 100u16.saturating_sub(pct);
     let fill_color = if left_pct <= 20 {
-        rgb(255, 100, 100)
+        error_color()
     } else if left_pct <= 50 {
         rgb(255, 200, 100)
     } else {
@@ -1970,7 +1971,7 @@ pub(super) fn draw_input(
         hint_line = Some(hint.trim().to_string());
         lines.push(Line::from(Span::styled(
             hint,
-            Style::default().fg(rgb(120, 200, 255)),
+            Style::default().fg(accent_color()),
         )));
     } else if app.is_processing() && !input_text.is_empty() {
         hint_shown = true;
@@ -2042,6 +2043,7 @@ pub(super) fn draw_input(
     }
 
     let centered = app.centered_mode();
+    let input_style = Style::default().fg(foreground_color()).bg(input_color());
     let paragraph = if centered {
         Paragraph::new(
             lines
@@ -2051,7 +2053,8 @@ pub(super) fn draw_input(
         )
     } else {
         Paragraph::new(lines.clone())
-    };
+    }
+    .style(input_style);
     frame.render_widget(paragraph, area);
 
     let cursor_screen_line = cursor_line.saturating_sub(scroll_offset) + suggestions_offset;
@@ -2320,7 +2323,7 @@ fn send_mode_indicator(app: &dyn TuiState) -> (&'static str, Color) {
     if mode.is_shell() {
         ("$", shell_mode_color())
     } else if app.next_prompt_new_session_armed() {
-        ("↗", rgb(120, 200, 255))
+        ("↗", accent_color())
     } else if app.queue_mode() {
         ("⏳", queued_color())
     } else if let Some(ref conn) = app.connection_type() {
@@ -2330,7 +2333,7 @@ fn send_mode_indicator(app: &dyn TuiState) -> (&'static str, Color) {
         } else if lower.contains("subprocess") || lower.contains("cli") {
             ("󰆍", rgb(180, 160, 220))
         } else {
-            ("󰖟", rgb(140, 180, 255))
+            ("󰖟", accent_color())
         }
     } else {
         // Idle: no glyph. The faint dir · model hint is drawn instead.
@@ -2406,7 +2409,7 @@ fn idle_status_facts(app: &dyn TuiState) -> Option<Vec<Span<'static>>> {
     let ledger = crate::tui::info_widget::widget_visible_facts(&data);
     // The idle input hint owns model + dir, so treat them as already shown.
     let mut spans: Vec<Span<'static>> = Vec::new();
-    let sep = || Span::styled(" · ", Style::default().fg(rgb(100, 100, 110)));
+    let sep = || Span::styled(" · ", Style::default().fg(muted_color()));
 
     if ledger.is_missing(Fact::Provider) {
         let provider = data

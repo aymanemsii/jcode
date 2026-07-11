@@ -403,7 +403,7 @@ pub(crate) fn render_usage_message(
     width: u16,
     _diff_mode: crate::config::DiffDisplayMode,
 ) -> Vec<Line<'static>> {
-    let border_style = Style::default().fg(rgb(120, 140, 190));
+    let border_style = Style::default().fg(border_color());
     let title = msg.title.as_deref().unwrap_or("Usage");
     let inner_width = width.saturating_sub(8).max(24) as usize;
     let content_width = inner_width.min(96);
@@ -416,13 +416,13 @@ pub(crate) fn render_usage_message(
         }
 
         let (text, style) = if let Some(rest) = raw_line.strip_prefix("! ") {
-            (rest, Style::default().fg(Color::Red))
+            (rest, Style::default().fg(error_color()))
         } else if let Some(rest) = raw_line.strip_prefix("~ ") {
-            (rest, Style::default().fg(rgb(255, 200, 100)))
+            (rest, Style::default().fg(warning_color()))
         } else if let Some(rest) = raw_line.strip_prefix("+ ") {
-            (rest, Style::default().fg(rgb(100, 220, 170)))
+            (rest, Style::default().fg(success_color()))
         } else if let Some(rest) = raw_line.strip_prefix("# ") {
-            (rest, Style::default().fg(Color::White).bold())
+            (rest, Style::default().fg(foreground_color()).bold())
         } else {
             (raw_line, Style::default().fg(dim_color()))
         };
@@ -466,27 +466,27 @@ pub(crate) fn render_overnight_message(
     let (icon, border_color, status_color, text_color) = match card.status.as_str() {
         "completed" => (
             "✓",
-            rgb(90, 190, 120),
-            rgb(130, 225, 155),
-            rgb(220, 246, 226),
+            success_color(),
+            success_color(),
+            foreground_color(),
         ),
         "failed" => (
             "✗",
-            rgb(220, 100, 100),
-            rgb(255, 150, 150),
-            rgb(255, 225, 225),
+            error_color(),
+            error_color(),
+            foreground_color(),
         ),
         "cancel requested" | "cancelling" => (
             "◌",
-            rgb(255, 193, 94),
-            rgb(255, 214, 120),
-            rgb(255, 241, 214),
+            warning_color(),
+            warning_color(),
+            foreground_color(),
         ),
         _ => (
             "◌",
-            rgb(158, 135, 255),
-            rgb(198, 184, 255),
-            rgb(232, 228, 255),
+            active_border_color(),
+            accent_color(),
+            foreground_color(),
         ),
     };
     let border_style = Style::default().fg(border_color);
@@ -495,7 +495,7 @@ pub(crate) fn render_overnight_message(
     let label_style = Style::default().fg(dim_color());
     let dim_style = Style::default().fg(dim_color()).dim();
     let filled_style = Style::default().fg(status_color);
-    let empty_style = Style::default().fg(rgb(70, 68, 95));
+    let empty_style = Style::default().fg(muted_color());
 
     let max_box_width = if centered {
         (width.saturating_sub(4) as usize).min(120)
@@ -975,11 +975,11 @@ fn render_scheduled_tool_message(msg: &DisplayMessage, width: u16) -> Option<Vec
     .max(20);
     let inner_width = max_box_width.saturating_sub(4).max(1);
 
-    let border_style = Style::default().fg(rgb(140, 180, 255));
-    let status_style = Style::default().fg(rgb(186, 220, 255)).bold();
+    let border_style = Style::default().fg(active_border_color());
+    let status_style = Style::default().fg(accent_color()).bold();
     let label_style = Style::default().fg(dim_color());
-    let body_style = Style::default().fg(rgb(225, 232, 245));
-    let meta_style = Style::default().fg(rgb(170, 200, 255));
+    let body_style = Style::default().fg(foreground_color());
+    let meta_style = Style::default().fg(accent_color());
 
     let mut box_content = vec![Line::from(Span::styled(
         format!("Will run {}.", parsed.when),
@@ -1144,8 +1144,8 @@ fn render_connection_system_message(msg: &DisplayMessage, width: u16) -> Vec<Lin
         if let Some((status_line, detail, hint)) = parse_connection_retry_message(content) {
             (
                 width_stable_system_title("⚡ reconnecting", "reconnecting"),
-                rgb(255, 193, 94),
-                rgb(255, 220, 140),
+                warning_color(),
+                warning_color(),
                 status_line,
                 Some(detail),
                 hint,
@@ -1154,8 +1154,8 @@ fn render_connection_system_message(msg: &DisplayMessage, width: u16) -> Vec<Lin
         {
             (
                 width_stable_system_title("⚡ waiting for reload", "waiting for reload"),
-                rgb(120, 180, 255),
-                rgb(180, 215, 255),
+                active_border_color(),
+                accent_color(),
                 status_line,
                 Some(detail),
                 hint,
@@ -1163,8 +1163,8 @@ fn render_connection_system_message(msg: &DisplayMessage, width: u16) -> Vec<Lin
         } else if content.starts_with("⏳ Starting server") {
             (
                 width_stable_system_title("⏳ starting server", "starting server"),
-                rgb(255, 193, 94),
-                rgb(255, 220, 140),
+                warning_color(),
+                warning_color(),
                 "Starting shared server".to_string(),
                 None,
                 None,
@@ -1187,8 +1187,8 @@ fn render_connection_system_message(msg: &DisplayMessage, width: u16) -> Vec<Lin
     let border_style = Style::default().fg(border_color);
     let status_style = Style::default().fg(status_color).bold();
     let label_style = Style::default().fg(dim_color());
-    let body_style = Style::default().fg(rgb(225, 232, 245));
-    let hint_style = Style::default().fg(rgb(170, 200, 255));
+    let body_style = Style::default().fg(foreground_color());
+    let hint_style = Style::default().fg(accent_color());
     let mut box_content = vec![Line::from(Span::styled(status_line, status_style))];
 
     if let Some(detail) = detail.filter(|detail| !detail.is_empty()) {
@@ -1237,23 +1237,23 @@ pub(crate) fn render_background_task_message(
     let (title, border_color, status_color, preview_color) = if parsed.status.starts_with('✓') {
         (
             format!("✓ bg {} completed · {}", task_label, parsed.task_id),
-            rgb(100, 180, 100),
-            rgb(120, 210, 140),
-            rgb(214, 240, 220),
+            success_color(),
+            success_color(),
+            foreground_color(),
         )
     } else if parsed.status.starts_with('✗') {
         (
             format!("✗ bg {} failed · {}", task_label, parsed.task_id),
-            rgb(220, 100, 100),
-            rgb(255, 150, 150),
-            rgb(255, 225, 225),
+            error_color(),
+            error_color(),
+            foreground_color(),
         )
     } else {
         (
             format!("◌ bg {} running · {}", task_label, parsed.task_id),
-            rgb(255, 193, 94),
-            rgb(255, 214, 120),
-            rgb(255, 241, 214),
+            warning_color(),
+            warning_color(),
+            foreground_color(),
         )
     };
 
@@ -1392,12 +1392,12 @@ fn render_background_task_progress_message(
     width: u16,
 ) -> Vec<Line<'static>> {
     let centered = markdown::center_code_blocks();
-    let border_color = rgb(255, 193, 94);
+    let border_color = warning_color();
     let border_style = Style::default().fg(border_color);
     let label_style = Style::default().fg(dim_color());
-    let text_style = Style::default().fg(rgb(255, 241, 214));
-    let filled_style = Style::default().fg(rgb(255, 214, 120));
-    let empty_style = Style::default().fg(rgb(94, 82, 62));
+    let text_style = Style::default().fg(foreground_color());
+    let filled_style = Style::default().fg(warning_color());
+    let empty_style = Style::default().fg(muted_color());
 
     let max_box_width = if centered {
         (width.saturating_sub(4) as usize).min(120)

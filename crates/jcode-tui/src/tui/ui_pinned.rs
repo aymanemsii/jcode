@@ -24,8 +24,12 @@ use util_support::{
 const SIDE_PANEL_HEADER_HEIGHT: u16 = 1;
 
 fn side_panel_border_style(focused: bool) -> Style {
-    let border_color = if focused { tool_color() } else { dim_color() };
-    Style::default().fg(border_color)
+    let color = if focused {
+        active_border_color()
+    } else {
+        border_color()
+    };
+    Style::default().fg(color)
 }
 
 fn side_panel_inner(area: Rect) -> Rect {
@@ -107,9 +111,9 @@ fn image_group_for(source: &crate::session::RenderedImageSource) -> ImageGroup {
 
 fn image_group_heading(group: ImageGroup) -> (&'static str, Color) {
     match group {
-        ImageGroup::Inputs => ("inputs", rgb(138, 180, 248)),
+        ImageGroup::Inputs => ("inputs", user_color()),
         ImageGroup::Tools => ("tools", accent_color()),
-        ImageGroup::Other => ("other", dim_color()),
+        ImageGroup::Other => ("other", muted_color()),
     }
 }
 
@@ -930,7 +934,7 @@ pub(super) fn draw_pinned_content_cached(
     {
         title_parts.push(Span::styled(
             format!(" auto-hide {}s", remaining),
-            Style::default().fg(rgb(255, 193, 7)),
+            Style::default().fg(warning_color()),
         ));
     }
     title_parts.push(Span::styled(
