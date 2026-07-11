@@ -896,7 +896,7 @@ fn project_workspace_config_overrides_only_allowlisted_visual_fields() {
 }
 
 #[test]
-fn project_workspace_config_is_current_directory_only() {
+fn project_workspace_config_discovers_parent_directory_file() {
     let _guard = crate::storage::lock_test_env();
     let prev_home = std::env::var_os("JCODE_HOME");
     let prev_cwd = std::env::current_dir().expect("current dir");
@@ -917,8 +917,49 @@ fn project_workspace_config_is_current_directory_only() {
     std::env::set_current_dir(&child).expect("set child cwd");
     let cfg = Config::load();
 
-    assert_eq!(cfg.workspace.name(), None);
-    assert_eq!(cfg.workspace_config.path, None);
+    assert_eq!(cfg.workspace.name(), Some("ParentWorkspace"));
+    assert_eq!(
+        cfg.workspace_config.path,
+        Some(project.path().join(".jcode").join("workspace.toml"))
+    );
+
+    restore_current_dir(&prev_cwd);
+    restore_env_var("JCODE_HOME", prev_home);
+}
+
+#[test]
+fn project_workspace_config_uses_nearest_discovered_file() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let parent_workspace_dir = project.path().join(".jcode");
+    let child_workspace_dir = child.join(".jcode");
+    std::fs::create_dir_all(&parent_workspace_dir).expect("create parent workspace dir");
+    std::fs::create_dir_all(&child_workspace_dir).expect("create child workspace dir");
+    std::fs::write(
+        parent_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"ParentWorkspace\"\n",
+    )
+    .expect("write parent workspace config");
+    std::fs::write(
+        child_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"ChildWorkspace\"\n",
+    )
+    .expect("write child workspace config");
+
+    std::env::set_current_dir(&child).expect("set child cwd");
+    let cfg = Config::load();
+
+    assert_eq!(cfg.workspace.name(), Some("ChildWorkspace"));
+    assert_eq!(
+        cfg.workspace_config.path,
+        Some(child.join(".jcode").join("workspace.toml"))
+    );
 
     restore_current_dir(&prev_cwd);
     restore_env_var("JCODE_HOME", prev_home);

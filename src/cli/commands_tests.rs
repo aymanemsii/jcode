@@ -254,6 +254,7 @@ fn config_show_reports_missing_accent_as_default() {
     let output = render_config_show(&cfg);
 
     assert!(output.contains("workspace config: not found"));
+    assert!(output.contains("workspace config location: not found"));
     assert!(output.contains("workspace.name: not configured"));
     assert!(output.contains("project-local display overrides: none"));
     assert!(output.contains("app.name: not configured"));
@@ -315,6 +316,7 @@ fn config_show_reports_project_local_workspace_customization() {
     let output = render_config_show(&cfg);
 
     assert!(output.contains("workspace config: .jcode/workspace.toml"));
+    assert!(output.contains("workspace config location: parent directory"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains(
         "project-local display overrides: display.theme, display.accent_color, display.background_style, display.background_opacity, display.top_bar, display.top_bar_items"
@@ -381,11 +383,15 @@ top_bar_items = ["app", "session", "theme", "repo"]
     )
     .expect("valid workspace toml");
 
-    let output =
-        render_workspace_show_from_value(std::path::Path::new(".jcode/workspace.toml"), &value);
+    let output = render_workspace_show_from_value(
+        std::path::Path::new(".jcode/workspace.toml"),
+        "current directory",
+        &value,
+    );
 
     assert!(output.contains("Workspace config: found"));
     assert!(output.contains("path: .jcode/workspace.toml"));
+    assert!(output.contains("location: current directory"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains("display.theme: cursor"));
     assert!(output.contains("display.accent_color: #0088FF"));

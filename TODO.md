@@ -1,5 +1,26 @@
 # TODO
 
+## Task 42 - Add parent-directory workspace discovery
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added parent-directory discovery for `.jcode/workspace.toml`.
+* Loaded the nearest workspace config when running jcode from subdirectories.
+* Preserved visual-only workspace allowlist behavior and global-only settings.
+* Updated config visibility and workspace docs to report discovered workspace paths.
+* Kept `jcode workspace init` and `jcode workspace edit` current-directory only.
+* Deferred multi-workspace merging, project-local secrets, workspace parent edit/init behavior, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 41 - Broaden TUI color routing MVP
 
 Task Type: Implementation

@@ -32,14 +32,18 @@ Useful outcomes include:
 
 The first version should stay visual and informational. It should not add project-local behavior that affects credentials, provider selection, network behavior, command execution, or auth.
 
-## File Path
+## File Discovery
 
-jcode reads the project-local workspace file only from the current working
-directory:
+jcode discovers the project-local workspace file by starting in the current
+working directory and walking upward through parent directories until it finds:
 
 ```text
-./.jcode/workspace.toml
+.jcode/workspace.toml
 ```
+
+The nearest file wins. If both the current directory and a parent directory have
+`.jcode/workspace.toml`, jcode loads only the current directory file. It does
+not merge multiple workspace files.
 
 This path keeps project-local workspace identity separate from the global user config file:
 
@@ -51,8 +55,6 @@ $JCODE_HOME/config.toml
 `./.jcode/workspace.toml` is preferable to reusing `./.jcode/config.toml` for the MVP because `config.toml` already means user-level jcode configuration. Reusing the same filename inside a repository could imply that every global option is valid project-locally, including sensitive provider, auth, privacy, and network settings. A distinct `workspace.toml` name makes the scope clearer: this file describes the local workspace, not the user's account, credentials, or global app behavior.
 
 Only reuse `./.jcode/config.toml` if there is a strong future reason to support a full layered config system and the loader can clearly separate project-safe keys from global-only keys.
-
-For the MVP, jcode does not search parent directories.
 
 ## Config Shape
 
@@ -72,6 +74,7 @@ startup_splash_footer = "workspace customization enabled"
 background_style = "subtle-grid"
 background_opacity = 0.15
 top_bar = true
+top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
 The example in shorthand form:
@@ -117,6 +120,7 @@ The MVP allows only visual and workspace identity fields:
 * `display.background_style`
 * `display.background_opacity`
 * `display.top_bar`
+* `display.top_bar_items`
 
 These fields are appropriate because they are visible, low-risk, and already connected to the customization work in this fork. Background style and opacity are visual-only terminal text-cell settings; they do not introduce image files, terminal image protocols, network access, or command execution. These fields help identify the current repository without changing model behavior, authentication, network access, or command execution.
 
@@ -153,20 +157,19 @@ The most important safety boundary is that a cloned repo should not be able to c
 jcode currently uses:
 
 ```text
-current directory only
+nearest .jcode/workspace.toml found by walking upward from the current directory
 ```
 
-Current-directory-only loading is safer and easier to explain. It avoids surprising users when jcode is launched from a subdirectory and silently loads a parent repository's settings. It also avoids extra filesystem traversal during startup.
-
-Upward discovery remains deferred. If added later, it should be explicit,
-well-documented, and paired with CLI visibility so users can see exactly which
-workspace file was loaded.
+Discovery stops at the filesystem root. Only one workspace file is loaded: the
+first `.jcode/workspace.toml` found while walking upward. Parent files above the
+nearest match are ignored and never merged.
 
 ## CLI Visibility
 
 `jcode config show` reports project-local customization compactly:
 
-* Project-local workspace config path when loaded, or `not found`.
+* Discovered project-local workspace config path when loaded, or `not found`.
+* Whether the discovered file is in the current directory or a parent directory.
 * `workspace.name` when present.
 * Which project-local display fields override global config.
 
@@ -183,10 +186,11 @@ jcode workspace init
 jcode workspace edit
 ```
 
-`jcode workspace show` reports whether `./.jcode/workspace.toml` exists in the
-current directory. When present, it prints the file path, `workspace.name`, and
-the supported project-local `display.*` fields. When missing, it prints the path
-that would be used and suggests `jcode workspace init` or `jcode workspace edit`.
+`jcode workspace show` uses the same parent-directory discovery as config
+loading. When present, it prints the discovered file path, whether it came from
+the current directory or a parent directory, `workspace.name`, and the supported
+project-local `display.*` fields. When missing, it prints the current-directory
+path that `jcode workspace init` or `jcode workspace edit` would use.
 
 `jcode workspace init` creates `./.jcode/workspace.toml`, creating `./.jcode/`
 first when needed. It does not overwrite an existing file. The generated file is
@@ -206,9 +210,12 @@ the file is missing, it creates the same safe default first. Editor selection
 matches `jcode config edit`: `VISUAL`, then `EDITOR`, then Notepad on Windows,
 with a helpful error on macOS/Linux if no editor is configured.
 
-All workspace commands are current-directory only. They do not search parent
-directories, modify global config, add secrets, or change provider, auth,
-network, execution, Queue, or server protocol behavior.
+`jcode workspace init` and `jcode workspace edit` remain current-directory
+commands. They create or edit only `./.jcode/workspace.toml` under the current
+working directory. They do not edit a discovered parent file.
+
+Workspace commands do not modify global config, add secrets, or change
+provider, auth, network, execution, Queue, or server protocol behavior.
 
 ## Risks
 
@@ -221,20 +228,23 @@ Important risks:
 * Users expecting all global config fields to work project-locally.
 * Teams committing local-only visual preferences that not every contributor wants.
 
-The MVP should reduce these risks by using a distinct filename, a small allowlist of fields, current-directory-only loading, and clear CLI visibility before broadening the feature.
+The MVP should reduce these risks by using a distinct filename, a small
+allowlist of fields, nearest-file-only discovery, and clear CLI visibility.
 
 ## Implemented MVP
 
 The implemented MVP:
 
 * Adds a workspace config model containing `workspace.name` and the allowed `display.*` fields.
-* Loads only `./.jcode/workspace.toml` from the current working directory.
+* Searches upward from the current working directory for `.jcode/workspace.toml`.
+* Loads only the nearest discovered workspace file.
 * Merges workspace values over global config at the field level for the allowlisted fields.
 * Reuses existing validation and fallback behavior for themes, accent colors, splash text, terminal-safe background fields, and `top_bar`.
-* Updates `jcode config show` to report the loaded workspace path, workspace name, and project-local display overrides.
+* Updates `jcode config show` to report the discovered workspace path, workspace location, workspace name, and project-local display overrides.
 * Adds `jcode workspace show`, `jcode workspace init`, and `jcode workspace edit`.
 * Rejects non-allowlisted project-local sections instead of treating them as config.
 
-The MVP does not include upward discovery, secrets, provider/model settings,
-auth settings, network/privacy settings, automatic execution, workspace
-Queue integration, server protocol changes, or Cargo version changes.
+The MVP does not include multi-workspace merging, project-local secrets,
+provider/model settings, auth settings, network/privacy settings, automatic
+execution, workspace parent init/edit behavior, workspace Queue integration,
+server protocol changes, or Cargo version changes.

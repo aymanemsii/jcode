@@ -1,7 +1,7 @@
 use super::*;
 use crate::storage::jcode_dir;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const WORKSPACE_CONFIG_RELATIVE_PATH: &[&str] = &[".jcode", "workspace.toml"];
 
@@ -42,15 +42,35 @@ impl Config {
     }
 
     /// Get the current-directory project-local workspace config path.
-    ///
-    /// MVP behavior intentionally checks only the process current working
-    /// directory. It does not search parent directories.
-    pub fn workspace_path() -> Option<PathBuf> {
+    pub fn current_workspace_path() -> Option<PathBuf> {
         let mut path = std::env::current_dir().ok()?;
         for component in WORKSPACE_CONFIG_RELATIVE_PATH {
             path.push(component);
         }
         Some(path)
+    }
+
+    /// Discover the project-local workspace config path.
+    ///
+    /// Search starts at the process current working directory and walks upward
+    /// through parents until the nearest `.jcode/workspace.toml` is found or
+    /// the filesystem root is reached.
+    pub fn workspace_path() -> Option<PathBuf> {
+        let cwd = std::env::current_dir().ok()?;
+        Self::discover_workspace_path_from(&cwd)
+    }
+
+    pub fn discover_workspace_path_from(start: &Path) -> Option<PathBuf> {
+        for dir in start.ancestors() {
+            let mut path = dir.to_path_buf();
+            for component in WORKSPACE_CONFIG_RELATIVE_PATH {
+                path.push(component);
+            }
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+        None
     }
 
     /// Load config from file, with environment variable overrides
@@ -105,9 +125,6 @@ impl Config {
         let Some(path) = Self::workspace_path() else {
             return Ok(None);
         };
-        if !path.exists() {
-            return Ok(None);
-        }
 
         let content = std::fs::read_to_string(&path).map_err(|e| {
             anyhow::anyhow!(
@@ -131,7 +148,7 @@ impl Config {
             Ok(Some(workspace)) => self.apply_project_workspace_customization(workspace),
             Ok(None) => {}
             Err(e) => {
-                if let Some(path) = Self::workspace_path().filter(|path| path.exists()) {
+                if let Some(path) = Self::workspace_path() {
                     self.workspace_config.path = Some(path);
                 }
                 crate::logging::error(&format!("Failed to load workspace config: {}", e));

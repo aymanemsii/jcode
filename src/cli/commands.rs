@@ -570,7 +570,7 @@ fn create_workspace_config_file(overwrite: bool) -> Result<PathBuf> {
 }
 
 fn workspace_config_path() -> Result<PathBuf> {
-    crate::config::Config::workspace_path().ok_or_else(|| {
+    crate::config::Config::current_workspace_path().ok_or_else(|| {
         anyhow::anyhow!("Could not determine current-directory workspace config path")
     })
 }
@@ -653,6 +653,15 @@ fn render_config_show(config: &crate::config::Config) -> String {
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| "not found".to_string());
+    let workspace_config_location_label = config
+        .workspace_config
+        .path
+        .as_ref()
+        .and_then(|path| {
+            crate::config::Config::current_workspace_path()
+                .map(|current_path| workspace_location_label(path, &current_path))
+        })
+        .unwrap_or("not found");
     let workspace_name_label = compact_optional_text_label(config.workspace.name.as_deref());
     let workspace_display_overrides_label = if config.workspace_config.display_overrides.is_empty()
     {
@@ -758,6 +767,7 @@ fn render_config_show(config: &crate::config::Config) -> String {
     format!(
         "Display customization config:\n\
 workspace config: {workspace_config_label}\n\
+workspace config location: {workspace_config_location_label}\n\
 workspace.name: {workspace_name_label}\n\
 project-local display overrides: {workspace_display_overrides_label}\n\
 app.name: {app_name_label}\n\
@@ -789,16 +799,16 @@ fallback: {fallback_label}\n"
 }
 
 fn render_workspace_show() -> Result<String> {
-    let workspace_path = workspace_config_path()?;
-    if !workspace_path.exists() {
+    let current_workspace_path = workspace_config_path()?;
+    let Some(workspace_path) = crate::config::Config::workspace_path() else {
         return Ok(format!(
             "Workspace config: not found\n\
-path: {}\n\
+current-directory path: {}\n\
 \n\
 Create one with `jcode workspace init`, or open a new local workspace file with `jcode workspace edit`.\n",
-            workspace_path.display()
+            current_workspace_path.display()
         ));
-    }
+    };
 
     let content = std::fs::read_to_string(&workspace_path).map_err(|err| {
         anyhow::anyhow!(
@@ -813,13 +823,26 @@ Create one with `jcode workspace init`, or open a new local workspace file with 
         )
     })?;
 
-    Ok(render_workspace_show_from_value(&workspace_path, &value))
+    Ok(render_workspace_show_from_value(
+        &workspace_path,
+        workspace_location_label(&workspace_path, &current_workspace_path),
+        &value,
+    ))
 }
 
-fn render_workspace_show_from_value(path: &Path, value: &toml::Value) -> String {
+fn workspace_location_label(path: &Path, current_workspace_path: &Path) -> &'static str {
+    if path == current_workspace_path {
+        "current directory"
+    } else {
+        "parent directory"
+    }
+}
+
+fn render_workspace_show_from_value(path: &Path, location: &str, value: &toml::Value) -> String {
     format!(
         "Workspace config: found\n\
 path: {}\n\
+location: {}\n\
 workspace.name: {}\n\
 \n\
 Supported project-local display fields:\n\
@@ -833,6 +856,7 @@ display.background_opacity: {}\n\
 display.top_bar: {}\n\
 display.top_bar_items: {}\n",
         path.display(),
+        location,
         toml_string_label(value, &["workspace", "name"]),
         toml_string_label(value, &["display", "theme"]),
         toml_string_label(value, &["display", "accent_color"]),

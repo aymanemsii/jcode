@@ -998,7 +998,7 @@ pub(crate) enum ConfigCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum WorkspaceCommand {
-    /// Show current-directory project-local workspace customization
+    /// Show discovered project-local workspace customization
     Show,
     /// Create ./.jcode/workspace.toml with safe visual-only defaults
     Init,

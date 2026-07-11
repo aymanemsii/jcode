@@ -20,12 +20,15 @@ Customization is configured through TOML sections such as `[app]`, `[display]`, 
 
 ## Project-Local Customization
 
-jcode also supports a visual-only project-local workspace file in the current
-working directory:
+jcode also supports a visual-only project-local workspace file:
 
 ```text
-./.jcode/workspace.toml
+.jcode/workspace.toml
 ```
+
+jcode searches upward from the current working directory and loads the nearest
+`.jcode/workspace.toml`. It loads only one workspace file and does not merge
+multiple parent workspace files.
 
 Supported MVP shape:
 
@@ -59,7 +62,7 @@ Only these project-local fields are supported:
 * `display.top_bar_items`
 
 Project-local values override global config at field level for those fields
-only. jcode does not search parent directories for this MVP.
+only.
 
 Global config remains the source for `app.name`, `app.terminal_title`,
 credentials, providers, auth, privacy/network settings, execution settings, and
@@ -76,8 +79,8 @@ jcode workspace init
 jcode workspace edit
 ```
 
-`jcode workspace show` reports whether `./.jcode/workspace.toml` exists in the
-current directory, then shows the workspace path, `workspace.name`, and the
+`jcode workspace show` reports the discovered workspace file, whether it was
+found in the current directory or a parent directory, `workspace.name`, and the
 supported project-local display fields when present.
 
 `jcode workspace init` creates `./.jcode/workspace.toml` with safe visual-only
@@ -96,6 +99,9 @@ top_bar_items = ["app", "session", "theme", "repo"]
 `jcode workspace edit` creates the same local file if needed, then opens it in
 the editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS and
 Linux, set `VISUAL` or `EDITOR` first.
+
+`jcode workspace init` and `jcode workspace edit` are current-directory
+commands. They do not edit a discovered parent workspace file.
 
 ## App Identity
 
@@ -240,13 +246,12 @@ jcode theme preview [theme-name]
 ```
 
 `jcode theme list` prints the built-in theme names and any global custom themes
-defined under `[themes.<name>]`. If `./.jcode/workspace.toml` in the current
-directory overrides `display.theme` or `display.accent_color`, the command notes
-that project-local workspace customization may affect the current theme or
-accent.
+defined under `[themes.<name>]`. If the discovered `.jcode/workspace.toml`
+overrides `display.theme` or `display.accent_color`, the command notes that
+project-local workspace customization may affect the current theme or accent.
 
 `jcode theme current` shows the active resolved theme from the same merged
-global-plus-current-directory workspace config used by `jcode config show`. It
+global-plus-discovered-workspace config used by `jcode config show`. It
 reports the active theme name, theme source, theme validity, active accent
 color, whether a project-local workspace config is present, and whether
 project-local `display.theme` or `display.accent_color` overrides are active.
@@ -381,7 +386,7 @@ The command reports safe display/customization visibility details, including:
 * Background style and opacity fields
 * Top status bar setting
 * Top status bar item order and ignored item names
-* Project-local workspace config path, workspace name, and project-local display overrides
+* Project-local workspace config path, location, workspace name, and project-local display overrides
 
 This command is read-only and intended for diagnosing which customization settings are active.
 
@@ -400,6 +405,7 @@ The current customization system includes:
 * Configurable top status bar items
 * Project-local visual workspace customization
 * Workspace show/init/edit commands
+* Parent-directory workspace discovery
 * Config visibility
 * Config editing command
 
@@ -410,7 +416,6 @@ The following customization areas are intentionally deferred:
 * Real image wallpaper/background files
 * Animated wallpaper/backgrounds
 * Terminal image protocol wallpaper
-* Parent-directory workspace discovery
 * Project-local app identity or terminal title
 * Theme import/export
 * Full TUI recolor sweep

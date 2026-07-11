@@ -465,8 +465,9 @@ pub fn on_config_reloaded(listener: fn()) {
 pub struct Config {
     /// Effective project-local workspace identity.
     ///
-    /// This is populated only from `./.jcode/workspace.toml` in the process
-    /// current directory. It is not loaded from or saved to global config.toml.
+    /// This is populated from the nearest `.jcode/workspace.toml` discovered
+    /// by walking upward from the process current directory. It is not loaded
+    /// from or saved to global config.toml.
     #[serde(skip)]
     pub workspace: WorkspaceIdentityConfig,
 
