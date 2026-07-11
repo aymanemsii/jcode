@@ -1,5 +1,25 @@
 # TODO
 
+## Task 40 - Investigate real wallpaper support
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `docs/WALLPAPER_SUPPORT_ARCHITECTURE.md` investigating real image wallpaper support for the TUI.
+* Documented terminal support risks, Ratatui constraints, opacity/readability issues, security/privacy rules, fallback behavior, and possible implementation approaches.
+* Recommended a safe future path for wallpaper support while keeping terminal-safe backgrounds as the default.
+* Kept the slice documentation-only with no image protocol, network, Queue, server protocol, Cargo, or TUI implementation changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
+
 ## Task 39 - Add terminal-safe background MVP
 
 Task Type: Implementation
