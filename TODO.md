@@ -1,5 +1,26 @@
 # TODO
 
+## Task 43 - Investigate full app rename
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `docs/APP_RENAME_ARCHITECTURE.md` documenting soft rename vs hard rename options for the fork.
+* Audited likely rename surfaces including binary name, config directory, environment variables, docs/help text, package metadata, user-agent strings, tests, process titles, and path assumptions.
+* Documented compatibility risks and a phased migration strategy.
+* Recommended a safe next implementation slice before any hard rename.
+* Kept the slice documentation-only with no code, Cargo, Queue, server protocol, or rename implementation changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
+
 ## Task 42 - Add parent-directory workspace discovery
 
 Task Type: Implementation
