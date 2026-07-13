@@ -1,5 +1,25 @@
 # TODO
 
+## Task 45 - Investigate alias binary rename path
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `docs/ALIAS_BINARY_ARCHITECTURE.md` investigating a compatibility-safe alias/wrapper binary path.
+* Compared second Cargo bin target, wrapper script, shell alias, installer alias, and renamed binary compatibility options.
+* Documented repo surfaces, compatibility strategy, risks, and a recommended future implementation path.
+* Kept the slice documentation-only with no code, Cargo, Queue, server protocol, config directory, environment variable, package, or hard rename changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
+
 ## Task 44 - Add soft branding polish
 
 Task Type: Implementation
