@@ -110,6 +110,23 @@ fn native_scrollbar_visibility_requires_overflow() {
     assert!(native_scrollbar_visible(true, 6, 5));
 }
 
+#[test]
+fn startup_splash_text_helpers_use_app_identity_fallbacks() {
+    assert_eq!(
+        startup_splash_title_text(None, Some("AymaneCode"), "jcode"),
+        "AymaneCode"
+    );
+    assert_eq!(startup_splash_title_text(None, None, "jcode"), "jcode");
+    assert_eq!(
+        startup_splash_title_text(Some("  Custom  "), Some("AymaneCode"), "jcode"),
+        "Custom"
+    );
+    assert_eq!(
+        startup_splash_text(Some("   "), "jcode workspace ready."),
+        "jcode workspace ready."
+    );
+}
+
 #[derive(Clone, Default)]
 struct TestState {
     input: String,

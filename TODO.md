@@ -1,5 +1,24 @@
 # TODO
 
+## Task 44 - Add soft branding polish
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Routed additional low-risk user-facing labels through the existing `[app].name` identity setting.
+* Preserved fallback behavior when `app.name` is missing or blank.
+* Kept the slice as a soft branding pass without changing the binary name, command names, config directories, environment variables, package/crate names, provider user-agent constants, Queue behavior, server protocol behavior, or Cargo files.
+* Updated rename/customization docs to reflect the soft branding implementation step.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 43 - Investigate full app rename
 
 Task Type: Investigation

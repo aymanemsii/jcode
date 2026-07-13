@@ -22,6 +22,25 @@ The current fork already has meaningful user-facing identity customization:
 
 That makes a soft rename practical before any hard rename is attempted.
 
+## First Soft Branding Implementation Slice
+
+The first soft branding implementation slice routes additional low-risk
+user-facing labels through the existing `[app].name` identity setting.
+
+Implemented surfaces now include:
+
+* onboarding welcome title
+* startup splash title fallback
+* startup splash default subtitle
+* top bar app item
+* config visibility heading
+* theme command headings
+* terminal title hook through `[app].terminal_title`
+
+This is intentionally still a soft branding pass. Missing, empty, or
+whitespace-only app names continue to fall back to `jcode`, and hard rename work
+remains deferred.
+
 ## Current Identity Layers
 
 The implemented identity layers are configuration and presentation layers. They do not rename the installed binary, crates, packages, config directory, environment variables, release artifacts, or repository branding.
@@ -34,7 +53,10 @@ Current behavior:
 
 * It is configured in global user config under `[app]`.
 * Missing, empty, or whitespace-only values fall back to built-in jcode behavior.
-* It does not change the `jcode` command, config directory, env vars, crates, packages, or docs by itself.
+* It can affect low-risk user-facing labels such as onboarding, startup splash,
+  top bar, config visibility, and theme command headings.
+* It does not change the `jcode` command, config directory, env vars, crates,
+  packages, protocol labels, provider user-agent strings, or docs by itself.
 
 ### `[app].terminal_title`
 
@@ -94,7 +116,10 @@ Soft rename surfaces include:
 * configurable `app.name`
 * configurable terminal title through `app.terminal_title`
 * startup splash title and fallback behavior
+* startup splash default subtitle
+* onboarding welcome title
 * top bar app item
+* config/theme command headings
 * docs wording that describes this as Aymane's fork or custom build where appropriate
 * generated examples that can show customization without implying command renames
 
@@ -110,6 +135,10 @@ Soft rename intentionally does not change:
 * command names
 
 Recommendation: continue with the soft rename first. It gives the fork its own visible identity with low migration risk and minimal upstream merge friction.
+
+Hard rename remains deferred. It should still be treated as a separate
+migration project with compatibility aliases, fallback order, docs, tests, and
+installer behavior designed before implementation.
 
 ### Hard Rename
 
@@ -273,14 +302,18 @@ Project-local workspace migration should be even more conservative. Many reposit
 
 ## Recommended Next Implementation Slice
 
-The safest next slice is an app identity docs and branding pass.
+The first app identity docs and branding pass has started. Future soft branding
+slices should stay similarly narrow and use `app.name` only where config is
+already loaded and the label is clearly user-facing.
 
 Scope:
 
+* Continue auditing low-risk user-facing labels where `app.name` can be used as
+  a fallback without changing commands, paths, env vars, protocols, provider
+  user-agent constants, package metadata, or Queue behavior.
 * Update customization and network/privacy docs to describe Aymane's fork/custom build where appropriate.
 * Keep command examples as `jcode`.
 * Make docs clear that `[app].name` and `[app].terminal_title` are soft identity, not hard rename controls.
-* Audit low-risk user-facing labels where `app.name` can be used as a fallback without changing commands, paths, env vars, protocols, or package metadata.
 
 Alternative small slice: terminal title polish. Verify that all existing terminal title updates use the configured title consistently and fall back cleanly.
 

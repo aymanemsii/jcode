@@ -253,6 +253,7 @@ fn config_show_reports_missing_accent_as_default() {
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("jcode customization config:"));
     assert!(output.contains("workspace config: not found"));
     assert!(output.contains("workspace config location: not found"));
     assert!(output.contains("workspace.name: not configured"));
@@ -471,8 +472,24 @@ fn config_show_reports_app_identity_compactly() {
 
     let output = render_config_show(&cfg);
 
+    assert!(output.contains("AymaneCode customization config:"));
     assert!(output.contains("app.name: AymaneCode"));
     assert!(output.contains("app.terminal_title: (empty/fallback)"));
+}
+
+#[test]
+fn theme_command_headings_use_app_identity_with_jcode_fallback() {
+    let mut cfg = crate::config::Config::default();
+
+    assert!(render_theme_list(&cfg).starts_with("jcode themes:"));
+    assert!(render_theme_current(&cfg).starts_with("jcode current theme:"));
+    assert!(render_theme_preview(&cfg, None).starts_with("jcode theme preview:"));
+
+    cfg.app.name = Some("  AymaneCode  ".to_string());
+
+    assert!(render_theme_list(&cfg).starts_with("AymaneCode themes:"));
+    assert!(render_theme_current(&cfg).starts_with("AymaneCode current theme:"));
+    assert!(render_theme_preview(&cfg, None).starts_with("AymaneCode theme preview:"));
 }
 
 #[test]

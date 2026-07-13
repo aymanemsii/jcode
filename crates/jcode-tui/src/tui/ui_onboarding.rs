@@ -6,7 +6,7 @@
 //!
 //! Layout, top to bottom, vertically centered in the chat area:
 //!   1. The animated donut (attention grab).
-//!   2. "Welcome to jcode onboarding" title.
+//!   2. "Welcome to <app name> onboarding" title.
 //!   3. The login / getting-started prompt with suggestions.
 //!
 //! The donut is drawn as a live widget (not part of the cached transcript) so
@@ -210,12 +210,20 @@ fn legacy_notice_header_lines(width: u16) -> Vec<Line<'static>> {
 /// Welcome title line, rendered just above the donut.
 fn welcome_title_line() -> Line<'static> {
     Line::from(Span::styled(
-        "Welcome to jcode onboarding",
+        welcome_title_text(crate::config::config().app.name()),
         Style::default()
             .fg(welcome_accent())
             .add_modifier(Modifier::BOLD),
     ))
     .alignment(Alignment::Center)
+}
+
+fn welcome_title_text(app_name: Option<&str>) -> String {
+    let app_name = app_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("jcode");
+    format!("Welcome to {app_name} onboarding")
 }
 
 /// Short keyboard hint rendered just below the donut on guided phases. Replaces
@@ -535,4 +543,19 @@ pub(super) fn draw_onboarding_welcome(frame: &mut Frame, app: &dyn TuiState, are
         Paragraph::new(body).alignment(Alignment::Center),
         chunks[idx],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::welcome_title_text;
+
+    #[test]
+    fn welcome_title_uses_app_name_with_jcode_fallback() {
+        assert_eq!(
+            welcome_title_text(Some("  AymaneCode  ")),
+            "Welcome to AymaneCode onboarding"
+        );
+        assert_eq!(welcome_title_text(Some("   ")), "Welcome to jcode onboarding");
+        assert_eq!(welcome_title_text(None), "Welcome to jcode onboarding");
+    }
 }

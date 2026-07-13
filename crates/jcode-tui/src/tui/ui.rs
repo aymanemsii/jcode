@@ -3257,9 +3257,11 @@ fn draw_startup_splash(frame: &mut Frame, area: Rect) {
         config.app.name(),
         "jcode",
     );
+    let app_name = config.app.name().unwrap_or("jcode");
+    let default_subtitle = format!("{app_name} workspace ready.");
     let subtitle = startup_splash_text(
         display.startup_splash_subtitle.as_deref(),
-        "Personalized workspace ready.",
+        &default_subtitle,
     );
     let footer = startup_splash_text(
         display.startup_splash_footer.as_deref(),
@@ -3285,18 +3287,18 @@ fn draw_startup_splash(frame: &mut Frame, area: Rect) {
     frame.render_widget(paragraph, panel);
 }
 
-fn startup_splash_text<'a>(configured: Option<&'a str>, fallback: &'a str) -> &'a str {
+fn startup_splash_text(configured: Option<&str>, fallback: &str) -> String {
     match configured.map(str::trim) {
-        Some(value) if !value.is_empty() => value,
-        _ => fallback,
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => fallback.to_string(),
     }
 }
 
-fn startup_splash_title_text<'a>(
-    configured: Option<&'a str>,
-    app_name: Option<&'a str>,
-    fallback: &'a str,
-) -> &'a str {
+fn startup_splash_title_text(
+    configured: Option<&str>,
+    app_name: Option<&str>,
+    fallback: &str,
+) -> String {
     startup_splash_text(configured, app_name.unwrap_or(fallback))
 }
 

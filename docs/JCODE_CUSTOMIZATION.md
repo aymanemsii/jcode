@@ -115,7 +115,7 @@ terminal_title = "AymaneCode"
 
 Both fields are optional. Missing, empty, or whitespace-only values fall back to the current jcode behavior.
 
-`app.name` is currently used as the default startup splash title only when `display.startup_splash_title` is missing or blank. An explicit non-blank `display.startup_splash_title` always wins.
+`app.name` is used for safe user-facing identity labels, including the default startup splash title when `display.startup_splash_title` is missing or blank, the startup splash default subtitle, the top status bar app item, onboarding welcome title, and config/theme command headings. An explicit non-blank `display.startup_splash_title` always wins for the splash title.
 
 `app.terminal_title` customizes the active TUI terminal/window title where jcode already updates that title. It does not rename the binary, config directory, `JCODE_HOME`, crates, packages, or documentation globally.
 
@@ -263,6 +263,8 @@ chrome fields including `accent`, `user`, `assistant`, `tool`, `system`,
 `muted`, `success`, `warning`, `error`, `border`, `active_border`,
 `background`, `panel`, and `input`.
 
+Theme command headings use `app.name` when configured and fall back to `jcode`.
+
 Unknown theme names return a non-zero error and print the available built-in and
 global custom theme names. Theme commands are read-only; they do not set themes,
 import/export themes, add project-local custom theme definitions, discover
@@ -387,6 +389,8 @@ The command reports safe display/customization visibility details, including:
 * Top status bar setting
 * Top status bar item order and ignored item names
 * Project-local workspace config path, location, workspace name, and project-local display overrides
+
+The heading uses `app.name` when configured and falls back to `jcode`.
 
 This command is read-only and intended for diagnosing which customization settings are active.
 

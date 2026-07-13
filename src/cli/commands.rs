@@ -647,6 +647,7 @@ fn editor_command(program: String) -> EditorCommand {
 }
 
 fn render_config_show(config: &crate::config::Config) -> String {
+    let app_label = app_identity_label(config);
     let workspace_config_label = config
         .workspace_config
         .path
@@ -765,7 +766,7 @@ fn render_config_show(config: &crate::config::Config) -> String {
         compact_top_bar_items_ignored_label(config.display.top_bar_items.as_deref());
 
     format!(
-        "Display customization config:\n\
+        "{app_label} customization config:\n\
 workspace config: {workspace_config_label}\n\
 workspace config location: {workspace_config_location_label}\n\
 workspace.name: {workspace_name_label}\n\
@@ -871,7 +872,8 @@ display.top_bar_items: {}\n",
 }
 
 fn render_theme_list(config: &crate::config::Config) -> String {
-    let mut output = String::from("Themes:\n\nBuilt-in themes:\n");
+    let app_label = app_identity_label(config);
+    let mut output = format!("{app_label} themes:\n\nBuilt-in themes:\n");
     for name in jcode_tui_style::theme::BUILT_IN_THEME_NAMES {
         output.push_str("  ");
         output.push_str(name);
@@ -903,9 +905,10 @@ fn render_theme_current(config: &crate::config::Config) -> String {
         jcode_tui_style::theme::resolve_theme_palette(config.display.theme.as_deref(), &custom_themes);
     let theme_accent = jcode_tui_style::theme::color_to_hex(resolved.palette.accent);
     let active_accent = active_accent_color_hex(config, &theme_accent);
+    let app_label = app_identity_label(config);
 
     format!(
-        "Current theme:\n\
+        "{app_label} current theme:\n\
 active theme: {}\n\
 theme source: {}\n\
 theme valid: {}\n\
@@ -939,9 +942,10 @@ fn render_theme_preview(config: &crate::config::Config, requested: Option<&str>)
         palette.accent = accent;
         accent_note = " (display.accent_color override)";
     }
+    let app_label = app_identity_label(config);
 
     format!(
-        "Theme preview: {}\n\
+        "{app_label} theme preview: {}\n\
 source: {}\n\
 valid: {}\n\
 \n\
@@ -978,6 +982,10 @@ input: {}\n",
         jcode_tui_style::theme::color_to_hex(palette.panel),
         jcode_tui_style::theme::color_to_hex(palette.input),
     )
+}
+
+fn app_identity_label(config: &crate::config::Config) -> &str {
+    config.app.name().unwrap_or("jcode")
 }
 
 fn theme_source_label(source: jcode_tui_style::theme::ThemeSource) -> &'static str {
