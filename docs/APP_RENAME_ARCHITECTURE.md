@@ -140,6 +140,20 @@ Hard rename remains deferred. It should still be treated as a separate
 migration project with compatibility aliases, fallback order, docs, tests, and
 installer behavior designed before implementation.
 
+## Alias Binary MVP
+
+A compatibility-safe alias binary MVP now exists:
+
+* `jcode` remains the canonical binary.
+* `mercury` is available as a second Cargo bin target.
+* `mercury` uses the same startup source path as `jcode`.
+* Config directories, environment variables, project-local `.jcode` paths,
+  provider user-agent constants, package/crate names, Queue behavior, server
+  protocol behavior, installers, release artifacts, and hard rename work remain
+  unchanged.
+
+This is Phase B's first code-level alias slice, not a hard rename.
+
 ### Hard Rename
 
 A hard rename changes compatibility-sensitive names and should happen only after compatibility aliases and migration behavior are designed.
@@ -258,6 +272,8 @@ Docs should be explicit that command examples still use `jcode` unless a compati
 Investigate adding a new alias/wrapper binary while keeping the `jcode` binary for compatibility.
 
 The alias should forward to the same behavior and preserve existing config/env defaults at first. This gives users a new command name without immediately moving config directories or breaking automation.
+
+Initial MVP status: implemented as a second Cargo bin target named `mercury` that shares `src/main.rs` with `jcode`. Installer and release packaging changes remain deferred.
 
 ### Phase C: Add New Config Dir And Env Var Aliases
 

@@ -1,5 +1,25 @@
 # TODO
 
+## Task 46 - Add alias binary MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added a compatibility-safe alias binary named `mercury`.
+* Kept the existing `jcode` binary working unchanged.
+* Shared the same app startup path instead of duplicating startup logic.
+* Preserved existing config directory, environment variables, project-local `.jcode` paths, provider user-agent constants, package/crate names, Queue behavior, server protocol behavior, and hard rename deferrals.
+* Updated alias/rename docs to reflect the MVP.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 45 - Investigate alias binary rename path
 
 Task Type: Investigation

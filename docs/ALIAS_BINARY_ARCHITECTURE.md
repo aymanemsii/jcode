@@ -1,6 +1,19 @@
 # Alias Binary Architecture
 
-This document investigates adding an alias or wrapper command for Aymane's fork of jcode. It is documentation-only and does not implement an alias binary, change Cargo metadata, rename packages, rename config paths, or change installer behavior.
+This document tracks the alias or wrapper command path for Aymane's fork of jcode. The initial MVP now implements a compatibility-safe Cargo alias binary named `mercury` while preserving the existing `jcode` binary and all compatibility-sensitive names.
+
+## MVP Implementation Status
+
+Implemented:
+
+* added a second Cargo bin target named `mercury`
+* pointed `mercury` at the same `src/main.rs` startup source as `jcode`
+* kept `jcode` as the canonical command
+* preserved existing config directories, environment variables, project-local `.jcode` paths, provider user-agent constants, package/crate names, Queue behavior, server protocol behavior, and hard rename deferrals
+
+The only intended behavioral difference for the MVP is the unavoidable executable name / `argv[0]` surface when users launch the app as `mercury`.
+
+Installer, release artifact, shell completion, config directory, environment variable, and hard rename work remain deferred.
 
 ## Goal
 
@@ -8,7 +21,7 @@ The goal is to allow a custom command name later while keeping the existing `jco
 
 Possible future command names can remain placeholders for now, such as:
 
-* `aymanecode`
+* `mercury`
 * `<custom-name>`
 
 The alias should be treated as a compatibility layer, not as a hard rename. Existing users, scripts, docs, config, workspaces, and release workflows should continue to work through `jcode`.
@@ -17,16 +30,16 @@ The alias should be treated as a compatibility layer, not as a hard rename. Exis
 
 ### Second Cargo Bin Target
 
-A second Cargo binary target could compile another executable that calls the same main entrypoint as `jcode`.
+A second Cargo binary target can compile another executable that calls the same main entrypoint as `jcode`.
 
-Potential shape:
+MVP shape:
 
 * keep the existing `jcode` binary
-* add a tiny alias binary such as `<custom-name>`
+* add a tiny alias binary named `mercury`
 * share the real startup path instead of duplicating command logic
 * keep config, environment variables, server behavior, and docs identical at first
 
-This is likely the cleanest code-level approach if the current Cargo structure supports extracting or reusing a shared main entrypoint cleanly. It should not be started by copying the entire current `main.rs` body.
+The current Cargo structure supports this cleanly through explicit bin targets and `autobins = false`. The MVP uses the same `src/main.rs` path for both `jcode` and `mercury`, avoiding copied startup logic.
 
 ### Wrapper Script Installed Next To `jcode`
 
@@ -110,10 +123,10 @@ The main risks are compatibility drift and install complexity:
 
 ## Recommended Implementation Path
 
-When implementation is eventually approved, use a narrow path:
+The MVP follows the narrow path:
 
-1. First add a tiny second bin target only if the Cargo structure supports it cleanly.
-2. Extract or reuse a shared main entrypoint if possible.
+1. Add a tiny second bin target because the Cargo structure supports it cleanly.
+2. Reuse the shared `src/main.rs` startup path.
 3. Keep behavior identical except for unavoidable process `argv[0]` or binary-name differences.
 4. Keep `jcode` as the canonical compatible command.
 5. Keep config, state, env vars, server protocol, and workspace paths unchanged.
