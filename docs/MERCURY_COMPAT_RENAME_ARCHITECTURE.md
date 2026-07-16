@@ -138,7 +138,11 @@ Document the compatibility rename layer and agree on precedence before code chan
 
 ### Phase B: Add `MERCURY_HOME` Support While Preserving `JCODE_HOME`
 
-Add `MERCURY_HOME` as a higher-precedence explicit environment variable. Continue honoring `JCODE_HOME` and warn when both are set.
+Status: implemented.
+
+`MERCURY_HOME` is now supported as the higher-precedence explicit config home environment variable. `JCODE_HOME` remains supported as a fallback when `MERCURY_HOME` is not set. If both are set, `MERCURY_HOME` wins and `config show` reports that both env vars are set.
+
+The default config directory remains unchanged in this phase: when neither env var is set, Mercury/jcode still uses the existing `~/.jcode` global config home. This phase does not add `~/.mercury/config.toml`, `.mercury/workspace.toml`, migration behavior, package/crate renames, provider user-agent changes, Queue changes, or server protocol changes.
 
 ### Phase C: Add `~/.mercury/config.toml` Support While Preserving `~/.jcode/config.toml`
 

@@ -1,6 +1,7 @@
 //! Configuration file support for jcode
 //!
-//! Config is loaded from `~/.jcode/config.toml` (or `$JCODE_HOME/config.toml`)
+//! Config is loaded from `~/.jcode/config.toml` (or `$MERCURY_HOME/config.toml` /
+//! `$JCODE_HOME/config.toml`)
 //! Environment variables override config file settings.
 
 pub use jcode_config_types::{
@@ -165,6 +166,7 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_WORKSPACE_LEFT_KEY",
     "JCODE_WORKSPACE_RIGHT_KEY",
     "JCODE_WORKSPACE_UP_KEY",
+    "MERCURY_HOME",
     "XDG_CONFIG_HOME",
 ];
 

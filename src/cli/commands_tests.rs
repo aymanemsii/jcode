@@ -249,11 +249,17 @@ fn cli_route_display_uses_typed_api_methods() {
 
 #[test]
 fn config_show_reports_missing_accent_as_default() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME"]);
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
     let cfg = crate::config::Config::default();
 
     let output = render_config_show(&cfg);
 
     assert!(output.contains("jcode customization config:"));
+    assert!(output.contains("config home source: default"));
+    assert!(output.contains("config home warning: none"));
     assert!(output.contains("workspace config: not found"));
     assert!(output.contains("workspace config location: not found"));
     assert!(output.contains("workspace.name: not configured"));
@@ -287,6 +293,22 @@ fn config_show_reports_missing_accent_as_default() {
     );
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
+}
+
+#[test]
+fn config_show_reports_mercury_home_precedence_warning() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME"]);
+    crate::env::set_var("MERCURY_HOME", "C:\\mercury-home");
+    crate::env::set_var("JCODE_HOME", "C:\\jcode-home");
+    let cfg = crate::config::Config::default();
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains("config home source: MERCURY_HOME"));
+    assert!(output.contains(
+        "config home warning: MERCURY_HOME and JCODE_HOME are both set; using MERCURY_HOME"
+    ));
 }
 
 #[test]

@@ -1,5 +1,26 @@
 # TODO
 
+## Task 48 - Add MERCURY_HOME support
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `MERCURY_HOME` support as the first implementation slice of the Mercury compatibility rename layer.
+* Preserved `JCODE_HOME` as a fallback when `MERCURY_HOME` is not set.
+* Kept the default config directory unchanged for this phase.
+* Preserved existing config edit/show behavior through the resolved config home.
+* Documented that `MERCURY_HOME` takes precedence when both env vars are set.
+* Avoided `.mercury` workspace support, default config directory changes, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 47 - Investigate Mercury compatibility rename layer
 
 Task Type: Investigation

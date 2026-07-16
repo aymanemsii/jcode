@@ -37,8 +37,10 @@ fn harden_secret_file_permissions_sets_owner_only_modes() {
 #[test]
 fn user_home_path_uses_external_dir_under_jcode_home() {
     let _guard = lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
     let prev_home = std::env::var_os("JCODE_HOME");
     let temp = tempfile::TempDir::new().expect("create temp dir");
+    crate::env::remove_var("MERCURY_HOME");
     crate::env::set_var("JCODE_HOME", temp.path());
 
     let resolved = user_home_path(".codex/auth.json").expect("resolve user home path");
@@ -50,6 +52,11 @@ fn user_home_path_uses_external_dir_under_jcode_home() {
             .join("auth.json")
     );
 
+    if let Some(prev_mercury_home) = prev_mercury_home {
+        crate::env::set_var("MERCURY_HOME", prev_mercury_home);
+    } else {
+        crate::env::remove_var("MERCURY_HOME");
+    }
     if let Some(prev_home) = prev_home {
         crate::env::set_var("JCODE_HOME", prev_home);
     } else {
@@ -75,15 +82,79 @@ fn validate_external_auth_file_rejects_symlink() {
 #[test]
 fn app_config_dir_uses_jcode_home_when_set() {
     let _guard = lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
     let prev_home = std::env::var_os("JCODE_HOME");
     let temp = tempfile::TempDir::new().expect("create temp dir");
+    crate::env::remove_var("MERCURY_HOME");
     crate::env::set_var("JCODE_HOME", temp.path());
 
     let resolved = app_config_dir().expect("resolve app config dir");
     assert_eq!(resolved, temp.path().join("config").join("jcode"));
 
+    if let Some(prev_mercury_home) = prev_mercury_home {
+        crate::env::set_var("MERCURY_HOME", prev_mercury_home);
+    } else {
+        crate::env::remove_var("MERCURY_HOME");
+    }
     if let Some(prev_home) = prev_home {
         crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
+fn jcode_dir_uses_mercury_home_when_set() {
+    let _guard = lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let mercury_home = tempfile::TempDir::new().expect("create mercury temp dir");
+
+    crate::env::set_var("MERCURY_HOME", mercury_home.path());
+    crate::env::remove_var("JCODE_HOME");
+
+    assert_eq!(jcode_dir().expect("resolve jcode dir"), mercury_home.path());
+
+    if let Some(prev_mercury_home) = prev_mercury_home {
+        crate::env::set_var("MERCURY_HOME", prev_mercury_home);
+    } else {
+        crate::env::remove_var("MERCURY_HOME");
+    }
+    if let Some(prev_jcode_home) = prev_jcode_home {
+        crate::env::set_var("JCODE_HOME", prev_jcode_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
+fn mercury_home_takes_precedence_over_jcode_home() {
+    let _guard = lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let mercury_home = tempfile::TempDir::new().expect("create mercury temp dir");
+    let jcode_home = tempfile::TempDir::new().expect("create jcode temp dir");
+
+    crate::env::set_var("MERCURY_HOME", mercury_home.path());
+    crate::env::set_var("JCODE_HOME", jcode_home.path());
+
+    let resolution = config_home_env_resolution();
+    assert_eq!(resolution.explicit_source, Some("MERCURY_HOME"));
+    assert_eq!(resolution.explicit_home.as_deref(), Some(mercury_home.path()));
+    assert!(resolution.has_conflict());
+    assert_eq!(jcode_dir().expect("resolve jcode dir"), mercury_home.path());
+    assert_eq!(
+        app_config_dir().expect("resolve app config dir"),
+        mercury_home.path().join("config").join("jcode")
+    );
+
+    if let Some(prev_mercury_home) = prev_mercury_home {
+        crate::env::set_var("MERCURY_HOME", prev_mercury_home);
+    } else {
+        crate::env::remove_var("MERCURY_HOME");
+    }
+    if let Some(prev_jcode_home) = prev_jcode_home {
+        crate::env::set_var("JCODE_HOME", prev_jcode_home);
     } else {
         crate::env::remove_var("JCODE_HOME");
     }

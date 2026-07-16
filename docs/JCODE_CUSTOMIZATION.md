@@ -16,6 +16,18 @@ When `JCODE_HOME` is set, jcode reads the config from:
 $JCODE_HOME/config.toml
 ```
 
+Mercury compatibility also supports `MERCURY_HOME` as a higher-precedence
+explicit config home:
+
+```text
+$MERCURY_HOME/config.toml
+```
+
+If both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` wins and
+`jcode config show` reports that both env vars are set. When neither env var is
+set, the default remains `~/.jcode/config.toml`; this phase does not introduce
+`~/.mercury/config.toml` as a default location.
+
 Customization is configured through TOML sections such as `[app]`, `[display]`, and `[themes.<name>]`.
 
 ## Project-Local Customization
@@ -117,7 +129,7 @@ Both fields are optional. Missing, empty, or whitespace-only values fall back to
 
 `app.name` is used for safe user-facing identity labels, including the default startup splash title when `display.startup_splash_title` is missing or blank, the startup splash default subtitle, the top status bar app item, onboarding welcome title, and config/theme command headings. An explicit non-blank `display.startup_splash_title` always wins for the splash title.
 
-`app.terminal_title` customizes the active TUI terminal/window title where jcode already updates that title. It does not rename the binary, config directory, `JCODE_HOME`, crates, packages, or documentation globally.
+`app.terminal_title` customizes the active TUI terminal/window title where jcode already updates that title. It does not rename the binary, config directory, `MERCURY_HOME`/`JCODE_HOME`, crates, packages, or documentation globally.
 
 ## Config Editing
 

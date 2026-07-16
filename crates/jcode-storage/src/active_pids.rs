@@ -114,7 +114,46 @@ fn process_is_running(pid: u32) -> bool {
     result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn process_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+
+    type Handle = *mut std::ffi::c_void;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        #[link_name = "OpenProcess"]
+        fn open_process(
+            dw_desired_access: u32,
+            b_inherit_handle: i32,
+            dw_process_id: u32,
+        ) -> Handle;
+        #[link_name = "GetExitCodeProcess"]
+        fn get_exit_code_process(h_process: Handle, lp_exit_code: *mut u32) -> i32;
+        #[link_name = "CloseHandle"]
+        fn close_handle(h_object: Handle) -> i32;
+    }
+
+    unsafe {
+        let handle = open_process(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+
+        let mut exit_code = 0u32;
+        let ok = get_exit_code_process(handle, &mut exit_code);
+        close_handle(handle);
+
+        ok != 0 && exit_code == STILL_ACTIVE
+    }
+}
+
+#[cfg(all(not(unix), not(windows)))]
 fn process_is_running(pid: u32) -> bool {
     // Best-effort fallback for platforms where this low-level storage crate does
     // not have a process API. The active PID file is still useful, and stale
@@ -202,18 +241,52 @@ pub fn session_counts() -> SessionCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
 
-    /// Serialize tests that mutate `JCODE_HOME`.
+    /// Serialize tests that mutate `MERCURY_HOME` and `JCODE_HOME`.
     fn lock_env() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    struct HomeEnvGuard {
+        mercury_home: Option<OsString>,
+        jcode_home: Option<OsString>,
+    }
+
+    impl HomeEnvGuard {
+        fn set_jcode_home(path: &std::path::Path) -> Self {
+            let guard = Self {
+                mercury_home: std::env::var_os("MERCURY_HOME"),
+                jcode_home: std::env::var_os("JCODE_HOME"),
+            };
+            jcode_core::env::remove_var("MERCURY_HOME");
+            jcode_core::env::set_var("JCODE_HOME", path);
+            guard
+        }
+    }
+
+    impl Drop for HomeEnvGuard {
+        fn drop(&mut self) {
+            if let Some(value) = self.mercury_home.take() {
+                jcode_core::env::set_var("MERCURY_HOME", value);
+            } else {
+                jcode_core::env::remove_var("MERCURY_HOME");
+            }
+
+            if let Some(value) = self.jcode_home.take() {
+                jcode_core::env::set_var("JCODE_HOME", value);
+            } else {
+                jcode_core::env::remove_var("JCODE_HOME");
+            }
+        }
     }
 
     #[test]
     fn session_counts_counts_live_and_streaming_only() {
         let _guard = lock_env();
         let temp = tempfile::tempdir().expect("tempdir");
-        jcode_core::env::set_var("JCODE_HOME", temp.path());
+        let _home_env = HomeEnvGuard::set_jcode_home(temp.path());
 
         let live = std::process::id();
         // Pick a PID that is almost certainly dead.
@@ -264,15 +337,13 @@ mod tests {
         assert_eq!(session_counts().streaming, 1);
         unregister_active_pid("session_epsilon");
         assert_eq!(session_counts().streaming, 0);
-
-        jcode_core::env::remove_var("JCODE_HOME");
     }
 
     #[test]
     fn streaming_guard_marks_and_clears_on_drop() {
         let _guard = lock_env();
         let temp = tempfile::tempdir().expect("tempdir");
-        jcode_core::env::set_var("JCODE_HOME", temp.path());
+        let _home_env = HomeEnvGuard::set_jcode_home(temp.path());
 
         register_active_pid("session_guard", std::process::id());
         assert_eq!(session_counts().streaming, 0);
@@ -281,7 +352,5 @@ mod tests {
             assert_eq!(session_counts().streaming, 1);
         }
         assert_eq!(session_counts().streaming, 0);
-
-        jcode_core::env::remove_var("JCODE_HOME");
     }
 }

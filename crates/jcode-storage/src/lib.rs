@@ -71,9 +71,49 @@ fn ensure_private_runtime_dir(path: &Path) {
     }
 }
 
+pub const MERCURY_HOME_ENV: &str = "MERCURY_HOME";
+pub const JCODE_HOME_ENV: &str = "JCODE_HOME";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigHomeEnvResolution {
+    pub mercury_home: Option<PathBuf>,
+    pub jcode_home: Option<PathBuf>,
+    pub explicit_home: Option<PathBuf>,
+    pub explicit_source: Option<&'static str>,
+}
+
+impl ConfigHomeEnvResolution {
+    pub fn has_conflict(&self) -> bool {
+        self.mercury_home.is_some() && self.jcode_home.is_some()
+    }
+}
+
+fn env_path(name: &str) -> Option<PathBuf> {
+    std::env::var(name).ok().map(PathBuf::from)
+}
+
+pub fn config_home_env_resolution() -> ConfigHomeEnvResolution {
+    let mercury_home = env_path(MERCURY_HOME_ENV);
+    let jcode_home = env_path(JCODE_HOME_ENV);
+    let (explicit_source, explicit_home) = if let Some(path) = mercury_home.clone() {
+        (Some(MERCURY_HOME_ENV), Some(path))
+    } else if let Some(path) = jcode_home.clone() {
+        (Some(JCODE_HOME_ENV), Some(path))
+    } else {
+        (None, None)
+    };
+
+    ConfigHomeEnvResolution {
+        mercury_home,
+        jcode_home,
+        explicit_home,
+        explicit_source,
+    }
+}
+
 pub fn jcode_dir() -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("JCODE_HOME") {
-        return Ok(PathBuf::from(path));
+    if let Some(path) = config_home_env_resolution().explicit_home {
+        return Ok(path);
     }
 
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
@@ -87,12 +127,12 @@ pub fn logs_dir() -> Result<PathBuf> {
 /// Resolve jcode's app-owned config directory.
 ///
 /// Default location is the platform config dir + `jcode` (for example
-/// `~/.config/jcode` on Linux). When `JCODE_HOME` is set, sandbox this under
-/// `$JCODE_HOME/config/jcode` so self-dev/tests do not leak into the user's
-/// real config directory.
+/// `~/.config/jcode` on Linux). When `MERCURY_HOME` or `JCODE_HOME` is set,
+/// sandbox this under the resolved home at `config/jcode` so self-dev/tests do
+/// not leak into the user's real config directory.
 pub fn app_config_dir() -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("JCODE_HOME") {
-        return Ok(PathBuf::from(path).join("config").join("jcode"));
+    if let Some(path) = config_home_env_resolution().explicit_home {
+        return Ok(path.join("config").join("jcode"));
     }
 
     let config_dir =
@@ -101,7 +141,7 @@ pub fn app_config_dir() -> Result<PathBuf> {
 }
 
 /// Resolve a path under the user's home directory, but sandbox it under
-/// `$JCODE_HOME/external/` when `JCODE_HOME` is set.
+/// the resolved explicit config home when `MERCURY_HOME` or `JCODE_HOME` is set.
 ///
 /// This keeps external provider auth files isolated during tests and sandboxed
 /// runs without changing default on-disk locations for normal users.
@@ -114,8 +154,8 @@ pub fn user_home_path(relative: impl AsRef<Path>) -> Result<PathBuf> {
         );
     }
 
-    if let Ok(path) = std::env::var("JCODE_HOME") {
-        return Ok(PathBuf::from(path).join("external").join(relative));
+    if let Some(path) = config_home_env_resolution().explicit_home {
+        return Ok(path.join("external").join(relative));
     }
 
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;

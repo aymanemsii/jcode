@@ -286,10 +286,13 @@ Introduce new config directory and environment variable aliases only after the c
 
 Compatibility should be preserved:
 
+* `MERCURY_HOME` is now supported as a higher-precedence explicit config home.
 * Continue supporting `JCODE_HOME`.
 * Continue reading `~/.jcode`.
 * Add a new home/env alias only with documented precedence.
 * Keep project-local `.jcode/workspace.toml` working.
+
+When both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` takes precedence and `config show` reports the conflict. The default config directory remains `~/.jcode` until a separate compatibility phase adds `~/.mercury/config.toml` support.
 
 ### Phase D: Optional Hard Rename
 
