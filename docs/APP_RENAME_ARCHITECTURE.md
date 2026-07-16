@@ -140,6 +140,11 @@ Hard rename remains deferred. It should still be treated as a separate
 migration project with compatibility aliases, fallback order, docs, tests, and
 installer behavior designed before implementation.
 
+The next hard-rename path should be a compatibility rename layer, not an
+immediate destructive rename. Mercury-specific names such as future config
+paths and environment variables should be introduced additively while existing
+`jcode` paths and env vars remain supported.
+
 ## Alias Binary MVP
 
 A compatibility-safe alias binary MVP now exists:

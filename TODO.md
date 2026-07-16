@@ -1,5 +1,25 @@
 # TODO
 
+## Task 47 - Investigate Mercury compatibility rename layer
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `docs/MERCURY_COMPAT_RENAME_ARCHITECTURE.md` documenting the compatibility-safe rename layer for Mercury.
+* Covered future support for `MERCURY_HOME`, `~/.mercury/config.toml`, and `.mercury/workspace.toml` while preserving `JCODE_HOME`, `~/.jcode/config.toml`, and `.jcode/workspace.toml`.
+* Documented config resolution, workspace discovery precedence, migration strategy, repo surfaces, risks, and recommended implementation phases.
+* Kept the slice documentation-only with no code, Cargo, Queue, server protocol, config-path, environment-variable, or migration behavior changes.
+
+Validation:
+
+* Documentation-only change.
+* Manual review will be run separately after this change.
+
 ## Task 46 - Add alias binary MVP
 
 Task Type: Implementation
