@@ -300,6 +300,11 @@ Compatibility should be preserved:
 
 When both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` takes precedence and `config show` reports the conflict. When neither env var is set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to `~/.jcode/config.toml`.
 
+New global config creation now defaults to `~/.mercury/config.toml` when neither
+explicit env var is set and no existing global config file is found. Existing
+`~/.jcode/config.toml` users remain on that fallback path unless they choose to
+migrate manually.
+
 ### Phase D: Optional Hard Rename
 
 Only after compatibility aliases exist, consider a hard rename of crates, package metadata, binary names, release artifacts, docs, and internal constants.

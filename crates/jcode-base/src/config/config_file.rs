@@ -1,5 +1,4 @@
 use super::*;
-use crate::storage::jcode_dir;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -40,7 +39,14 @@ type ProjectWorkspaceLoadResult = anyhow::Result<Option<LoadedProjectWorkspaceCo
 impl Config {
     /// Get the config file path
     pub fn path() -> Option<PathBuf> {
-        jcode_dir().ok().map(|d| d.join("config.toml"))
+        crate::storage::global_config_path().ok()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn global_config_path_resolution_for_home(
+        home: &Path,
+    ) -> anyhow::Result<crate::storage::GlobalConfigPathResolution> {
+        crate::storage::global_config_path_resolution_for_home(home)
     }
 
     /// Get the current-directory project-local workspace config path.
@@ -424,7 +430,7 @@ impl Config {
         if cfg.launch_hotkeys.imported {
             return false;
         }
-        let Ok(jcode_dir) = jcode_dir() else {
+        let Ok(jcode_dir) = crate::storage::jcode_dir() else {
             return false;
         };
         let sessions_dir = jcode_dir.join("sessions");

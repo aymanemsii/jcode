@@ -73,6 +73,9 @@ fn ensure_private_runtime_dir(path: &Path) {
 
 pub const MERCURY_HOME_ENV: &str = "MERCURY_HOME";
 pub const JCODE_HOME_ENV: &str = "JCODE_HOME";
+const MERCURY_CONFIG_DIR_NAME: &str = ".mercury";
+const JCODE_CONFIG_DIR_NAME: &str = ".jcode";
+const CONFIG_FILE_NAME: &str = "config.toml";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigHomeEnvResolution {
@@ -118,6 +121,61 @@ pub fn jcode_dir() -> Result<PathBuf> {
 
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
     Ok(home.join(".jcode"))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GlobalConfigPathResolution {
+    pub path: PathBuf,
+    pub source: &'static str,
+    pub warning: Option<&'static str>,
+}
+
+pub fn global_config_path_resolution() -> Result<GlobalConfigPathResolution> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
+    global_config_path_resolution_for_home(&home)
+}
+
+pub fn global_config_path_resolution_for_home(home: &Path) -> Result<GlobalConfigPathResolution> {
+    let env_resolution = config_home_env_resolution();
+    let warning = env_resolution
+        .has_conflict()
+        .then_some("MERCURY_HOME and JCODE_HOME are both set; using MERCURY_HOME");
+
+    if let Some(path) = env_resolution.explicit_home {
+        return Ok(GlobalConfigPathResolution {
+            path: path.join(CONFIG_FILE_NAME),
+            source: env_resolution.explicit_source.unwrap_or("default"),
+            warning,
+        });
+    }
+
+    let mercury_config_path = home.join(MERCURY_CONFIG_DIR_NAME).join(CONFIG_FILE_NAME);
+    if mercury_config_path.is_file() {
+        return Ok(GlobalConfigPathResolution {
+            path: mercury_config_path,
+            source: "~/.mercury/config.toml",
+            warning,
+        });
+    }
+
+    let jcode_config_path = home.join(JCODE_CONFIG_DIR_NAME).join(CONFIG_FILE_NAME);
+    if jcode_config_path.is_file() {
+        return Ok(GlobalConfigPathResolution {
+            path: jcode_config_path,
+            source: "~/.jcode/config.toml",
+            warning,
+        });
+    }
+
+    Ok(GlobalConfigPathResolution {
+        path: mercury_config_path,
+        source: "default",
+        warning,
+    })
+}
+
+pub fn global_config_path() -> Result<PathBuf> {
+    Ok(global_config_path_resolution()?.path)
 }
 
 pub fn logs_dir() -> Result<PathBuf> {

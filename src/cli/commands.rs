@@ -676,12 +676,20 @@ fn editor_command(program: String) -> EditorCommand {
 fn render_config_show(config: &crate::config::Config) -> String {
     let app_label = app_identity_label(config);
     let home_env = crate::storage::config_home_env_resolution();
+    let config_path_resolution = crate::storage::global_config_path_resolution().ok();
+    let config_path_label = config_path_resolution
+        .as_ref()
+        .map(|resolution| resolution.path.display().to_string())
+        .unwrap_or_else(|| "not found".to_string());
+    let config_path_source_label = config_path_resolution
+        .as_ref()
+        .map(|resolution| resolution.source)
+        .unwrap_or("not found");
     let config_home_source_label = home_env.explicit_source.unwrap_or("default");
-    let config_home_warning_label = if home_env.has_conflict() {
-        "MERCURY_HOME and JCODE_HOME are both set; using MERCURY_HOME"
-    } else {
-        "none"
-    };
+    let config_home_warning_label = config_path_resolution
+        .as_ref()
+        .and_then(|resolution| resolution.warning)
+        .unwrap_or("none");
     let workspace_config_label = config
         .workspace_config
         .path
@@ -810,6 +818,8 @@ fn render_config_show(config: &crate::config::Config) -> String {
 
     format!(
         "{app_label} customization config:\n\
+config path: {config_path_label}\n\
+config path source: {config_path_source_label}\n\
 config home source: {config_home_source_label}\n\
 config home warning: {config_home_warning_label}\n\
 workspace config: {workspace_config_label}\n\

@@ -11,7 +11,7 @@ impl Config {
         }
 
         let default_content = r##"# jcode configuration file
-# Location: ~/.jcode/config.toml
+# Location: ~/.mercury/config.toml for new installs; existing ~/.jcode/config.toml remains supported.
 #
 # Environment variables override these settings.
 # Run `/config` in jcode to see current settings.

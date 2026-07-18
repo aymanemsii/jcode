@@ -445,6 +445,113 @@ fn test_generated_default_config_uses_low_openai_reasoning_effort() {
 }
 
 #[test]
+fn global_config_path_defaults_to_mercury_when_no_config_exists() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+
+    let resolved = Config::global_config_path_resolution_for_home(home.path())
+        .expect("resolve global config path");
+
+    assert_eq!(resolved.path, home.path().join(".mercury").join("config.toml"));
+    assert_eq!(resolved.source, "default");
+
+    restore_env_var("MERCURY_HOME", prev_mercury_home);
+    restore_env_var("JCODE_HOME", prev_jcode_home);
+}
+
+#[test]
+fn global_config_path_uses_existing_jcode_config_fallback() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    let jcode_config_path = home.path().join(".jcode").join("config.toml");
+    std::fs::create_dir_all(jcode_config_path.parent().expect("config parent"))
+        .expect("create jcode config parent");
+    std::fs::write(&jcode_config_path, "[display]\ncentered = true\n")
+        .expect("write jcode config");
+
+    let resolved = Config::global_config_path_resolution_for_home(home.path())
+        .expect("resolve global config path");
+
+    assert_eq!(resolved.path, jcode_config_path);
+    assert_eq!(resolved.source, "~/.jcode/config.toml");
+
+    restore_env_var("MERCURY_HOME", prev_mercury_home);
+    restore_env_var("JCODE_HOME", prev_jcode_home);
+}
+
+#[test]
+fn global_config_path_prefers_existing_mercury_config_over_jcode() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    let mercury_config_path = home.path().join(".mercury").join("config.toml");
+    let jcode_config_path = home.path().join(".jcode").join("config.toml");
+    std::fs::create_dir_all(mercury_config_path.parent().expect("mercury parent"))
+        .expect("create mercury config parent");
+    std::fs::create_dir_all(jcode_config_path.parent().expect("jcode parent"))
+        .expect("create jcode config parent");
+    std::fs::write(&mercury_config_path, "[display]\ncentered = false\n")
+        .expect("write mercury config");
+    std::fs::write(&jcode_config_path, "[display]\ncentered = true\n")
+        .expect("write jcode config");
+
+    let resolved = Config::global_config_path_resolution_for_home(home.path())
+        .expect("resolve global config path");
+
+    assert_eq!(resolved.path, mercury_config_path);
+    assert_eq!(resolved.source, "~/.mercury/config.toml");
+
+    restore_env_var("MERCURY_HOME", prev_mercury_home);
+    restore_env_var("JCODE_HOME", prev_jcode_home);
+}
+
+#[test]
+fn global_config_path_env_vars_beat_home_directory_discovery() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let mercury_home = tempfile::TempDir::new().expect("mercury home tempdir");
+    let jcode_home = tempfile::TempDir::new().expect("jcode home tempdir");
+    let home_config_path = home.path().join(".mercury").join("config.toml");
+    std::fs::create_dir_all(home_config_path.parent().expect("home config parent"))
+        .expect("create home config parent");
+    std::fs::write(&home_config_path, "[display]\ncentered = true\n")
+        .expect("write home config");
+
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::set_var("JCODE_HOME", jcode_home.path());
+    assert_eq!(
+        Config::global_config_path_resolution_for_home(home.path())
+            .expect("resolve jcode env config path")
+            .path,
+        jcode_home.path().join("config.toml")
+    );
+
+    crate::env::set_var("MERCURY_HOME", mercury_home.path());
+    assert_eq!(
+        Config::global_config_path_resolution_for_home(home.path())
+            .expect("resolve mercury env config path")
+            .path,
+        mercury_home.path().join("config.toml")
+    );
+
+    restore_env_var("MERCURY_HOME", prev_mercury_home);
+    restore_env_var("JCODE_HOME", prev_jcode_home);
+}
+
+#[test]
 fn global_config_cache_reloads_after_manual_file_edit() {
     let _guard = crate::storage::lock_test_env();
     let prev_home = std::env::var_os("JCODE_HOME");

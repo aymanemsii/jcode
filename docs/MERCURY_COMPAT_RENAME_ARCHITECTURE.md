@@ -52,7 +52,7 @@ If both `MERCURY_HOME` and `JCODE_HOME` are set, Mercury should use strict docum
 
 Failing hard would be safer for detecting misconfiguration, but it is likely too disruptive for a compatibility layer. Silent precedence is also risky because users can end up editing the wrong file. A warning gives clear behavior while keeping existing workflows running.
 
-When commands create or edit config in the future, write-target behavior should be explicit. If `MERCURY_HOME` is set, write there. If only `JCODE_HOME` is set, continue writing there. If neither env var is set and no config exists, future Mercury commands can eventually default to `~/.mercury/config.toml`, but only after read compatibility is proven.
+When commands create or edit config, write-target behavior is explicit. If `MERCURY_HOME` is set, write there. If only `JCODE_HOME` is set, continue writing there. If neither env var is set and no config exists, new global config creation defaults to `~/.mercury/config.toml`.
 
 ## Workspace Resolution Strategy
 
@@ -151,6 +151,16 @@ Status: implemented.
 Mercury default config discovery now reads `~/.mercury/config.toml` before the
 legacy `~/.jcode/config.toml` fallback when neither explicit home env var is
 set.
+
+### Phase C2: Default New Global Configs To `~/.mercury/config.toml`
+
+Status: implemented.
+
+When neither `MERCURY_HOME` nor `JCODE_HOME` is set and no existing global
+config file is found, brand-new global config creation now targets
+`~/.mercury/config.toml`. Existing `~/.jcode/config.toml` remains a fallback,
+and explicit env vars still take precedence. `config show` reports the resolved
+config path and source; `config edit` creates or edits the resolved path.
 
 ### Phase D: Add `.mercury/workspace.toml` Support While Preserving `.jcode/workspace.toml`
 

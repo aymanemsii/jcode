@@ -4,29 +4,28 @@ This document describes the current customization system implemented in jcode cu
 
 ## Config Location
 
-jcode reads global customization settings from:
+jcode reads global customization settings with this precedence:
 
 ```text
+$MERCURY_HOME/config.toml
+$JCODE_HOME/config.toml
+~/.mercury/config.toml
 ~/.jcode/config.toml
 ```
 
-When `JCODE_HOME` is set, jcode reads the config from:
+`MERCURY_HOME` is the highest-precedence explicit config home. `JCODE_HOME`
+remains supported as the legacy explicit config home:
 
 ```text
 $JCODE_HOME/config.toml
-```
-
-Mercury compatibility also supports `MERCURY_HOME` as a higher-precedence
-explicit config home:
-
-```text
 $MERCURY_HOME/config.toml
 ```
 
 If both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` wins and
 `jcode config show` reports that both env vars are set. When neither env var is
 set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to
-`~/.jcode/config.toml`.
+`~/.jcode/config.toml`. If neither file exists, new global config creation
+defaults to `~/.mercury/config.toml`.
 
 Customization is configured through TOML sections such as `[app]`, `[display]`, and `[themes.<name>]`.
 
@@ -148,7 +147,7 @@ Use:
 jcode config edit
 ```
 
-The command opens the global user config file in your editor. It creates the config directory and `config.toml` if they do not already exist.
+The command opens the resolved global user config file in your editor. It creates the config directory and `config.toml` if they do not already exist; for brand-new configs with no explicit env var and no existing file, that path is `~/.mercury/config.toml`.
 
 Editor selection uses `$VISUAL` first, then `$EDITOR`. On Windows, jcode falls back to Notepad when neither variable is set. On macOS and Linux, set `VISUAL` or `EDITOR` before running the command.
 
@@ -399,6 +398,7 @@ jcode config show
 
 The command reports safe display/customization visibility details, including:
 
+* Resolved global config path and source
 * Active theme
 * Theme validity
 * Theme source

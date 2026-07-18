@@ -276,6 +276,8 @@ fn config_show_reports_missing_accent_as_default() {
     let output = render_config_show(&cfg);
 
     assert!(output.contains("jcode customization config:"));
+    assert!(output.contains("config path:"));
+    assert!(output.contains("config path source:"));
     assert!(output.contains("config home source: default"));
     assert!(output.contains("config home warning: none"));
     assert!(output.contains("workspace config: not found"));
@@ -312,6 +314,66 @@ fn config_show_reports_missing_accent_as_default() {
     );
     assert!(!output.contains("api_key"));
     assert!(!output.contains("token"));
+}
+
+#[test]
+fn config_edit_creates_global_config_at_mercury_path_when_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+
+    let path = ensure_global_config_file().expect("ensure global config");
+
+    assert_eq!(path, home.path().join(".mercury").join("config.toml"));
+    assert!(path.exists());
+    assert!(!home.path().join(".jcode").join("config.toml").exists());
+}
+
+#[test]
+fn config_edit_preserves_existing_jcode_global_config() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    let jcode_path = home.path().join(".jcode").join("config.toml");
+    let original = "[display]\ncentered = true\n";
+    std::fs::create_dir_all(jcode_path.parent().expect("config parent"))
+        .expect("create config parent");
+    std::fs::write(&jcode_path, original).expect("write jcode config");
+
+    let path = ensure_global_config_file().expect("ensure global config");
+
+    assert_eq!(path, jcode_path);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    assert!(!home.path().join(".mercury").join("config.toml").exists());
+}
+
+#[test]
+fn config_show_reports_resolved_global_config_path_source() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    let mercury_path = home.path().join(".mercury").join("config.toml");
+    std::fs::create_dir_all(mercury_path.parent().expect("config parent"))
+        .expect("create config parent");
+    std::fs::write(&mercury_path, "[display]\ncentered = true\n").expect("write config");
+    let cfg = crate::config::Config::default();
+
+    let output = render_config_show(&cfg);
+
+    assert!(output.contains(&format!("config path: {}", mercury_path.display())));
+    assert!(output.contains("config path source: ~/.mercury/config.toml"));
 }
 
 #[test]
