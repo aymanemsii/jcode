@@ -3,7 +3,8 @@ use crate::storage::jcode_dir;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-const WORKSPACE_CONFIG_RELATIVE_PATH: &[&str] = &[".jcode", "workspace.toml"];
+const MERCURY_WORKSPACE_CONFIG_RELATIVE_PATH: &[&str] = &[".mercury", "workspace.toml"];
+const JCODE_WORKSPACE_CONFIG_RELATIVE_PATH: &[&str] = &[".jcode", "workspace.toml"];
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -30,6 +31,7 @@ struct ProjectWorkspaceDisplayConfig {
 #[derive(Debug, Clone)]
 struct LoadedProjectWorkspaceConfig {
     path: PathBuf,
+    source: WorkspaceConfigSource,
     config: ProjectWorkspaceConfig,
 }
 
@@ -44,7 +46,7 @@ impl Config {
     /// Get the current-directory project-local workspace config path.
     pub fn current_workspace_path() -> Option<PathBuf> {
         let mut path = std::env::current_dir().ok()?;
-        for component in WORKSPACE_CONFIG_RELATIVE_PATH {
+        for component in JCODE_WORKSPACE_CONFIG_RELATIVE_PATH {
             path.push(component);
         }
         Some(path)
@@ -53,21 +55,43 @@ impl Config {
     /// Discover the project-local workspace config path.
     ///
     /// Search starts at the process current working directory and walks upward
-    /// through parents until the nearest `.jcode/workspace.toml` is found or
-    /// the filesystem root is reached.
+    /// through parents until the nearest `.mercury/workspace.toml` or
+    /// `.jcode/workspace.toml` is found or the filesystem root is reached.
+    /// `.mercury` wins only when both files exist in the same directory.
     pub fn workspace_path() -> Option<PathBuf> {
-        let cwd = std::env::current_dir().ok()?;
-        Self::discover_workspace_path_from(&cwd)
+        Self::workspace_path_with_source().map(|resolved| resolved.path)
     }
 
     pub fn discover_workspace_path_from(start: &Path) -> Option<PathBuf> {
+        Self::discover_workspace_path_with_source_from(start).map(|resolved| resolved.path)
+    }
+
+    pub fn workspace_path_with_source() -> Option<ResolvedWorkspaceConfigPath> {
+        let cwd = std::env::current_dir().ok()?;
+        Self::discover_workspace_path_with_source_from(&cwd)
+    }
+
+    pub fn discover_workspace_path_with_source_from(
+        start: &Path,
+    ) -> Option<ResolvedWorkspaceConfigPath> {
         for dir in start.ancestors() {
-            let mut path = dir.to_path_buf();
-            for component in WORKSPACE_CONFIG_RELATIVE_PATH {
-                path.push(component);
-            }
-            if path.is_file() {
-                return Some(path);
+            for (relative_path, source) in [
+                (
+                    MERCURY_WORKSPACE_CONFIG_RELATIVE_PATH,
+                    WorkspaceConfigSource::Mercury,
+                ),
+                (
+                    JCODE_WORKSPACE_CONFIG_RELATIVE_PATH,
+                    WorkspaceConfigSource::Jcode,
+                ),
+            ] {
+                let mut path = dir.to_path_buf();
+                for component in relative_path {
+                    path.push(component);
+                }
+                if path.is_file() {
+                    return Some(ResolvedWorkspaceConfigPath { path, source });
+                }
             }
         }
         None
@@ -122,9 +146,11 @@ impl Config {
     }
 
     fn load_project_workspace_config_strict() -> ProjectWorkspaceLoadResult {
-        let Some(path) = Self::workspace_path() else {
+        let Some(resolved) = Self::workspace_path_with_source() else {
             return Ok(None);
         };
+        let source = resolved.source;
+        let path = resolved.path;
 
         let content = std::fs::read_to_string(&path).map_err(|e| {
             anyhow::anyhow!(
@@ -140,7 +166,11 @@ impl Config {
                 e
             )
         })?;
-        Ok(Some(LoadedProjectWorkspaceConfig { path, config }))
+        Ok(Some(LoadedProjectWorkspaceConfig {
+            path,
+            source,
+            config,
+        }))
     }
 
     fn apply_project_workspace_customization_lossy(&mut self) {
@@ -148,8 +178,9 @@ impl Config {
             Ok(Some(workspace)) => self.apply_project_workspace_customization(workspace),
             Ok(None) => {}
             Err(e) => {
-                if let Some(path) = Self::workspace_path() {
-                    self.workspace_config.path = Some(path);
+                if let Some(resolved) = Self::workspace_path_with_source() {
+                    self.workspace_config.path = Some(resolved.path);
+                    self.workspace_config.source = Some(resolved.source);
                 }
                 crate::logging::error(&format!("Failed to load workspace config: {}", e));
             }
@@ -158,6 +189,7 @@ impl Config {
 
     fn apply_project_workspace_customization(&mut self, loaded: LoadedProjectWorkspaceConfig) {
         self.workspace_config.path = Some(loaded.path);
+        self.workspace_config.source = Some(loaded.source);
         self.workspace = loaded.config.workspace;
 
         if let Some(value) = loaded.config.display.theme {

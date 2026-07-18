@@ -261,6 +261,7 @@ fn config_show_reports_missing_accent_as_default() {
     assert!(output.contains("config home source: default"));
     assert!(output.contains("config home warning: none"));
     assert!(output.contains("workspace config: not found"));
+    assert!(output.contains("workspace config source: not found"));
     assert!(output.contains("workspace config location: not found"));
     assert!(output.contains("workspace.name: not configured"));
     assert!(output.contains("project-local display overrides: none"));
@@ -316,6 +317,7 @@ fn config_show_reports_project_local_workspace_customization() {
     let mut cfg = crate::config::Config::default();
     cfg.workspace.name = Some("jcode".to_string());
     cfg.workspace_config.path = Some(std::path::PathBuf::from(".jcode/workspace.toml"));
+    cfg.workspace_config.source = Some(crate::config::WorkspaceConfigSource::Jcode);
     cfg.workspace_config.display_overrides = vec![
         "display.theme".to_string(),
         "display.accent_color".to_string(),
@@ -339,6 +341,7 @@ fn config_show_reports_project_local_workspace_customization() {
     let output = render_config_show(&cfg);
 
     assert!(output.contains("workspace config: .jcode/workspace.toml"));
+    assert!(output.contains("workspace config source: .jcode"));
     assert!(output.contains("workspace config location: parent directory"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains(
@@ -408,12 +411,14 @@ top_bar_items = ["app", "session", "theme", "repo"]
 
     let output = render_workspace_show_from_value(
         std::path::Path::new(".jcode/workspace.toml"),
+        ".jcode",
         "current directory",
         &value,
     );
 
     assert!(output.contains("Workspace config: found"));
     assert!(output.contains("path: .jcode/workspace.toml"));
+    assert!(output.contains("source: .jcode"));
     assert!(output.contains("location: current directory"));
     assert!(output.contains("workspace.name: jcode"));
     assert!(output.contains("display.theme: cursor"));

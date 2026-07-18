@@ -467,9 +467,9 @@ pub fn on_config_reloaded(listener: fn()) {
 pub struct Config {
     /// Effective project-local workspace identity.
     ///
-    /// This is populated from the nearest `.jcode/workspace.toml` discovered
-    /// by walking upward from the process current directory. It is not loaded
-    /// from or saved to global config.toml.
+    /// This is populated from the nearest `.mercury/workspace.toml` or
+    /// `.jcode/workspace.toml` discovered by walking upward from the process
+    /// current directory. It is not loaded from or saved to global config.toml.
     #[serde(skip)]
     pub workspace: WorkspaceIdentityConfig,
 
@@ -583,7 +583,29 @@ impl WorkspaceIdentityConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkspaceConfigMetadata {
     pub path: Option<PathBuf>,
+    pub source: Option<WorkspaceConfigSource>,
     pub display_overrides: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedWorkspaceConfigPath {
+    pub path: PathBuf,
+    pub source: WorkspaceConfigSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceConfigSource {
+    Mercury,
+    Jcode,
+}
+
+impl WorkspaceConfigSource {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mercury => ".mercury",
+            Self::Jcode => ".jcode",
+        }
+    }
 }
 
 /// Agent Client Protocol adapter configuration.

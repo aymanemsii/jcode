@@ -1,5 +1,26 @@
 # TODO
 
+## Task 50 - Add Mercury workspace path support
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added support for `.mercury/workspace.toml` as part of the Mercury compatibility rename layer.
+* Preserved `.jcode/workspace.toml` as a fallback.
+* Implemented parent-directory discovery precedence where the nearest workspace directory wins and `.mercury` wins only when both files exist in the same directory.
+* Reported the resolved workspace path/source through existing config/workspace visibility commands where appropriate.
+* Preserved current workspace init/edit default behavior for this phase.
+* Avoided automatic migration, destructive moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 48 - Add MERCURY_HOME support
 
 Task Type: Implementation

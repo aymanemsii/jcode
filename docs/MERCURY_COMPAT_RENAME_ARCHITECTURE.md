@@ -146,11 +146,21 @@ The default config directory remains unchanged in this phase: when neither env v
 
 ### Phase C: Add `~/.mercury/config.toml` Support While Preserving `~/.jcode/config.toml`
 
-Read the Mercury default config path before the legacy default path. Preserve `~/.jcode/config.toml` as fallback.
+Status: implemented.
+
+Mercury default config discovery now reads `~/.mercury/config.toml` before the
+legacy `~/.jcode/config.toml` fallback when neither explicit home env var is
+set.
 
 ### Phase D: Add `.mercury/workspace.toml` Support While Preserving `.jcode/workspace.toml`
 
-Extend parent-directory workspace discovery to support both workspace filenames. Use nearest-directory precedence with `.mercury` as the same-directory tie-breaker.
+Status: implemented.
+
+Parent-directory workspace discovery now supports both
+`.mercury/workspace.toml` and `.jcode/workspace.toml`. Discovery uses
+nearest-directory precedence, with `.mercury` as the same-directory tie-breaker.
+Existing workspace init/edit defaults still create or edit
+`./.jcode/workspace.toml` for this phase.
 
 ### Phase E: Update Workspace Init/Edit Defaults Only After Compatibility Is Proven
 

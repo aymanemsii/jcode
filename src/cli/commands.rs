@@ -661,14 +661,23 @@ fn render_config_show(config: &crate::config::Config) -> String {
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| "not found".to_string());
+    let workspace_config_source_label = config
+        .workspace_config
+        .source
+        .or_else(|| {
+            config
+                .workspace_config
+                .path
+                .as_deref()
+                .and_then(workspace_source_from_path)
+        })
+        .map(crate::config::WorkspaceConfigSource::label)
+        .unwrap_or("not found");
     let workspace_config_location_label = config
         .workspace_config
         .path
         .as_ref()
-        .and_then(|path| {
-            crate::config::Config::current_workspace_path()
-                .map(|current_path| workspace_location_label(path, &current_path))
-        })
+        .map(|path| workspace_location_label(path))
         .unwrap_or("not found");
     let workspace_name_label = compact_optional_text_label(config.workspace.name.as_deref());
     let workspace_display_overrides_label = if config.workspace_config.display_overrides.is_empty()
@@ -777,6 +786,7 @@ fn render_config_show(config: &crate::config::Config) -> String {
 config home source: {config_home_source_label}\n\
 config home warning: {config_home_warning_label}\n\
 workspace config: {workspace_config_label}\n\
+workspace config source: {workspace_config_source_label}\n\
 workspace config location: {workspace_config_location_label}\n\
 workspace.name: {workspace_name_label}\n\
 project-local display overrides: {workspace_display_overrides_label}\n\
@@ -810,7 +820,7 @@ fallback: {fallback_label}\n"
 
 fn render_workspace_show() -> Result<String> {
     let current_workspace_path = workspace_config_path()?;
-    let Some(workspace_path) = crate::config::Config::workspace_path() else {
+    let Some(workspace) = crate::config::Config::workspace_path_with_source() else {
         return Ok(format!(
             "Workspace config: not found\n\
 current-directory path: {}\n\
@@ -819,6 +829,8 @@ Create one with `jcode workspace init`, or open a new local workspace file with 
             current_workspace_path.display()
         ));
     };
+    let workspace_source = workspace.source;
+    let workspace_path = workspace.path;
 
     let content = std::fs::read_to_string(&workspace_path).map_err(|err| {
         anyhow::anyhow!(
@@ -835,23 +847,50 @@ Create one with `jcode workspace init`, or open a new local workspace file with 
 
     Ok(render_workspace_show_from_value(
         &workspace_path,
-        workspace_location_label(&workspace_path, &current_workspace_path),
+        workspace_source.label(),
+        workspace_location_label(&workspace_path),
         &value,
     ))
 }
 
-fn workspace_location_label(path: &Path, current_workspace_path: &Path) -> &'static str {
-    if path == current_workspace_path {
+fn workspace_location_label(path: &Path) -> &'static str {
+    if workspace_config_root(path)
+        .and_then(|workspace_root| {
+            std::env::current_dir()
+                .ok()
+                .map(|cwd| workspace_root == cwd.as_path())
+        })
+        .unwrap_or(false)
+    {
         "current directory"
     } else {
         "parent directory"
     }
 }
 
-fn render_workspace_show_from_value(path: &Path, location: &str, value: &toml::Value) -> String {
+fn workspace_config_root(path: &Path) -> Option<&Path> {
+    path.parent()?.parent()
+}
+
+fn workspace_source_from_path(path: &Path) -> Option<crate::config::WorkspaceConfigSource> {
+    let source_dir = path.parent()?.file_name()?.to_str()?;
+    match source_dir {
+        ".mercury" => Some(crate::config::WorkspaceConfigSource::Mercury),
+        ".jcode" => Some(crate::config::WorkspaceConfigSource::Jcode),
+        _ => None,
+    }
+}
+
+fn render_workspace_show_from_value(
+    path: &Path,
+    source: &str,
+    location: &str,
+    value: &toml::Value,
+) -> String {
     format!(
         "Workspace config: found\n\
 path: {}\n\
+source: {}\n\
 location: {}\n\
 workspace.name: {}\n\
 \n\
@@ -866,6 +905,7 @@ display.background_opacity: {}\n\
 display.top_bar: {}\n\
 display.top_bar_items: {}\n",
         path.display(),
+        source,
         location,
         toml_string_label(value, &["workspace", "name"]),
         toml_string_label(value, &["display", "theme"]),

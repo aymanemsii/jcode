@@ -25,8 +25,8 @@ $MERCURY_HOME/config.toml
 
 If both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` wins and
 `jcode config show` reports that both env vars are set. When neither env var is
-set, the default remains `~/.jcode/config.toml`; this phase does not introduce
-`~/.mercury/config.toml` as a default location.
+set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to
+`~/.jcode/config.toml`.
 
 Customization is configured through TOML sections such as `[app]`, `[display]`, and `[themes.<name>]`.
 
@@ -35,12 +35,15 @@ Customization is configured through TOML sections such as `[app]`, `[display]`, 
 jcode also supports a visual-only project-local workspace file:
 
 ```text
+.mercury/workspace.toml
 .jcode/workspace.toml
 ```
 
 jcode searches upward from the current working directory and loads the nearest
-`.jcode/workspace.toml`. It loads only one workspace file and does not merge
-multiple parent workspace files.
+`.mercury/workspace.toml` or `.jcode/workspace.toml`. It loads only one
+workspace file and does not merge multiple parent workspace files. Distance is
+the primary precedence rule; when both files exist in the same directory,
+`.mercury/workspace.toml` wins.
 
 Supported MVP shape:
 
@@ -92,8 +95,9 @@ jcode workspace edit
 ```
 
 `jcode workspace show` reports the discovered workspace file, whether it was
-found in the current directory or a parent directory, `workspace.name`, and the
-supported project-local display fields when present.
+found in the current directory or a parent directory, whether the source is
+`.mercury` or `.jcode`, `workspace.name`, and the supported project-local
+display fields when present.
 
 `jcode workspace init` creates `./.jcode/workspace.toml` with safe visual-only
 defaults and refuses to overwrite an existing file:
@@ -113,7 +117,8 @@ the editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS and
 Linux, set `VISUAL` or `EDITOR` first.
 
 `jcode workspace init` and `jcode workspace edit` are current-directory
-commands. They do not edit a discovered parent workspace file.
+commands. They continue to create/edit `./.jcode/workspace.toml` for this
+phase and do not edit a discovered parent workspace file.
 
 ## App Identity
 
@@ -258,7 +263,7 @@ jcode theme preview [theme-name]
 ```
 
 `jcode theme list` prints the built-in theme names and any global custom themes
-defined under `[themes.<name>]`. If the discovered `.jcode/workspace.toml`
+defined under `[themes.<name>]`. If the discovered project-local workspace file
 overrides `display.theme` or `display.accent_color`, the command notes that
 project-local workspace customization may affect the current theme or accent.
 
@@ -338,7 +343,7 @@ drawn over the background panel. jcode does not draw the background over
 messages, input text, dialogs, command palettes, onboarding, or active
 conversation content.
 
-Project-local `./.jcode/workspace.toml` can override
+Project-local `.mercury/workspace.toml` or `./.jcode/workspace.toml` can override
 `display.background_style` and `display.background_opacity` because they are
 visual-only fields.
 
@@ -374,8 +379,8 @@ An explicitly empty list renders no items while `display.top_bar = true` still
 reserves the top bar line. Unknown item names are ignored safely and reported by
 `jcode config show` as ignored items.
 
-Project-local `./.jcode/workspace.toml` can override `display.top_bar_items`
-because it is visual-only.
+Project-local `.mercury/workspace.toml` or `./.jcode/workspace.toml` can
+override `display.top_bar_items` because it is visual-only.
 
 Token usage, multi-session controls, Queue integration beyond the current
 session label, wallpaper, and split-pane controls are deferred.
@@ -400,7 +405,7 @@ The command reports safe display/customization visibility details, including:
 * Background style and opacity fields
 * Top status bar setting
 * Top status bar item order and ignored item names
-* Project-local workspace config path, location, workspace name, and project-local display overrides
+* Project-local workspace config path, source, location, workspace name, and project-local display overrides
 
 The heading uses `app.name` when configured and falls back to `jcode`.
 

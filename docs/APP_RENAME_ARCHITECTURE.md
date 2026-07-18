@@ -94,6 +94,11 @@ Project-local customization is stored in:
 .jcode/workspace.toml
 ```
 
+Mercury compatibility also reads `.mercury/workspace.toml` during
+parent-directory discovery. The existing `.jcode/workspace.toml` path remains
+supported as a fallback, and current workspace init/edit defaults still target
+`./.jcode/workspace.toml`.
+
 The workspace identity field is:
 
 ```toml
@@ -201,7 +206,7 @@ These surfaces should be audited before any hard rename implementation.
 * Env vars such as `JCODE_HOME`
 * Env vars with `JCODE_NO_*` names
 * Project-local directory: `.jcode`
-* Project-local workspace file: `.jcode/workspace.toml`
+* Project-local workspace file: `.jcode/workspace.toml`, with Mercury read compatibility for `.mercury/workspace.toml`
 * Logs, cache, and state paths
 * Generated default config comments
 * Install notes and launcher paths
@@ -290,9 +295,9 @@ Compatibility should be preserved:
 * Continue supporting `JCODE_HOME`.
 * Continue reading `~/.jcode`.
 * Add a new home/env alias only with documented precedence.
-* Keep project-local `.jcode/workspace.toml` working.
+* Keep project-local `.jcode/workspace.toml` working while also reading `.mercury/workspace.toml`.
 
-When both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` takes precedence and `config show` reports the conflict. The default config directory remains `~/.jcode` until a separate compatibility phase adds `~/.mercury/config.toml` support.
+When both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` takes precedence and `config show` reports the conflict. When neither env var is set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to `~/.jcode/config.toml`.
 
 ### Phase D: Optional Hard Rename
 

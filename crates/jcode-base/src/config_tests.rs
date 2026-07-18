@@ -922,9 +922,109 @@ fn project_workspace_config_discovers_parent_directory_file() {
         cfg.workspace_config.path,
         Some(project.path().join(".jcode").join("workspace.toml"))
     );
+    assert_eq!(
+        cfg.workspace_config.source,
+        Some(super::WorkspaceConfigSource::Jcode)
+    );
 
     restore_current_dir(&prev_cwd);
     restore_env_var("JCODE_HOME", prev_home);
+}
+
+#[test]
+fn project_workspace_config_discovers_mercury_workspace_file() {
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    let workspace_dir = project.path().join(".mercury");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+    std::fs::create_dir_all(&child).expect("create child dir");
+    std::fs::write(
+        workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"MercuryWorkspace\"\n",
+    )
+    .expect("write mercury workspace config");
+
+    let resolved = Config::discover_workspace_path_with_source_from(&child)
+        .expect("discover mercury workspace config");
+
+    assert_eq!(resolved.path, workspace_dir.join("workspace.toml"));
+    assert_eq!(resolved.source, super::WorkspaceConfigSource::Mercury);
+}
+
+#[test]
+fn project_workspace_config_discovers_jcode_workspace_fallback_file() {
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    let workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+    std::fs::create_dir_all(&child).expect("create child dir");
+    std::fs::write(
+        workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"JcodeWorkspace\"\n",
+    )
+    .expect("write jcode workspace config");
+
+    let resolved = Config::discover_workspace_path_with_source_from(&child)
+        .expect("discover jcode workspace config");
+
+    assert_eq!(resolved.path, workspace_dir.join("workspace.toml"));
+    assert_eq!(resolved.source, super::WorkspaceConfigSource::Jcode);
+}
+
+#[test]
+fn project_workspace_config_prefers_mercury_when_both_files_exist_in_same_directory() {
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    let mercury_workspace_dir = project.path().join(".mercury");
+    let jcode_workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&mercury_workspace_dir).expect("create mercury workspace dir");
+    std::fs::create_dir_all(&jcode_workspace_dir).expect("create jcode workspace dir");
+    std::fs::create_dir_all(&child).expect("create child dir");
+    std::fs::write(
+        mercury_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"MercuryWorkspace\"\n",
+    )
+    .expect("write mercury workspace config");
+    std::fs::write(
+        jcode_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"JcodeWorkspace\"\n",
+    )
+    .expect("write jcode workspace config");
+
+    let resolved = Config::discover_workspace_path_with_source_from(&child)
+        .expect("discover workspace config");
+
+    assert_eq!(
+        resolved.path,
+        mercury_workspace_dir.join("workspace.toml")
+    );
+    assert_eq!(resolved.source, super::WorkspaceConfigSource::Mercury);
+}
+
+#[test]
+fn project_workspace_config_uses_nearer_jcode_before_parent_mercury() {
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    let child = project.path().join("child");
+    let parent_workspace_dir = project.path().join(".mercury");
+    let child_workspace_dir = child.join(".jcode");
+    std::fs::create_dir_all(&parent_workspace_dir).expect("create parent workspace dir");
+    std::fs::create_dir_all(&child_workspace_dir).expect("create child workspace dir");
+    std::fs::write(
+        parent_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"ParentMercuryWorkspace\"\n",
+    )
+    .expect("write parent mercury workspace config");
+    std::fs::write(
+        child_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"ChildJcodeWorkspace\"\n",
+    )
+    .expect("write child jcode workspace config");
+
+    let resolved = Config::discover_workspace_path_with_source_from(&child)
+        .expect("discover workspace config");
+
+    assert_eq!(resolved.path, child_workspace_dir.join("workspace.toml"));
+    assert_eq!(resolved.source, super::WorkspaceConfigSource::Jcode);
 }
 
 #[test]
@@ -959,6 +1059,10 @@ fn project_workspace_config_uses_nearest_discovered_file() {
     assert_eq!(
         cfg.workspace_config.path,
         Some(child.join(".jcode").join("workspace.toml"))
+    );
+    assert_eq!(
+        cfg.workspace_config.source,
+        Some(super::WorkspaceConfigSource::Jcode)
     );
 
     restore_current_dir(&prev_cwd);
@@ -996,6 +1100,10 @@ fn project_workspace_config_rejects_non_allowlisted_sections() {
     assert_eq!(
         cfg.workspace_config.path,
         Some(project.path().join(".jcode").join("workspace.toml"))
+    );
+    assert_eq!(
+        cfg.workspace_config.source,
+        Some(super::WorkspaceConfigSource::Jcode)
     );
     assert!(cfg.workspace_config.display_overrides.is_empty());
 
