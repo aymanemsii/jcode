@@ -75,7 +75,7 @@ The alternative, globally preferring `.mercury` even when `.jcode` is nearer, wo
 
 Same-directory precedence should prefer `.mercury/workspace.toml` because it is the new app-specific location. If both files exist together, Mercury should warn or show both paths in `workspace show`/`config show` diagnostics so users understand which one is active.
 
-Workspace init/edit defaults should be delayed. Existing `jcode workspace init` and edit behavior should continue using `.jcode/workspace.toml` until `.mercury` read compatibility is proven. A later Mercury-specific default can be introduced after the read path, diagnostics, and tests are stable.
+Workspace init/edit now use `.mercury/workspace.toml` for new current-directory workspace files. Existing `.jcode/workspace.toml` files remain supported; edit opens an existing current-directory `.jcode/workspace.toml` when no same-directory `.mercury/workspace.toml` exists, and init refuses to create a duplicate Mercury file beside an existing current-directory legacy file.
 
 ## Migration Strategy
 
@@ -159,12 +159,23 @@ Status: implemented.
 Parent-directory workspace discovery now supports both
 `.mercury/workspace.toml` and `.jcode/workspace.toml`. Discovery uses
 nearest-directory precedence, with `.mercury` as the same-directory tie-breaker.
-Existing workspace init/edit defaults still create or edit
+Existing workspace init/edit defaults still created or edited
 `./.jcode/workspace.toml` for this phase.
 
 ### Phase E: Update Workspace Init/Edit Defaults Only After Compatibility Is Proven
 
-After read compatibility, diagnostics, and tests are stable, consider making Mercury-facing workspace commands create or edit `.mercury/workspace.toml` by default. Keep legacy paths readable.
+Status: implemented.
+
+Workspace init/edit now default new current-directory workspace files to
+`./.mercury/workspace.toml`. `workspace init` refuses to overwrite an existing
+same-directory `.mercury/workspace.toml` and refuses to create a duplicate when
+only same-directory `.jcode/workspace.toml` exists. `workspace edit` opens
+same-directory `.mercury/workspace.toml` first, then same-directory
+`.jcode/workspace.toml`, and creates `./.mercury/workspace.toml` only when
+neither file exists.
+
+This phase does not implement automatic migration, does not move or copy
+legacy workspace files, and keeps `.jcode/workspace.toml` readable.
 
 ## What Not To Do Yet
 

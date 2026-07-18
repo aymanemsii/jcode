@@ -1000,9 +1000,9 @@ pub(crate) enum ConfigCommand {
 pub(crate) enum WorkspaceCommand {
     /// Show discovered project-local workspace customization
     Show,
-    /// Create ./.jcode/workspace.toml with safe visual-only defaults
+    /// Create ./.mercury/workspace.toml with safe visual-only defaults
     Init,
-    /// Open ./.jcode/workspace.toml in an editor, creating it first if missing
+    /// Open the current-directory workspace config in an editor, creating ./.mercury/workspace.toml if missing
     Edit,
 }
 

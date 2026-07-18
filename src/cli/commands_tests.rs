@@ -37,6 +37,24 @@ impl Drop for SavedEnv {
     }
 }
 
+struct SavedCurrentDir {
+    path: std::path::PathBuf,
+}
+
+impl SavedCurrentDir {
+    fn capture() -> Self {
+        Self {
+            path: std::env::current_dir().expect("current dir"),
+        }
+    }
+}
+
+impl Drop for SavedCurrentDir {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.path).expect("restore current dir");
+    }
+}
+
 struct TestProvider;
 
 #[async_trait]
@@ -386,6 +404,69 @@ fn workspace_default_config_is_visual_only() {
     assert!(!output.contains("auth"));
     assert!(!output.contains("network"));
     assert!(!output.contains("execution"));
+}
+
+#[test]
+fn workspace_init_creates_mercury_workspace_config() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+
+    let path = create_workspace_config_file(false).expect("create workspace config");
+
+    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
+    assert!(path.exists());
+    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
+}
+
+#[test]
+fn workspace_init_refuses_duplicate_when_jcode_workspace_config_exists() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let jcode_path = temp.path().join(".jcode").join("workspace.toml");
+    std::fs::create_dir_all(jcode_path.parent().expect("workspace parent")).unwrap();
+    std::fs::write(&jcode_path, "[workspace]\nname = \"ExistingJcode\"\n").unwrap();
+
+    let err = create_workspace_config_file(false).expect_err("duplicate should fail");
+
+    assert!(err.to_string().contains(".jcode"));
+    assert!(err.to_string().contains("workspace.toml"));
+    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
+}
+
+#[test]
+fn workspace_edit_creates_mercury_workspace_config_when_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+
+    let path = ensure_workspace_config_file().expect("ensure workspace config");
+
+    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
+    assert!(path.exists());
+    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
+}
+
+#[test]
+fn workspace_edit_preserves_existing_jcode_workspace_config() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let jcode_path = temp.path().join(".jcode").join("workspace.toml");
+    let original = "[workspace]\nname = \"ExistingJcode\"\n";
+    std::fs::create_dir_all(jcode_path.parent().expect("workspace parent")).unwrap();
+    std::fs::write(&jcode_path, original).unwrap();
+
+    let path = ensure_workspace_config_file().expect("ensure workspace config");
+
+    assert_eq!(path, jcode_path);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
 }
 
 #[test]

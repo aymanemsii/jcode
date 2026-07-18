@@ -1,5 +1,24 @@
 # TODO
 
+## Task 51 - Default new workspaces to Mercury path
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Updated workspace init/edit creation defaults to use `.mercury/workspace.toml` for new workspaces.
+* Preserved existing `.jcode/workspace.toml` compatibility and avoided duplicate creation when a current-directory `.jcode` workspace already exists.
+* Kept workspace discovery precedence unchanged: nearest directory wins, with `.mercury` preferred only when both files exist in the same directory.
+* Avoided automatic migration, destructive moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 50 - Add Mercury workspace path support
 
 Task Type: Implementation

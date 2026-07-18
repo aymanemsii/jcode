@@ -91,13 +91,14 @@ This hook is especially useful when multiple terminals are open because it can c
 Project-local customization is stored in:
 
 ```text
-.jcode/workspace.toml
+.mercury/workspace.toml
 ```
 
 Mercury compatibility also reads `.mercury/workspace.toml` during
 parent-directory discovery. The existing `.jcode/workspace.toml` path remains
-supported as a fallback, and current workspace init/edit defaults still target
-`./.jcode/workspace.toml`.
+supported as a fallback. New workspace init/edit creation defaults now target
+`./.mercury/workspace.toml`; edit still opens an existing current-directory
+`./.jcode/workspace.toml` when no same-directory Mercury file exists.
 
 The workspace identity field is:
 
@@ -206,7 +207,7 @@ These surfaces should be audited before any hard rename implementation.
 * Env vars such as `JCODE_HOME`
 * Env vars with `JCODE_NO_*` names
 * Project-local directory: `.jcode`
-* Project-local workspace file: `.jcode/workspace.toml`, with Mercury read compatibility for `.mercury/workspace.toml`
+* Project-local workspace file: `.mercury/workspace.toml`, with legacy compatibility for `.jcode/workspace.toml`
 * Logs, cache, and state paths
 * Generated default config comments
 * Install notes and launcher paths
