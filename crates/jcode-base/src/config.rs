@@ -1,7 +1,7 @@
 //! Configuration file support for jcode
 //!
-//! Config is loaded from `~/.jcode/config.toml` (or `$MERCURY_HOME/config.toml` /
-//! `$JCODE_HOME/config.toml`)
+//! Config is loaded from `$MERCURY_HOME/config.toml`, `$JCODE_HOME/config.toml`,
+//! `~/.mercury/config.toml`, or legacy `~/.jcode/config.toml`.
 //! Environment variables override config file settings.
 
 pub use jcode_config_types::{

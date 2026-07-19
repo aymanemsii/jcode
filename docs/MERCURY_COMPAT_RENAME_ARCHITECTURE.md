@@ -152,7 +152,7 @@ Mercury default config discovery now reads `~/.mercury/config.toml` before the
 legacy `~/.jcode/config.toml` fallback when neither explicit home env var is
 set.
 
-### Phase C2: Default New Global Configs To `~/.mercury/config.toml`
+### Phase E1: Default New Global Configs To `~/.mercury/config.toml`
 
 Status: implemented.
 

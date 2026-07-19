@@ -305,6 +305,10 @@ explicit env var is set and no existing global config file is found. Existing
 `~/.jcode/config.toml` users remain on that fallback path unless they choose to
 migrate manually.
 
+In short: brand-new no-env global configs are now created at
+`~/.mercury/config.toml`, while legacy `~/.jcode/config.toml` remains supported
+and is not silently ignored when present.
+
 ### Phase D: Optional Hard Rename
 
 Only after compatibility aliases exist, consider a hard rename of crates, package metadata, binary names, release artifacts, docs, and internal constants.

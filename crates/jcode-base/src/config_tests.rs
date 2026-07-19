@@ -458,6 +458,8 @@ fn global_config_path_defaults_to_mercury_when_no_config_exists() {
 
     assert_eq!(resolved.path, home.path().join(".mercury").join("config.toml"));
     assert_eq!(resolved.source, "default");
+    assert_eq!(resolved.warning, None);
+    assert_ne!(resolved.path, home.path().join(".jcode").join("config.toml"));
 
     restore_env_var("MERCURY_HOME", prev_mercury_home);
     restore_env_var("JCODE_HOME", prev_jcode_home);
@@ -546,6 +548,24 @@ fn global_config_path_env_vars_beat_home_directory_discovery() {
             .path,
         mercury_home.path().join("config.toml")
     );
+
+    restore_env_var("MERCURY_HOME", prev_mercury_home);
+    restore_env_var("JCODE_HOME", prev_jcode_home);
+}
+
+#[test]
+fn config_display_string_reports_global_config_source() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_mercury_home = std::env::var_os("MERCURY_HOME");
+    let prev_jcode_home = std::env::var_os("JCODE_HOME");
+    let jcode_home = tempfile::TempDir::new().expect("jcode home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::set_var("JCODE_HOME", jcode_home.path());
+
+    let summary = Config::default().display_string();
+
+    assert!(summary.contains(jcode_home.path().join("config.toml").to_str().unwrap()));
+    assert!(summary.contains("- Global config source: `JCODE_HOME`"));
 
     restore_env_var("MERCURY_HOME", prev_mercury_home);
     restore_env_var("JCODE_HOME", prev_jcode_home);

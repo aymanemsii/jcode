@@ -1,6 +1,6 @@
 # TODO
 
-## Task 52 - Default new global configs to Mercury path
+## Task 51 - Default new global config to Mercury path
 
 Task Type: Implementation
 
@@ -10,11 +10,12 @@ Priority: High
 
 Result:
 
-* Updated brand-new global config creation to default to `~/.mercury/config.toml`.
-* Preserved `~/.jcode/config.toml` as a fallback for existing users.
+* Changed the brand-new no-env global config default target to `~/.mercury/config.toml`.
 * Preserved explicit `MERCURY_HOME` and `JCODE_HOME` precedence.
-* Kept config show/edit aligned with the resolved config path.
-* Avoided automatic migration, destructive moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+* Preserved existing `~/.mercury/config.toml` and legacy `~/.jcode/config.toml` discovery.
+* Preserved legacy `~/.jcode/config.toml` fallback for existing users.
+* Kept workspace init/edit defaults unchanged for this slice.
+* Avoided automatic migration, destructive file moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
 
 Validation:
 

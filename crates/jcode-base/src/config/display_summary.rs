@@ -2,15 +2,28 @@ use super::*;
 
 impl Config {
     pub fn display_string(&self) -> String {
-        let path = Self::path()
-            .map(|p| p.display().to_string())
+        let config_path_resolution = crate::storage::global_config_path_resolution().ok();
+        let path = config_path_resolution
+            .as_ref()
+            .map(|resolution| resolution.path.display().to_string())
             .unwrap_or_else(|| "unknown".to_string());
+        let source = config_path_resolution
+            .as_ref()
+            .map(|resolution| resolution.source)
+            .unwrap_or("unknown");
+        let warning = config_path_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.warning)
+            .map(|warning| format!("- Warning: `{}`\n", warning))
+            .unwrap_or_default();
         let mut effective_disabled_tools: Vec<String> =
             self.tools.selection().disabled_tools.into_iter().collect();
         effective_disabled_tools.sort();
 
         format!(
             r#"**Configuration** (`{}`)
+- Global config source: `{}`
+{}
 
 **Keybindings:**
 - Scroll up: `{}`
@@ -124,6 +137,8 @@ impl Config {
 *Edit the config file or set environment variables to customize.*
 *Environment variables (e.g., `JCODE_SCROLL_UP_KEY`, `JCODE_GATEWAY_ENABLED`) override file settings.*"#,
             path,
+            source,
+            warning,
             self.keybindings.scroll_up,
             self.keybindings.scroll_down,
             self.keybindings.scroll_up_fallback,

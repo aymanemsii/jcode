@@ -16,11 +16,6 @@ $JCODE_HOME/config.toml
 `MERCURY_HOME` is the highest-precedence explicit config home. `JCODE_HOME`
 remains supported as the legacy explicit config home:
 
-```text
-$JCODE_HOME/config.toml
-$MERCURY_HOME/config.toml
-```
-
 If both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` wins and
 `jcode config show` reports that both env vars are set. When neither env var is
 set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to
