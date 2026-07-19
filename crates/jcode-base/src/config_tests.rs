@@ -1109,6 +1109,47 @@ fn project_workspace_config_prefers_mercury_when_both_files_exist_in_same_direct
 }
 
 #[test]
+fn project_workspace_config_loads_mercury_when_both_files_exist_in_same_directory() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let home = tempfile::TempDir::new().expect("home tempdir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let mercury_workspace_dir = project.path().join(".mercury");
+    let jcode_workspace_dir = project.path().join(".jcode");
+    std::fs::create_dir_all(&mercury_workspace_dir).expect("create mercury workspace dir");
+    std::fs::create_dir_all(&jcode_workspace_dir).expect("create jcode workspace dir");
+    std::fs::write(
+        mercury_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"MercuryWorkspace\"\n",
+    )
+    .expect("write mercury workspace config");
+    std::fs::write(
+        jcode_workspace_dir.join("workspace.toml"),
+        "[workspace]\nname = \"JcodeWorkspace\"\n",
+    )
+    .expect("write jcode workspace config");
+
+    std::env::set_current_dir(project.path()).expect("set project cwd");
+    let cfg = Config::load();
+
+    assert_eq!(cfg.workspace.name(), Some("MercuryWorkspace"));
+    assert_eq!(
+        cfg.workspace_config.path,
+        Some(mercury_workspace_dir.join("workspace.toml"))
+    );
+    assert_eq!(
+        cfg.workspace_config.source,
+        Some(super::WorkspaceConfigSource::Mercury)
+    );
+
+    restore_current_dir(&prev_cwd);
+    restore_env_var("JCODE_HOME", prev_home);
+}
+
+#[test]
 fn project_workspace_config_uses_nearer_jcode_before_parent_mercury() {
     let project = tempfile::TempDir::new().expect("project tempdir");
     let child = project.path().join("child");

@@ -20,25 +20,6 @@ Validation:
 
 * Manual validation will be run separately after this change.
 
-## Task 51 - Default new workspaces to Mercury path
-
-Task Type: Implementation
-
-Status: Completed
-
-Priority: High
-
-Result:
-
-* Updated workspace init/edit creation defaults to use `.mercury/workspace.toml` for new workspaces.
-* Preserved existing `.jcode/workspace.toml` compatibility and avoided duplicate creation when a current-directory `.jcode` workspace already exists.
-* Kept workspace discovery precedence unchanged: nearest directory wins, with `.mercury` preferred only when both files exist in the same directory.
-* Avoided automatic migration, destructive moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
-
-Validation:
-
-* Manual validation will be run separately after this change.
-
 ## Task 50 - Add Mercury workspace path support
 
 Task Type: Implementation
@@ -51,10 +32,11 @@ Result:
 
 * Added support for `.mercury/workspace.toml` as part of the Mercury compatibility rename layer.
 * Preserved `.jcode/workspace.toml` as a fallback.
-* Implemented parent-directory discovery precedence where the nearest workspace directory wins and `.mercury` wins only when both files exist in the same directory.
-* Reported the resolved workspace path/source through existing config/workspace visibility commands where appropriate.
-* Preserved current workspace init/edit default behavior for this phase.
-* Avoided automatic migration, destructive moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+* Preserved parent-directory workspace discovery with nearest-directory precedence.
+* Preferred `.mercury/workspace.toml` only when both Mercury and legacy workspace files exist in the same directory.
+* Preserved existing workspace allowlist and field-level merge behavior.
+* Reported the resolved workspace path/source through config/workspace visibility commands where natural.
+* Avoided workspace init/edit default changes, automatic migration, destructive file moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
 
 Validation:
 

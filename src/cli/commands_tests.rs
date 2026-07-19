@@ -469,7 +469,7 @@ fn workspace_default_config_is_visual_only() {
 }
 
 #[test]
-fn workspace_init_creates_mercury_workspace_config() {
+fn workspace_init_creates_jcode_workspace_config() {
     let _guard = crate::storage::lock_test_env();
     let _cwd = SavedCurrentDir::capture();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -477,9 +477,9 @@ fn workspace_init_creates_mercury_workspace_config() {
 
     let path = create_workspace_config_file(false).expect("create workspace config");
 
-    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
+    assert_eq!(path, temp.path().join(".jcode").join("workspace.toml"));
     assert!(path.exists());
-    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
+    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
 }
 
 #[test]
@@ -500,7 +500,7 @@ fn workspace_init_refuses_duplicate_when_jcode_workspace_config_exists() {
 }
 
 #[test]
-fn workspace_edit_creates_mercury_workspace_config_when_missing() {
+fn workspace_edit_creates_jcode_workspace_config_when_missing() {
     let _guard = crate::storage::lock_test_env();
     let _cwd = SavedCurrentDir::capture();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -508,9 +508,9 @@ fn workspace_edit_creates_mercury_workspace_config_when_missing() {
 
     let path = ensure_workspace_config_file().expect("ensure workspace config");
 
-    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
+    assert_eq!(path, temp.path().join(".jcode").join("workspace.toml"));
     assert!(path.exists());
-    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
+    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
 }
 
 #[test]
