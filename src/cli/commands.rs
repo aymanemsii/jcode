@@ -47,6 +47,12 @@ pub enum CloudSubcommand {
     Sessions(CloudSessionsSubcommand),
 }
 
+pub enum MigrateSubcommand {
+    Config { dry_run: bool },
+    Workspace { dry_run: bool },
+    All { dry_run: bool },
+}
+
 const DEFAULT_ACCENT_COLOR_HEX: &str = "#BA8BFF";
 
 pub enum CloudSessionsSubcommand {
@@ -154,6 +160,27 @@ pub fn run_cloud_command(cmd: CloudSubcommand) -> Result<()> {
     match cmd {
         CloudSubcommand::Sessions(action) => run_cloud_sessions_command(action),
     }
+}
+
+pub fn run_migrate_command(cmd: MigrateSubcommand) -> Result<()> {
+    let dry_run = match &cmd {
+        MigrateSubcommand::Config { dry_run }
+        | MigrateSubcommand::Workspace { dry_run }
+        | MigrateSubcommand::All { dry_run } => dry_run,
+    };
+    if !*dry_run {
+        anyhow::bail!(
+            "only --dry-run is supported for `migrate` in this slice; retry with --dry-run"
+        );
+    }
+
+    let output = match cmd {
+        MigrateSubcommand::Config { .. } => render_migrate_config_dry_run()?,
+        MigrateSubcommand::Workspace { .. } => render_migrate_workspace_dry_run()?,
+        MigrateSubcommand::All { .. } => render_migrate_all_dry_run()?,
+    };
+    print!("{output}");
+    Ok(())
 }
 
 fn run_cloud_sessions_command(action: CloudSessionsSubcommand) -> Result<()> {
@@ -849,6 +876,105 @@ display.top_bar_items_ignored: {top_bar_items_ignored_label}\n\
 built-in themes: {built_in_themes}\n\
 built-in default accent color: {DEFAULT_ACCENT_COLOR_HEX}\n\
 fallback: {fallback_label}\n"
+    )
+}
+
+fn render_migrate_config_dry_run() -> Result<String> {
+    let plan = config_migration_plan()?;
+    Ok(render_migration_plan("Mercury config migration dry-run", &plan))
+}
+
+fn render_migrate_workspace_dry_run() -> Result<String> {
+    let plan = workspace_migration_plan()?;
+    Ok(render_migration_plan(
+        "Mercury workspace migration dry-run",
+        &plan,
+    ))
+}
+
+fn render_migrate_all_dry_run() -> Result<String> {
+    Ok(format!(
+        "{}\n{}",
+        render_migrate_config_dry_run()?,
+        render_migrate_workspace_dry_run()?
+    ))
+}
+
+#[derive(Debug)]
+struct MigrationPlan {
+    source: PathBuf,
+    destination: PathBuf,
+    note: Option<&'static str>,
+}
+
+impl MigrationPlan {
+    fn source_exists(&self) -> bool {
+        self.source.exists()
+    }
+
+    fn destination_exists(&self) -> bool {
+        self.destination.exists()
+    }
+
+    fn action(&self) -> &'static str {
+        if !self.source_exists() {
+            "source missing, nothing to migrate"
+        } else if self.destination_exists() {
+            "destination exists, would not overwrite"
+        } else {
+            "would copy"
+        }
+    }
+}
+
+fn config_migration_plan() -> Result<MigrationPlan> {
+    let env_resolution = crate::storage::config_home_env_resolution();
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
+    let source_home = env_resolution
+        .jcode_home
+        .clone()
+        .unwrap_or_else(|| home.join(".jcode"));
+    let destination_home = env_resolution
+        .mercury_home
+        .clone()
+        .unwrap_or_else(|| home.join(".mercury"));
+    let note = env_resolution.has_conflict().then_some(
+        "MERCURY_HOME wins for the Mercury destination; JCODE_HOME is the legacy source candidate",
+    );
+
+    Ok(MigrationPlan {
+        source: source_home.join("config.toml"),
+        destination: destination_home.join("config.toml"),
+        note,
+    })
+}
+
+fn workspace_migration_plan() -> Result<MigrationPlan> {
+    Ok(MigrationPlan {
+        source: current_directory_jcode_workspace_config_path()?,
+        destination: current_directory_mercury_workspace_config_path()?,
+        note: Some("workspace dry-run is current-directory only"),
+    })
+}
+
+fn render_migration_plan(title: &str, plan: &MigrationPlan) -> String {
+    let note = plan
+        .note
+        .map(|note| format!("note: {note}\n"))
+        .unwrap_or_default();
+    format!(
+        "{title}\n\
+source: {}\n\
+destination: {}\n\
+source exists: {}\n\
+destination exists: {}\n\
+action: {}\n\
+{note}",
+        plan.source.display(),
+        plan.destination.display(),
+        plan.source_exists(),
+        plan.destination_exists(),
+        plan.action(),
     )
 }
 

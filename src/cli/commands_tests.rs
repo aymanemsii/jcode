@@ -393,6 +393,152 @@ fn config_show_reports_mercury_home_precedence_warning() {
 }
 
 #[test]
+fn migrate_config_dry_run_reports_would_copy_when_source_exists_and_destination_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    let source = home.path().join(".jcode").join("config.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, "api_key = \"secret\"\n").unwrap();
+
+    let output = render_migrate_config_dry_run().expect("render migration");
+
+    assert!(output.contains("Mercury config migration dry-run"));
+    assert!(output.contains(&format!("source: {}", source.display())));
+    assert!(output.contains(&format!(
+        "destination: {}",
+        home.path().join(".mercury").join("config.toml").display()
+    )));
+    assert!(output.contains("source exists: true"));
+    assert!(output.contains("destination exists: false"));
+    assert!(output.contains("action: would copy"));
+    assert!(!output.contains("secret"));
+    assert!(!home.path().join(".mercury").exists());
+}
+
+#[test]
+fn migrate_config_dry_run_reports_nothing_when_source_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+
+    let output = render_migrate_config_dry_run().expect("render migration");
+
+    assert!(output.contains("source exists: false"));
+    assert!(output.contains("destination exists: false"));
+    assert!(output.contains("action: source missing, nothing to migrate"));
+    assert!(!home.path().join(".mercury").exists());
+    assert!(!home.path().join(".jcode").exists());
+}
+
+#[test]
+fn migrate_config_dry_run_reports_no_overwrite_when_destination_exists() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let home = tempfile::tempdir().expect("home tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    let source = home.path().join(".jcode").join("config.toml");
+    let destination = home.path().join(".mercury").join("config.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::create_dir_all(destination.parent().expect("destination parent")).unwrap();
+    std::fs::write(&source, "[display]\n").unwrap();
+    std::fs::write(&destination, "[app]\n").unwrap();
+
+    let output = render_migrate_config_dry_run().expect("render migration");
+
+    assert!(output.contains("source exists: true"));
+    assert!(output.contains("destination exists: true"));
+    assert!(output.contains("action: destination exists, would not overwrite"));
+    assert_eq!(std::fs::read_to_string(&destination).unwrap(), "[app]\n");
+}
+
+#[test]
+fn migrate_workspace_dry_run_reports_would_copy_when_source_exists_and_destination_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, "name = \"secret-project\"\n").unwrap();
+
+    let output = render_migrate_workspace_dry_run().expect("render migration");
+
+    assert!(output.contains("Mercury workspace migration dry-run"));
+    assert!(output.contains(&format!("source: {}", source.display())));
+    assert!(output.contains(&format!(
+        "destination: {}",
+        temp.path().join(".mercury").join("workspace.toml").display()
+    )));
+    assert!(output.contains("source exists: true"));
+    assert!(output.contains("destination exists: false"));
+    assert!(output.contains("action: would copy"));
+    assert!(!output.contains("secret-project"));
+    assert!(!temp.path().join(".mercury").exists());
+}
+
+#[test]
+fn migrate_workspace_dry_run_reports_no_overwrite_when_destination_exists() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let destination = temp.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::create_dir_all(destination.parent().expect("destination parent")).unwrap();
+    std::fs::write(&source, "[workspace]\nname = \"jcode\"\n").unwrap();
+    std::fs::write(&destination, "[workspace]\nname = \"mercury\"\n").unwrap();
+
+    let output = render_migrate_workspace_dry_run().expect("render migration");
+
+    assert!(output.contains("source exists: true"));
+    assert!(output.contains("destination exists: true"));
+    assert!(output.contains("action: destination exists, would not overwrite"));
+    assert_eq!(
+        std::fs::read_to_string(&destination).unwrap(),
+        "[workspace]\nname = \"mercury\"\n"
+    );
+}
+
+#[test]
+fn migrate_all_dry_run_includes_config_and_workspace_sections() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", temp.path());
+    crate::env::set_var("USERPROFILE", temp.path());
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+
+    let output = render_migrate_all_dry_run().expect("render migration");
+
+    assert!(output.contains("Mercury config migration dry-run"));
+    assert!(output.contains("Mercury workspace migration dry-run"));
+}
+
+#[test]
+fn migrate_command_without_dry_run_returns_helpful_error() {
+    let err = run_migrate_command(MigrateSubcommand::Config { dry_run: false })
+        .expect_err("missing dry-run should fail");
+
+    assert!(err.to_string().contains("only --dry-run is supported"));
+}
+
+#[test]
 fn config_show_reports_project_local_workspace_customization() {
     let mut cfg = crate::config::Config::default();
     cfg.workspace.name = Some("jcode".to_string());

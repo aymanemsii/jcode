@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use super::args::{
     AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, ConfigCommand,
-    MemoryCommand, ModelCommand, ProviderCommand, QueueCommand, RestartCommand, ServerCommand,
-    SessionCommand, ThemeCommand, TranscriptModeArg, WorkspaceCommand,
+    MemoryCommand, MigrateCommand, ModelCommand, ProviderCommand, QueueCommand, RestartCommand,
+    ServerCommand, SessionCommand, ThemeCommand, TranscriptModeArg, WorkspaceCommand,
 };
 use crate::{
     agent, auth, build, provider, provider_catalog, server, session, setup_hints, startup_profile,
@@ -247,6 +247,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             ConfigCommand::Show => commands::run_config_show_command()?,
             ConfigCommand::Edit => commands::run_config_edit_command()?,
         },
+        Some(Command::Migrate(subcmd)) => {
+            commands::run_migrate_command(map_migrate_subcommand(subcmd))?;
+        }
         Some(Command::Workspace(subcmd)) => match subcmd {
             WorkspaceCommand::Show => commands::run_workspace_show_command()?,
             WorkspaceCommand::Init => commands::run_workspace_init_command()?,
@@ -470,6 +473,16 @@ fn auth_doctor_provider_arg<'a>(
             Some(global_provider.as_arg_value())
         }
     })
+}
+
+fn map_migrate_subcommand(subcmd: MigrateCommand) -> commands::MigrateSubcommand {
+    match subcmd {
+        MigrateCommand::Config { dry_run } => commands::MigrateSubcommand::Config { dry_run },
+        MigrateCommand::Workspace { dry_run } => {
+            commands::MigrateSubcommand::Workspace { dry_run }
+        }
+        MigrateCommand::All { dry_run } => commands::MigrateSubcommand::All { dry_run },
+    }
 }
 
 fn resolve_resume_arg(args: &mut Args) -> Result<()> {

@@ -95,6 +95,36 @@ fn config_edit_subcommand_parses() {
 }
 
 #[test]
+fn migrate_subcommands_parse_with_dry_run() {
+    let args = Args::try_parse_from(["mercury", "migrate", "config", "--dry-run"]).unwrap();
+    match args.command {
+        Some(Command::Migrate(MigrateCommand::Config { dry_run })) => assert!(dry_run),
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "migrate", "workspace", "--dry-run"]).unwrap();
+    match args.command {
+        Some(Command::Migrate(MigrateCommand::Workspace { dry_run })) => assert!(dry_run),
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    let args = Args::try_parse_from(["jcode", "migrate", "all", "--dry-run"]).unwrap();
+    match args.command {
+        Some(Command::Migrate(MigrateCommand::All { dry_run })) => assert!(dry_run),
+        other => panic!("unexpected command: {:?}", other),
+    }
+}
+
+#[test]
+fn migrate_subcommands_parse_without_dry_run_for_dispatch_error() {
+    let args = Args::try_parse_from(["jcode", "migrate", "config"]).unwrap();
+    match args.command {
+        Some(Command::Migrate(MigrateCommand::Config { dry_run })) => assert!(!dry_run),
+        other => panic!("unexpected command: {:?}", other),
+    }
+}
+
+#[test]
 fn workspace_subcommands_parse() {
     let args = Args::try_parse_from(["jcode", "workspace", "show"]).unwrap();
     match args.command {

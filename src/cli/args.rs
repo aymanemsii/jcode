@@ -270,6 +270,10 @@ pub(crate) enum Command {
     #[command(subcommand)]
     Config(ConfigCommand),
 
+    /// Dry-run Mercury migration reports
+    #[command(subcommand)]
+    Migrate(MigrateCommand),
+
     /// Project-local workspace customization commands
     #[command(subcommand)]
     Workspace(WorkspaceCommand),
@@ -994,6 +998,28 @@ pub(crate) enum ConfigCommand {
     Show,
     /// Open the global user config file in an editor
     Edit,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum MigrateCommand {
+    /// Report global config migration from jcode to Mercury
+    Config {
+        /// Show what would happen without writing files
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Report current-directory workspace migration from jcode to Mercury
+    Workspace {
+        /// Show what would happen without writing files
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Report global config and current-directory workspace migration
+    All {
+        /// Show what would happen without writing files
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

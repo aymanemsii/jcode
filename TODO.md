@@ -1,5 +1,24 @@
 # TODO
 
+## Task 56 - Add Mercury migration dry-run command
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `migrate config --dry-run`, `migrate workspace --dry-run`, and `migrate all --dry-run`.
+* Reported source path, destination path, file-existence state, and safe dry-run action.
+* Required `--dry-run` in this slice and avoided file writes.
+* Preserved jcode compatibility and avoided config/workspace loading precedence changes.
+
+Validation:
+
+* Manual cargo test/check/smoke validation will be run separately after this change.
+
 ## Task 55 - Document Mercury migration command architecture
 
 Task Type: Investigation

@@ -25,6 +25,7 @@ pub(crate) fn initial_title(args: &Args) -> String {
         Some(Command::Auth(_)) => "jcode auth".to_string(),
         Some(Command::Provider(_)) => "jcode provider".to_string(),
         Some(Command::Config(_)) => "jcode config".to_string(),
+        Some(Command::Migrate(_)) => "jcode migrate".to_string(),
         Some(Command::Workspace(_)) => "jcode workspace".to_string(),
         Some(Command::Theme(_)) => "jcode theme".to_string(),
         Some(Command::Memory(_)) => "jcode memory".to_string(),
