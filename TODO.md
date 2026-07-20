@@ -1,5 +1,25 @@
 # TODO
 
+## Task 57 - Add Mercury config migration copy
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `migrate config` to copy legacy jcode config files to Mercury config paths.
+* Preserved `migrate config --dry-run`.
+* Used copy-first, non-destructive behavior.
+* Avoided overwriting existing Mercury config files.
+* Left workspace/all actual migration for later slices.
+
+Validation:
+
+* Manual cargo test/check/smoke validation will be run separately after this change.
+
 ## Task 56 - Add Mercury migration dry-run command
 
 Task Type: Implementation

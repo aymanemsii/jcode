@@ -163,21 +163,21 @@ pub fn run_cloud_command(cmd: CloudSubcommand) -> Result<()> {
 }
 
 pub fn run_migrate_command(cmd: MigrateSubcommand) -> Result<()> {
-    let dry_run = match &cmd {
-        MigrateSubcommand::Config { dry_run }
-        | MigrateSubcommand::Workspace { dry_run }
-        | MigrateSubcommand::All { dry_run } => dry_run,
-    };
-    if !*dry_run {
-        anyhow::bail!(
-            "only --dry-run is supported for `migrate` in this slice; retry with --dry-run"
-        );
-    }
-
     let output = match cmd {
-        MigrateSubcommand::Config { .. } => render_migrate_config_dry_run()?,
-        MigrateSubcommand::Workspace { .. } => render_migrate_workspace_dry_run()?,
-        MigrateSubcommand::All { .. } => render_migrate_all_dry_run()?,
+        MigrateSubcommand::Config { dry_run: true } => render_migrate_config_dry_run()?,
+        MigrateSubcommand::Config { dry_run: false } => render_migrate_config()?,
+        MigrateSubcommand::Workspace { dry_run: true } => render_migrate_workspace_dry_run()?,
+        MigrateSubcommand::Workspace { dry_run: false } => {
+            anyhow::bail!(
+                "only --dry-run is supported for `migrate workspace` in this slice; retry with --dry-run"
+            );
+        }
+        MigrateSubcommand::All { dry_run: true } => render_migrate_all_dry_run()?,
+        MigrateSubcommand::All { dry_run: false } => {
+            anyhow::bail!(
+                "only --dry-run is supported for `migrate all` in this slice; retry with --dry-run"
+            );
+        }
     };
     print!("{output}");
     Ok(())
@@ -884,6 +884,16 @@ fn render_migrate_config_dry_run() -> Result<String> {
     Ok(render_migration_plan("Mercury config migration dry-run", &plan))
 }
 
+fn render_migrate_config() -> Result<String> {
+    let plan = config_migration_plan()?;
+    let result = copy_migration_plan_without_overwrite(&plan)?;
+    Ok(render_migration_result(
+        "Mercury config migration",
+        &plan,
+        result,
+    ))
+}
+
 fn render_migrate_workspace_dry_run() -> Result<String> {
     let plan = workspace_migration_plan()?;
     Ok(render_migration_plan(
@@ -925,6 +935,48 @@ impl MigrationPlan {
             "would copy"
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum MigrationCopyResult {
+    Copied,
+    SourceMissing,
+    DestinationExists,
+}
+
+impl MigrationCopyResult {
+    fn action(self) -> &'static str {
+        match self {
+            Self::Copied => "copied",
+            Self::SourceMissing => "source missing, nothing to migrate",
+            Self::DestinationExists => "destination exists, not overwritten",
+        }
+    }
+}
+
+fn copy_migration_plan_without_overwrite(plan: &MigrationPlan) -> Result<MigrationCopyResult> {
+    if !plan.source.exists() {
+        return Ok(MigrationCopyResult::SourceMissing);
+    }
+    if plan.destination.exists() {
+        return Ok(MigrationCopyResult::DestinationExists);
+    }
+    if let Some(parent) = plan.destination.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| {
+            anyhow::anyhow!(
+                "failed to create Mercury config directory {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    std::fs::copy(&plan.source, &plan.destination).map_err(|err| {
+        anyhow::anyhow!(
+            "failed to copy {} to {}: {err}",
+            plan.source.display(),
+            plan.destination.display()
+        )
+    })?;
+    Ok(MigrationCopyResult::Copied)
 }
 
 fn config_migration_plan() -> Result<MigrationPlan> {
@@ -975,6 +1027,27 @@ action: {}\n\
         plan.source_exists(),
         plan.destination_exists(),
         plan.action(),
+    )
+}
+
+fn render_migration_result(
+    title: &str,
+    plan: &MigrationPlan,
+    result: MigrationCopyResult,
+) -> String {
+    let note = plan
+        .note
+        .map(|note| format!("note: {note}\n"))
+        .unwrap_or_default();
+    format!(
+        "{title}\n\
+source: {}\n\
+destination: {}\n\
+action: {}\n\
+{note}",
+        plan.source.display(),
+        plan.destination.display(),
+        result.action(),
     )
 }
 
