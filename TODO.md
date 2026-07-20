@@ -1,5 +1,24 @@
 # TODO
 
+## Task 53 - Add alias-aware CLI hints
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Routed low-risk CLI helper text through the invoked binary name where natural.
+* Preserved `jcode` hints when invoked as `jcode`.
+* Preferred `mercury` hints when invoked as `mercury`.
+* Avoided command renames, config path changes, workspace path changes, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 52 - Default new workspace config to Mercury path
 
 Task Type: Implementation

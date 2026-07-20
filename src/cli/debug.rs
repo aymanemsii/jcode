@@ -29,14 +29,21 @@ pub async fn run_debug_command(
     };
 
     if !crate::transport::is_socket_path(&debug_socket) {
+        let cli_name = crate::cli::invocation::invoked_cli_name();
         eprintln!("Debug socket not found at {:?}", debug_socket);
         eprintln!("\nMake sure:");
-        eprintln!("  1. A jcode server is running (jcode or jcode serve)");
+        eprintln!("  1. A jcode server is running ({cli_name} or {cli_name} serve)");
         eprintln!("  2. debug_socket is enabled in ~/.jcode/config.toml");
         eprintln!("     [display]");
         eprintln!("     debug_socket = true");
-        eprintln!("\nOr use 'jcode debug start' to start a server.");
-        eprintln!("Use 'jcode debug list' to see running servers.");
+        eprintln!(
+            "\nOr use '{}' to start a server.",
+            crate::cli::invocation::invoked_cli_command("debug start")
+        );
+        eprintln!(
+            "Use '{}' to see running servers.",
+            crate::cli::invocation::invoked_cli_command("debug list")
+        );
         anyhow::bail!("Debug socket not available");
     }
 
@@ -130,7 +137,10 @@ async fn debug_list_servers() -> Result<()> {
 
     if servers.is_empty() {
         println!("No running jcode servers found.");
-        println!("\nStart one with: jcode debug start");
+        println!(
+            "\nStart one with: {}",
+            crate::cli::invocation::invoked_cli_command("debug start")
+        );
         return Ok(());
     }
 
@@ -236,7 +246,10 @@ async fn debug_start_server(arg: &str, socket_path: Option<String>) -> Result<()
             .is_ok()
     {
         eprintln!("Server already running at {}", socket);
-        eprintln!("Use 'jcode debug list' to see all servers.");
+        eprintln!(
+            "Use '{}' to see all servers.",
+            crate::cli::invocation::invoked_cli_command("debug list")
+        );
         return Ok(());
     }
 

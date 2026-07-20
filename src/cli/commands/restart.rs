@@ -17,7 +17,10 @@ pub async fn run_restart_save_command(auto_restore: bool) -> Result<()> {
     if snapshot.sessions.is_empty() {
         println!("Saved empty reboot snapshot to {}", path.display());
         if auto_restore {
-            println!("Automatic restore is armed for the next plain `jcode` launch.");
+            println!(
+                "Automatic restore is armed for the next plain `{}` launch.",
+                crate::cli::invocation::invoked_cli_name()
+            );
         }
         println!("\nNo active jcode windows were detected.");
         return Ok(());
@@ -40,9 +43,15 @@ pub async fn run_restart_save_command(auto_restore: bool) -> Result<()> {
         );
     }
     if auto_restore {
-        println!("\nAutomatic restore is armed for the next plain `jcode` launch.");
+        println!(
+            "\nAutomatic restore is armed for the next plain `{}` launch.",
+            crate::cli::invocation::invoked_cli_name()
+        );
     }
-    println!("\nAfter reboot, restore them with:\n  jcode restart restore");
+    println!(
+        "\nAfter reboot, restore them with:\n  {}",
+        crate::cli::invocation::invoked_cli_command("restart restore")
+    );
 
     Ok(())
 }
@@ -52,7 +61,10 @@ pub fn run_restart_status_command() -> Result<()> {
     let snapshot = match crate::restart_snapshot::load_snapshot() {
         Ok(snapshot) => snapshot,
         Err(_) => {
-            println!("No reboot snapshot saved.\n\nCreate one with:\n  jcode restart save");
+            println!(
+                "No reboot snapshot saved.\n\nCreate one with:\n  {}",
+                crate::cli::invocation::invoked_cli_command("restart save")
+            );
             return Ok(());
         }
     };
@@ -103,7 +115,10 @@ pub async fn maybe_run_pending_restart_restore_on_startup() -> Result<bool> {
     }
 
     if std::io::stdin().is_terminal() || std::io::stderr().is_terminal() {
-        println!("Saved reboot snapshot detected. Restore it with:\n  jcode restart restore\n");
+        println!(
+            "Saved reboot snapshot detected. Restore it with:\n  {}\n",
+            crate::cli::invocation::invoked_cli_command("restart restore")
+        );
     }
 
     Ok(false)
@@ -159,7 +174,8 @@ pub fn run_restart_restore_command() -> Result<()> {
             println!("{}", outcome.command);
         }
         println!(
-            "\nThe reboot snapshot was kept so you can try `jcode restart restore` again later."
+            "\nThe reboot snapshot was kept so you can try `{}` again later.",
+            crate::cli::invocation::invoked_cli_command("restart restore")
         );
         return Ok(());
     }

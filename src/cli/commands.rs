@@ -418,7 +418,8 @@ pub fn run_config_show_command() -> Result<()> {
 
 pub fn run_config_edit_command() -> Result<()> {
     let config_path = ensure_global_config_file()?;
-    let editor = resolve_config_editor("jcode config edit")?;
+    let retry_command = crate::cli::invocation::invoked_cli_command("config edit");
+    let editor = resolve_config_editor(&retry_command)?;
     let mut command = ProcessCommand::new(&editor.program);
     command.args(&editor.args).arg(&config_path);
 
@@ -470,7 +471,8 @@ pub fn run_workspace_init_command() -> Result<()> {
 
 pub fn run_workspace_edit_command() -> Result<()> {
     let workspace_path = ensure_workspace_config_file()?;
-    let editor = resolve_config_editor("jcode workspace edit")?;
+    let retry_command = crate::cli::invocation::invoked_cli_command("workspace edit");
+    let editor = resolve_config_editor(&retry_command)?;
     let mut command = ProcessCommand::new(&editor.program);
     command.args(&editor.args).arg(&workspace_path);
 
@@ -555,8 +557,9 @@ fn create_workspace_config_file(overwrite: bool) -> Result<PathBuf> {
         ] {
             if existing_path.exists() {
                 anyhow::bail!(
-                    "Workspace config already exists at {}. Edit it with `jcode workspace edit`.",
-                    existing_path.display()
+                    "Workspace config already exists at {}. Edit it with `{}`.",
+                    existing_path.display(),
+                    crate::cli::invocation::invoked_cli_command("workspace edit")
                 );
             }
         }
@@ -636,7 +639,7 @@ impl EditorCommand {
     }
 }
 
-fn resolve_config_editor(retry_command: &'static str) -> Result<EditorCommand> {
+fn resolve_config_editor(retry_command: &str) -> Result<EditorCommand> {
     if let Some(editor) = non_empty(std::env::var("VISUAL").ok()) {
         return Ok(editor_command(editor));
     }
@@ -852,11 +855,13 @@ fallback: {fallback_label}\n"
 fn render_workspace_show() -> Result<String> {
     let current_workspace_path = current_directory_mercury_workspace_config_path()?;
     let Some(workspace) = crate::config::Config::workspace_path_with_source() else {
+        let init_command = crate::cli::invocation::invoked_cli_command("workspace init");
+        let edit_command = crate::cli::invocation::invoked_cli_command("workspace edit");
         return Ok(format!(
             "Workspace config: not found\n\
 current-directory path: {}\n\
 \n\
-Create one with `jcode workspace init`, or open a new local workspace file with `jcode workspace edit`.\n",
+Create one with `{init_command}`, or open a new local workspace file with `{edit_command}`.\n",
             current_workspace_path.display()
         ));
     };
