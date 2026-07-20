@@ -1,5 +1,25 @@
 # TODO
 
+## Task 58 - Add Mercury workspace migration copy
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Added `migrate workspace` to copy current-directory legacy `.jcode/workspace.toml` files to `.mercury/workspace.toml`.
+* Preserved `migrate workspace --dry-run`.
+* Used copy-first, non-destructive behavior.
+* Avoided overwriting existing Mercury workspace files.
+* Left `migrate all` actual migration for a later slice.
+
+Validation:
+
+* Manual cargo test/check/smoke validation will be run separately after this change.
+
 ## Task 57 - Add Mercury config migration copy
 
 Task Type: Implementation

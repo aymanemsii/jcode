@@ -212,6 +212,9 @@ when the destination already exists.
 Add current-directory-only workspace copying. Preserve raw file bytes and refuse
 to write when `./.mercury/workspace.toml` already exists.
 
+Implemented for `migrate workspace`. Actual `migrate all` remains deferred to a
+later slice.
+
 ### Phase E: All Command
 
 Enable `migrate all` to run the config and workspace copy flows together while

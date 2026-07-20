@@ -167,11 +167,7 @@ pub fn run_migrate_command(cmd: MigrateSubcommand) -> Result<()> {
         MigrateSubcommand::Config { dry_run: true } => render_migrate_config_dry_run()?,
         MigrateSubcommand::Config { dry_run: false } => render_migrate_config()?,
         MigrateSubcommand::Workspace { dry_run: true } => render_migrate_workspace_dry_run()?,
-        MigrateSubcommand::Workspace { dry_run: false } => {
-            anyhow::bail!(
-                "only --dry-run is supported for `migrate workspace` in this slice; retry with --dry-run"
-            );
-        }
+        MigrateSubcommand::Workspace { dry_run: false } => render_migrate_workspace()?,
         MigrateSubcommand::All { dry_run: true } => render_migrate_all_dry_run()?,
         MigrateSubcommand::All { dry_run: false } => {
             anyhow::bail!(
@@ -895,10 +891,20 @@ fn render_migrate_config() -> Result<String> {
 }
 
 fn render_migrate_workspace_dry_run() -> Result<String> {
-    let plan = workspace_migration_plan()?;
+    let plan = workspace_migration_plan("workspace dry-run is current-directory only")?;
     Ok(render_migration_plan(
         "Mercury workspace migration dry-run",
         &plan,
+    ))
+}
+
+fn render_migrate_workspace() -> Result<String> {
+    let plan = workspace_migration_plan("workspace migration is current-directory only")?;
+    let result = copy_migration_plan_without_overwrite(&plan)?;
+    Ok(render_migration_result(
+        "Mercury workspace migration",
+        &plan,
+        result,
     ))
 }
 
@@ -964,7 +970,7 @@ fn copy_migration_plan_without_overwrite(plan: &MigrationPlan) -> Result<Migrati
     if let Some(parent) = plan.destination.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
             anyhow::anyhow!(
-                "failed to create Mercury config directory {}: {err}",
+                "failed to create Mercury migration destination directory {}: {err}",
                 parent.display()
             )
         })?;
@@ -1001,11 +1007,11 @@ fn config_migration_plan() -> Result<MigrationPlan> {
     })
 }
 
-fn workspace_migration_plan() -> Result<MigrationPlan> {
+fn workspace_migration_plan(note: &'static str) -> Result<MigrationPlan> {
     Ok(MigrationPlan {
         source: current_directory_jcode_workspace_config_path()?,
         destination: current_directory_mercury_workspace_config_path()?,
-        note: Some("workspace dry-run is current-directory only"),
+        note: Some(note),
     })
 }
 

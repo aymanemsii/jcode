@@ -671,6 +671,121 @@ fn migrate_workspace_dry_run_reports_no_overwrite_when_destination_exists() {
 }
 
 #[test]
+fn migrate_workspace_copies_exact_bytes_when_source_exists_and_destination_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let destination = temp.path().join(".mercury").join("workspace.toml");
+    let contents = b"[workspace]\r\nname = \"legacy\"\r\n";
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, contents).unwrap();
+
+    let output = render_migrate_workspace().expect("migrate workspace");
+
+    assert_eq!(std::fs::read(&destination).unwrap(), contents);
+    assert!(output.contains(&format!("source: {}", source.display())));
+    assert!(output.contains(&format!("destination: {}", destination.display())));
+    assert!(output.contains("action: copied"));
+    assert!(output.contains("note: workspace migration is current-directory only"));
+    assert!(!output.contains("workspace dry-run is current-directory only"));
+    assert!(!output.contains("legacy"));
+}
+
+#[test]
+fn migrate_workspace_copy_leaves_source_in_place() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let contents = b"[workspace]\nname = \"legacy\"\n";
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, contents).unwrap();
+
+    render_migrate_workspace().expect("migrate workspace");
+
+    assert!(source.exists());
+    assert_eq!(std::fs::read(&source).unwrap(), contents);
+}
+
+#[test]
+fn migrate_workspace_creates_destination_parent_directory() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let destination_parent = temp.path().join(".mercury");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, b"[workspace]\n").unwrap();
+
+    render_migrate_workspace().expect("migrate workspace");
+
+    assert!(destination_parent.is_dir());
+    assert!(destination_parent.join("workspace.toml").exists());
+}
+
+#[test]
+fn migrate_workspace_source_missing_creates_no_file_and_returns_success() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let destination = temp.path().join(".mercury").join("workspace.toml");
+
+    let output = render_migrate_workspace().expect("migrate workspace");
+
+    assert!(!destination.exists());
+    assert!(!temp.path().join(".mercury").exists());
+    assert!(output.contains("action: source missing, nothing to migrate"));
+}
+
+#[test]
+fn migrate_workspace_destination_exists_does_not_overwrite_and_returns_success() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let destination = temp.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::create_dir_all(destination.parent().expect("destination parent")).unwrap();
+    std::fs::write(&source, b"[workspace]\nname = \"legacy\"\n").unwrap();
+    std::fs::write(&destination, b"[workspace]\nname = \"existing\"\n").unwrap();
+
+    let output = render_migrate_workspace().expect("migrate workspace");
+
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        b"[workspace]\nname = \"existing\"\n"
+    );
+    assert!(output.contains(&format!("source: {}", source.display())));
+    assert!(output.contains(&format!("destination: {}", destination.display())));
+    assert!(output.contains("action: destination exists, not overwritten"));
+    assert!(!output.contains("legacy"));
+    assert!(!output.contains("existing"));
+}
+
+#[test]
+fn migrate_workspace_dry_run_still_does_not_create_or_copy_files() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let source = temp.path().join(".jcode").join("workspace.toml");
+    let destination = temp.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(source.parent().expect("source parent")).unwrap();
+    std::fs::write(&source, b"[workspace]\nname = \"legacy\"\n").unwrap();
+
+    let output = render_migrate_workspace_dry_run().expect("render migration");
+
+    assert!(output.contains("action: would copy"));
+    assert!(!destination.exists());
+}
+
+#[test]
 fn migrate_all_dry_run_includes_config_and_workspace_sections() {
     let _guard = crate::storage::lock_test_env();
     let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
@@ -689,11 +804,14 @@ fn migrate_all_dry_run_includes_config_and_workspace_sections() {
 }
 
 #[test]
-fn migrate_workspace_without_dry_run_returns_helpful_error() {
-    let err = run_migrate_command(MigrateSubcommand::Workspace { dry_run: false })
-        .expect_err("workspace actual migration should fail");
+fn migrate_workspace_without_dry_run_returns_success() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
 
-    assert!(err.to_string().contains("only --dry-run is supported"));
+    run_migrate_command(MigrateSubcommand::Workspace { dry_run: false })
+        .expect("workspace actual migration should succeed");
 }
 
 #[test]
