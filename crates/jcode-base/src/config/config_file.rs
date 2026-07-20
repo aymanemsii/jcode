@@ -52,7 +52,7 @@ impl Config {
     /// Get the current-directory project-local workspace config path.
     pub fn current_workspace_path() -> Option<PathBuf> {
         let mut path = std::env::current_dir().ok()?;
-        for component in JCODE_WORKSPACE_CONFIG_RELATIVE_PATH {
+        for component in MERCURY_WORKSPACE_CONFIG_RELATIVE_PATH {
             path.push(component);
         }
         Some(path)

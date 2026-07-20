@@ -534,24 +534,35 @@ pub fn run_theme_preview_command(theme_name: Option<&str>) -> Result<()> {
 }
 
 fn ensure_workspace_config_file() -> Result<PathBuf> {
-    let workspace_path = current_directory_jcode_workspace_config_path()?;
-    if workspace_path.exists() {
-        return Ok(workspace_path);
+    for workspace_path in [
+        current_directory_mercury_workspace_config_path()?,
+        current_directory_jcode_workspace_config_path()?,
+    ] {
+        if workspace_path.exists() {
+            return Ok(workspace_path);
+        }
     }
     create_workspace_config_file(false)
 }
 
 fn create_workspace_config_file(overwrite: bool) -> Result<PathBuf> {
-    let jcode_workspace_path = current_directory_jcode_workspace_config_path()?;
+    let workspace_path = current_directory_mercury_workspace_config_path()?;
 
-    if jcode_workspace_path.exists() && !overwrite {
-        anyhow::bail!(
-            "Workspace config already exists at {}. Edit it with `jcode workspace edit`.",
-            jcode_workspace_path.display()
-        );
+    if !overwrite {
+        for existing_path in [
+            workspace_path.clone(),
+            current_directory_jcode_workspace_config_path()?,
+        ] {
+            if existing_path.exists() {
+                anyhow::bail!(
+                    "Workspace config already exists at {}. Edit it with `jcode workspace edit`.",
+                    existing_path.display()
+                );
+            }
+        }
     }
 
-    if let Some(parent) = jcode_workspace_path.parent() {
+    if let Some(parent) = workspace_path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
             anyhow::anyhow!(
                 "Failed to create workspace config directory {}: {err}",
@@ -561,13 +572,17 @@ fn create_workspace_config_file(overwrite: bool) -> Result<PathBuf> {
     }
 
     let contents = workspace_default_config_contents();
-    std::fs::write(&jcode_workspace_path, contents).map_err(|err| {
+    std::fs::write(&workspace_path, contents).map_err(|err| {
         anyhow::anyhow!(
             "Failed to write workspace config file {}: {err}",
-            jcode_workspace_path.display()
+            workspace_path.display()
         )
     })?;
-    Ok(jcode_workspace_path)
+    Ok(workspace_path)
+}
+
+fn current_directory_mercury_workspace_config_path() -> Result<PathBuf> {
+    current_directory_workspace_config_path(".mercury")
 }
 
 fn current_directory_jcode_workspace_config_path() -> Result<PathBuf> {
@@ -835,7 +850,7 @@ fallback: {fallback_label}\n"
 }
 
 fn render_workspace_show() -> Result<String> {
-    let current_workspace_path = current_directory_jcode_workspace_config_path()?;
+    let current_workspace_path = current_directory_mercury_workspace_config_path()?;
     let Some(workspace) = crate::config::Config::workspace_path_with_source() else {
         return Ok(format!(
             "Workspace config: not found\n\

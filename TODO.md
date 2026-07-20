@@ -1,5 +1,26 @@
 # TODO
 
+## Task 52 - Default new workspace config to Mercury path
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Changed brand-new workspace config creation to default to `./.mercury/workspace.toml`.
+* Preserved `.jcode/workspace.toml` discovery and fallback compatibility.
+* Preserved parent-directory workspace discovery precedence.
+* Preserved same-directory `.mercury` over `.jcode` tie-breaking.
+* Preserved nearest-directory precedence.
+* Avoided automatic migration, destructive file moves, command renames, package/crate renames, provider user-agent changes, Queue changes, server protocol changes, and Cargo changes.
+
+Validation:
+
+* Manual validation will be run separately after this change.
+
 ## Task 51 - Default new global config to Mercury path
 
 Task Type: Implementation

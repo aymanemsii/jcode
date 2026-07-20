@@ -469,7 +469,7 @@ fn workspace_default_config_is_visual_only() {
 }
 
 #[test]
-fn workspace_init_creates_jcode_workspace_config() {
+fn workspace_init_creates_mercury_workspace_config() {
     let _guard = crate::storage::lock_test_env();
     let _cwd = SavedCurrentDir::capture();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -477,9 +477,26 @@ fn workspace_init_creates_jcode_workspace_config() {
 
     let path = create_workspace_config_file(false).expect("create workspace config");
 
-    assert_eq!(path, temp.path().join(".jcode").join("workspace.toml"));
+    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
     assert!(path.exists());
-    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
+    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
+}
+
+#[test]
+fn workspace_init_refuses_duplicate_when_mercury_workspace_config_exists() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let mercury_path = temp.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(mercury_path.parent().expect("workspace parent")).unwrap();
+    std::fs::write(&mercury_path, "[workspace]\nname = \"ExistingMercury\"\n").unwrap();
+
+    let err = create_workspace_config_file(false).expect_err("duplicate should fail");
+
+    assert!(err.to_string().contains(".mercury"));
+    assert!(err.to_string().contains("workspace.toml"));
+    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
 }
 
 #[test]
@@ -500,7 +517,7 @@ fn workspace_init_refuses_duplicate_when_jcode_workspace_config_exists() {
 }
 
 #[test]
-fn workspace_edit_creates_jcode_workspace_config_when_missing() {
+fn workspace_edit_creates_mercury_workspace_config_when_missing() {
     let _guard = crate::storage::lock_test_env();
     let _cwd = SavedCurrentDir::capture();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -508,9 +525,9 @@ fn workspace_edit_creates_jcode_workspace_config_when_missing() {
 
     let path = ensure_workspace_config_file().expect("ensure workspace config");
 
-    assert_eq!(path, temp.path().join(".jcode").join("workspace.toml"));
+    assert_eq!(path, temp.path().join(".mercury").join("workspace.toml"));
     assert!(path.exists());
-    assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
+    assert!(!temp.path().join(".jcode").join("workspace.toml").exists());
 }
 
 #[test]
@@ -529,6 +546,46 @@ fn workspace_edit_preserves_existing_jcode_workspace_config() {
     assert_eq!(path, jcode_path);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
     assert!(!temp.path().join(".mercury").join("workspace.toml").exists());
+}
+
+#[test]
+fn workspace_edit_prefers_existing_mercury_workspace_config() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    let mercury_path = temp.path().join(".mercury").join("workspace.toml");
+    let jcode_path = temp.path().join(".jcode").join("workspace.toml");
+    std::fs::create_dir_all(mercury_path.parent().expect("mercury workspace parent")).unwrap();
+    std::fs::create_dir_all(jcode_path.parent().expect("jcode workspace parent")).unwrap();
+    std::fs::write(&mercury_path, "[workspace]\nname = \"ExistingMercury\"\n").unwrap();
+    std::fs::write(&jcode_path, "[workspace]\nname = \"ExistingJcode\"\n").unwrap();
+
+    let path = ensure_workspace_config_file().expect("ensure workspace config");
+
+    assert_eq!(path, mercury_path);
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "[workspace]\nname = \"ExistingMercury\"\n"
+    );
+}
+
+#[test]
+fn workspace_show_not_found_reports_mercury_current_directory_path() {
+    let _guard = crate::storage::lock_test_env();
+    let _cwd = SavedCurrentDir::capture();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+
+    let output = render_workspace_show().expect("render workspace show");
+
+    assert!(output.contains("Workspace config: not found"));
+    assert!(output.contains(
+        &format!(
+            "current-directory path: {}",
+            temp.path().join(".mercury").join("workspace.toml").display()
+        )
+    ));
 }
 
 #[test]

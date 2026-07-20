@@ -93,8 +93,9 @@ found in the current directory or a parent directory, whether the source is
 `.mercury` or `.jcode`, `workspace.name`, and the supported project-local
 display fields when present.
 
-`jcode workspace init` creates `./.jcode/workspace.toml` with safe visual-only
-defaults and refuses to overwrite an existing file:
+`jcode workspace init` creates `./.mercury/workspace.toml` with safe visual-only
+defaults and refuses to overwrite or shadow an existing current-directory
+`.mercury/workspace.toml` or `.jcode/workspace.toml`:
 
 ```toml
 [workspace]
@@ -106,14 +107,15 @@ top_bar = true
 top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
-`jcode workspace edit` opens the current-directory `.jcode/workspace.toml` when
-present. If it does not exist, it creates `./.jcode/workspace.toml` and opens it
-in the editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS
-and Linux, set `VISUAL` or `EDITOR` first.
+`jcode workspace edit` opens the current-directory `.mercury/workspace.toml`
+when present, then the current-directory `.jcode/workspace.toml` when present.
+If neither exists, it creates `./.mercury/workspace.toml` and opens it in the
+editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS and
+Linux, set `VISUAL` or `EDITOR` first.
 
 `jcode workspace init` and `jcode workspace edit` are current-directory
-commands. They do not edit a discovered parent workspace file and do not switch
-write defaults to `.mercury/workspace.toml` in this phase.
+commands. They do not edit a discovered parent workspace file and do not
+automatically migrate, move, or copy legacy `.jcode/workspace.toml` files.
 
 ## App Identity
 

@@ -1059,6 +1059,21 @@ fn project_workspace_config_discovers_parent_directory_file() {
 }
 
 #[test]
+fn current_workspace_path_defaults_to_mercury_workspace_file() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_cwd = std::env::current_dir().expect("current dir");
+    let project = tempfile::TempDir::new().expect("project tempdir");
+    std::env::set_current_dir(project.path()).expect("set project cwd");
+
+    assert_eq!(
+        Config::current_workspace_path(),
+        Some(project.path().join(".mercury").join("workspace.toml"))
+    );
+
+    restore_current_dir(&prev_cwd);
+}
+
+#[test]
 fn project_workspace_config_discovers_mercury_workspace_file() {
     let project = tempfile::TempDir::new().expect("project tempdir");
     let child = project.path().join("child");
