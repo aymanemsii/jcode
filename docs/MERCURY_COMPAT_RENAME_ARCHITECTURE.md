@@ -90,6 +90,12 @@ files remain supported and are not migrated, moved, or copied automatically.
 
 Migration should be optional, conservative, and non-destructive.
 
+The future command design is documented in
+`docs/MERCURY_MIGRATION_COMMAND_ARCHITECTURE.md`. That investigation
+recommends `mercury migrate config`, `mercury migrate workspace`, and
+`mercury migrate all` as copy-first helpers with dry-run reporting,
+no-overwrite defaults, and no deletion of legacy `jcode` files.
+
 Recommended approach:
 
 * Do not automatically move, delete, or rewrite existing config or workspace files.

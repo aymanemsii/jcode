@@ -1,5 +1,24 @@
 # TODO
 
+## Task 55 - Document Mercury migration command architecture
+
+Task Type: Investigation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Documented a future non-destructive Mercury migration command.
+* Recommended copy-first migration from jcode config/workspace paths to Mercury paths.
+* Covered dry-run behavior, no-overwrite defaults, env-var precedence, validation, and phased implementation.
+* Deferred implementation to later small slices.
+
+Validation:
+
+* Manual documentation diff review will be run separately after this change.
+
 ## Task 54 - Default docs examples to Mercury
 
 Task Type: Documentation

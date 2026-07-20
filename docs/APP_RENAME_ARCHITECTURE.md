@@ -327,6 +327,11 @@ This should be optional. If upstream mergeability remains valuable, stopping at 
 
 Migration should prefer compatibility over forced moves.
 
+Mercury migration is planned as copy-first and non-destructive. A future
+`mercury migrate ...` command should copy legacy `jcode` config/workspace files
+to Mercury paths only when safe, should not delete legacy files, and should not
+overwrite existing Mercury files by default.
+
 Recommended fallback order for global config:
 
 1. Explicit new app home env var, if one is introduced later.
