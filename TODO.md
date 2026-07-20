@@ -1,5 +1,24 @@
 # TODO
 
+## Task 54 - Default docs examples to Mercury
+
+Task Type: Documentation
+
+Status: Completed
+
+Priority: Medium
+
+Result:
+
+* Updated Mercury/customization documentation examples to prefer `mercury` commands.
+* Updated new-user config examples to prefer `~/.mercury/config.toml`.
+* Updated new workspace examples to prefer `.mercury/workspace.toml`.
+* Documented that `jcode`, `JCODE_HOME`, and `.jcode/workspace.toml` remain compatibility paths.
+
+Validation:
+
+* Manual documentation diff review will be run separately after this change.
+
 ## Task 53 - Add alias-aware CLI hints
 
 Task Type: Implementation

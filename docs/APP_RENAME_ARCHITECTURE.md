@@ -156,15 +156,20 @@ paths and environment variables should be introduced additively while existing
 
 A compatibility-safe alias binary MVP now exists:
 
-* `jcode` remains the canonical binary.
+* `mercury` is now the preferred command identity for new user-facing
+  config, workspace, theme, and customization examples.
+* `jcode` remains a supported compatibility binary.
 * `mercury` is available as a second Cargo bin target.
 * `mercury` uses the same startup source path as `jcode`.
-* Config directories, environment variables, project-local `.jcode` paths,
-  provider user-agent constants, package/crate names, Queue behavior, server
+* `MERCURY_HOME`, `~/.mercury/config.toml`, and `.mercury/workspace.toml` are
+  supported Mercury identities/defaults.
+* `JCODE_HOME`, `~/.jcode/config.toml`, and `.jcode/workspace.toml` remain
+  supported compatibility fallbacks.
+* Provider user-agent constants, package/crate names, Queue behavior, server
   protocol behavior, installers, release artifacts, and hard rename work remain
-  unchanged.
+  deferred.
 
-This is Phase B's first code-level alias slice, not a hard rename.
+This is still a compatibility rename layer, not a completed hard rename.
 
 ### Hard Rename
 
@@ -277,7 +282,9 @@ Use app identity config everywhere user-facing where it is safe:
 * low-risk status labels
 * generated examples or docs that describe Aymane's fork/custom build
 
-Docs should be explicit that command examples still use `jcode` unless a compatibility alias exists.
+Docs should prefer `mercury` for new user-facing config, workspace, theme, and
+customization examples now that the alias and Mercury defaults exist. They
+should also state that `jcode` remains supported as a compatibility command.
 
 ### Phase B: Add Alias Or Wrapper Binary If Feasible
 
@@ -352,7 +359,8 @@ Scope:
   a fallback without changing commands, paths, env vars, protocols, provider
   user-agent constants, package metadata, or Queue behavior.
 * Update customization and network/privacy docs to describe Aymane's fork/custom build where appropriate.
-* Keep command examples as `jcode`.
+* Prefer `mercury` in new user-facing config, workspace, theme, and customization command examples.
+* Keep docs clear that `jcode` remains a supported compatibility command.
 * Make docs clear that `[app].name` and `[app].terminal_title` are soft identity, not hard rename controls.
 
 Alternative small slice: terminal title polish. Verify that all existing terminal title updates use the configured title consistently and fall back cleanly.

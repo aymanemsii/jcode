@@ -1,10 +1,12 @@
-# jcode Customization
+# Mercury / jcode Customization
 
-This document describes the current customization system implemented in jcode customization v2.
+This document describes the current customization system implemented in Mercury
+customization v2. The `mercury` command is preferred in new examples; the
+`jcode` command remains supported for compatibility.
 
 ## Config Location
 
-jcode reads global customization settings with this precedence:
+Mercury reads global customization settings with this precedence:
 
 ```text
 $MERCURY_HOME/config.toml
@@ -14,10 +16,10 @@ $JCODE_HOME/config.toml
 ```
 
 `MERCURY_HOME` is the highest-precedence explicit config home. `JCODE_HOME`
-remains supported as the legacy explicit config home:
+remains supported as the legacy explicit config home.
 
 If both `MERCURY_HOME` and `JCODE_HOME` are set, `MERCURY_HOME` wins and
-`jcode config show` reports that both env vars are set. When neither env var is
+`mercury config show` reports that both env vars are set. When neither env var is
 set, Mercury compatibility reads `~/.mercury/config.toml` before falling back to
 `~/.jcode/config.toml`. If neither file exists, new global config creation
 defaults to `~/.mercury/config.toml`.
@@ -26,29 +28,30 @@ Customization is configured through TOML sections such as `[app]`, `[display]`, 
 
 ## Project-Local Customization
 
-jcode also supports a visual-only project-local workspace file:
+Mercury also supports a visual-only project-local workspace file:
 
 ```text
 .mercury/workspace.toml
 .jcode/workspace.toml
 ```
 
-jcode searches upward from the current working directory and loads the nearest
+Mercury searches upward from the current working directory and loads the nearest
 `.mercury/workspace.toml` or `.jcode/workspace.toml`. It loads only one
 workspace file and does not merge multiple parent workspace files. Distance is
 the primary precedence rule; when both files exist in the same directory,
-`.mercury/workspace.toml` wins.
+`.mercury/workspace.toml` wins. Legacy `.jcode/workspace.toml` files remain
+supported fallbacks and are not migrated automatically.
 
 Supported MVP shape:
 
 ```toml
 [workspace]
-name = "jcode"
+name = "mercury"
 
 [display]
 theme = "cursor"
 accent_color = "#0088FF"
-startup_splash_title = "jcode dev mode"
+startup_splash_title = "mercury dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
 background_style = "subtle-grid"
@@ -83,17 +86,17 @@ place for secrets or command execution behavior.
 Use:
 
 ```text
-jcode workspace show
-jcode workspace init
-jcode workspace edit
+mercury workspace show
+mercury workspace init
+mercury workspace edit
 ```
 
-`jcode workspace show` reports the discovered workspace file, whether it was
+`mercury workspace show` reports the discovered workspace file, whether it was
 found in the current directory or a parent directory, whether the source is
 `.mercury` or `.jcode`, `workspace.name`, and the supported project-local
 display fields when present.
 
-`jcode workspace init` creates `./.mercury/workspace.toml` with safe visual-only
+`mercury workspace init` creates `./.mercury/workspace.toml` with safe visual-only
 defaults and refuses to overwrite or shadow an existing current-directory
 `.mercury/workspace.toml` or `.jcode/workspace.toml`:
 
@@ -107,13 +110,13 @@ top_bar = true
 top_bar_items = ["app", "session", "theme", "repo"]
 ```
 
-`jcode workspace edit` opens the current-directory `.mercury/workspace.toml`
+`mercury workspace edit` opens the current-directory `.mercury/workspace.toml`
 when present, then the current-directory `.jcode/workspace.toml` when present.
 If neither exists, it creates `./.mercury/workspace.toml` and opens it in the
 editor selected by `VISUAL`, `EDITOR`, or Notepad on Windows. On macOS and
 Linux, set `VISUAL` or `EDITOR` first.
 
-`jcode workspace init` and `jcode workspace edit` are current-directory
+`mercury workspace init` and `mercury workspace edit` are current-directory
 commands. They do not edit a discovered parent workspace file and do not
 automatically migrate, move, or copy legacy `.jcode/workspace.toml` files.
 
@@ -138,12 +141,12 @@ Both fields are optional. Missing, empty, or whitespace-only values fall back to
 Use:
 
 ```text
-jcode config edit
+mercury config edit
 ```
 
 The command opens the resolved global user config file in your editor. It creates the config directory and `config.toml` if they do not already exist; for brand-new configs with no explicit env var and no existing file, that path is `~/.mercury/config.toml`.
 
-Editor selection uses `$VISUAL` first, then `$EDITOR`. On Windows, jcode falls back to Notepad when neither variable is set. On macOS and Linux, set `VISUAL` or `EDITOR` before running the command.
+Editor selection uses `$VISUAL` first, then `$EDITOR`. On Windows, Mercury falls back to Notepad when neither variable is set. On macOS and Linux, set `VISUAL` or `EDITOR` before running the command.
 
 ## Built-In Themes
 
@@ -254,23 +257,23 @@ This prevents local config from replacing the behavior of stable built-in theme 
 Use:
 
 ```text
-jcode theme list
-jcode theme current
-jcode theme preview [theme-name]
+mercury theme list
+mercury theme current
+mercury theme preview [theme-name]
 ```
 
-`jcode theme list` prints the built-in theme names and any global custom themes
+`mercury theme list` prints the built-in theme names and any global custom themes
 defined under `[themes.<name>]`. If the discovered project-local workspace file
 overrides `display.theme` or `display.accent_color`, the command notes that
 project-local workspace customization may affect the current theme or accent.
 
-`jcode theme current` shows the active resolved theme from the same merged
-global-plus-discovered-workspace config used by `jcode config show`. It
+`mercury theme current` shows the active resolved theme from the same merged
+global-plus-discovered-workspace config used by `mercury config show`. It
 reports the active theme name, theme source, theme validity, active accent
 color, whether a project-local workspace config is present, and whether
 project-local `display.theme` or `display.accent_color` overrides are active.
 
-`jcode theme preview` previews the active theme. `jcode theme preview
+`mercury theme preview` previews the active theme. `mercury theme preview
 tokyonight` or another name previews that built-in or global custom theme. The
 preview prints compact Theme Palette V2 hex values for semantic colors and
 chrome fields including `accent`, `user`, `assistant`, `tool`, `system`,
@@ -291,7 +294,7 @@ The startup splash is configured under `[display]`:
 ```toml
 [display]
 startup_splash = true
-startup_splash_title = "jcode // Aymane"
+startup_splash_title = "Mercury // Aymane"
 startup_splash_subtitle = "Build fast. Break nothing."
 startup_splash_footer = "custom mode enabled"
 ```
@@ -374,7 +377,7 @@ Supported MVP item names are:
 
 An explicitly empty list renders no items while `display.top_bar = true` still
 reserves the top bar line. Unknown item names are ignored safely and reported by
-`jcode config show` as ignored items.
+`mercury config show` as ignored items.
 
 Project-local `.mercury/workspace.toml` or `./.jcode/workspace.toml` can
 override `display.top_bar_items` because it is visual-only.
@@ -387,7 +390,7 @@ session label, wallpaper, and split-pane controls are deferred.
 Use:
 
 ```text
-jcode config show
+mercury config show
 ```
 
 The command reports safe display/customization visibility details, including:

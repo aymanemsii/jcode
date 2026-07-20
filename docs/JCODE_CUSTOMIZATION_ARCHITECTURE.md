@@ -98,14 +98,16 @@ For jcode, "wallpaper" should be split into separate feature classes:
 The primary config system is global TOML:
 
 ```text
-~/.jcode/config.toml
+~/.mercury/config.toml
 ```
 
 or, when redirected:
 
 ```text
-$JCODE_HOME/config.toml
+$MERCURY_HOME/config.toml
 ```
+
+`JCODE_HOME` and `~/.jcode/config.toml` remain supported fallbacks.
 
 Relevant files:
 
@@ -263,8 +265,8 @@ Do not invent a final large format yet. A minimal first step could be one or two
 Recommended precedence, if project-local customization is introduced later:
 
 1. command-line or environment override
-2. project-local `.jcode/config.toml` or a scoped project customization file
-3. global `~/.jcode/config.toml`
+2. project-local `.mercury/workspace.toml` or a scoped project customization file
+3. global `~/.mercury/config.toml`
 4. built-in defaults
 
 However, project-local UI customization should not be added first. It creates questions about trust, repository portability, accidental team-wide visual changes, and config merge semantics. Start with global user preference. Add project-local only after there is a clear use case, such as per-repo accent colors or workspace identity.
@@ -329,7 +331,7 @@ Recommended future slices:
 
 1. Keep this customization architecture document as the baseline.
 2. Inspect direct color/style call sites in `crates/jcode-tui`, `crates/jcode-tui-render`, and `crates/jcode-tui-style` more deeply.
-3. If useful, add a read-only `jcode config show` or extend existing `/config` visibility for display/theme settings.
+3. If useful, add a read-only `mercury config show` or extend existing `/config` visibility for display/theme settings.
 4. Add a global accent color config field and route only `accent_color()` through it.
 5. Add named built-in theme config with no arbitrary imports.
 6. Apply the theme object to the central semantic color functions.

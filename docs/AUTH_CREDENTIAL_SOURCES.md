@@ -51,7 +51,7 @@ Programmatically, the single source of truth is
 
 ## Selecting a default via config
 
-`~/.jcode/config.toml`:
+`~/.mercury/config.toml`:
 
 ```toml
 [provider]

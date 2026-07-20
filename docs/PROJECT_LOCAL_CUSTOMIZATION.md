@@ -1,19 +1,23 @@
 # Project-Local Customization
 
-This document describes the project-local workspace customization MVP in jcode
-and records the remaining deferred work.
+This document describes the project-local workspace customization MVP in
+Mercury/jcode and records the remaining deferred work. New examples prefer the
+`mercury` command and `.mercury/workspace.toml`; `jcode` and
+`.jcode/workspace.toml` remain supported for compatibility.
 
-The current customization system is global. jcode reads user configuration from:
-
-```text
-~/.jcode/config.toml
-```
-
-When `JCODE_HOME` is set, jcode reads:
+The current customization system is global. Mercury reads user configuration from:
 
 ```text
-$JCODE_HOME/config.toml
+~/.mercury/config.toml
 ```
+
+When `MERCURY_HOME` is set, Mercury reads:
+
+```text
+$MERCURY_HOME/config.toml
+```
+
+`JCODE_HOME` and `~/.jcode/config.toml` remain supported fallbacks for existing users.
 
 Project-local customization lets a repository carry a small, safe workspace
 identity layer without changing the user's global defaults.
@@ -34,27 +38,30 @@ The first version should stay visual and informational. It should not add projec
 
 ## File Discovery
 
-jcode discovers the project-local workspace file by starting in the current
+Mercury discovers the project-local workspace file by starting in the current
 working directory and walking upward through parent directories until it finds:
 
 ```text
-.jcode/workspace.toml
+.mercury/workspace.toml
 ```
 
-The nearest file wins. If both the current directory and a parent directory have
-`.jcode/workspace.toml`, jcode loads only the current directory file. It does
-not merge multiple workspace files.
+Legacy `.jcode/workspace.toml` files are also discovered as compatibility
+fallbacks. The nearest file wins. If both the current directory and a parent
+directory have workspace files, Mercury loads only the nearest directory's file.
+It does not merge multiple workspace files. When `.mercury/workspace.toml` and
+`.jcode/workspace.toml` exist in the same directory, `.mercury/workspace.toml`
+wins.
 
 This path keeps project-local workspace identity separate from the global user config file:
 
 ```text
-~/.jcode/config.toml
-$JCODE_HOME/config.toml
+~/.mercury/config.toml
+$MERCURY_HOME/config.toml
 ```
 
-`./.jcode/workspace.toml` is preferable to reusing `./.jcode/config.toml` for the MVP because `config.toml` already means user-level jcode configuration. Reusing the same filename inside a repository could imply that every global option is valid project-locally, including sensitive provider, auth, privacy, and network settings. A distinct `workspace.toml` name makes the scope clearer: this file describes the local workspace, not the user's account, credentials, or global app behavior.
+`./.mercury/workspace.toml` is preferable to reusing `./.mercury/config.toml` for the MVP because `config.toml` already means user-level Mercury configuration. Reusing the same filename inside a repository could imply that every global option is valid project-locally, including sensitive provider, auth, privacy, and network settings. A distinct `workspace.toml` name makes the scope clearer: this file describes the local workspace, not the user's account, credentials, or global app behavior.
 
-Only reuse `./.jcode/config.toml` if there is a strong future reason to support a full layered config system and the loader can clearly separate project-safe keys from global-only keys.
+Only reuse `./.mercury/config.toml` if there is a strong future reason to support a full layered config system and the loader can clearly separate project-safe keys from global-only keys.
 
 ## Config Shape
 
@@ -63,12 +70,12 @@ avoids global identity and secret-bearing settings:
 
 ```toml
 [workspace]
-name = "jcode"
+name = "mercury"
 
 [display]
 theme = "cursor"
 accent_color = "#0088FF"
-startup_splash_title = "jcode dev mode"
+startup_splash_title = "mercury dev mode"
 startup_splash_subtitle = "local source build"
 startup_splash_footer = "workspace customization enabled"
 background_style = "subtle-grid"
@@ -81,12 +88,12 @@ The example in shorthand form:
 
 ```toml
 [workspace]
-name = "jcode"
+name = "mercury"
 
 [display]
 theme = "cursor"
 accent_color = "#0088FF"
-startup_splash_title = "jcode dev mode"
+startup_splash_title = "mercury dev mode"
 background_style = "stars"
 top_bar = true
 ```
@@ -99,9 +106,12 @@ top_bar = true
 
 Effective display customization is resolved at field level:
 
-1. Project-local workspace customization from `./.jcode/workspace.toml`
-2. Global user config from `~/.jcode/config.toml` or `$JCODE_HOME/config.toml`
+1. Project-local workspace customization from `./.mercury/workspace.toml`
+2. Global user config from `~/.mercury/config.toml` or `$MERCURY_HOME/config.toml`
 3. Built-in defaults
+
+Legacy `./.jcode/workspace.toml`, `~/.jcode/config.toml`, and
+`$JCODE_HOME/config.toml` remain supported fallbacks.
 
 This order lets a repository override only the small set of project-safe fields. Missing or invalid project-local fields should fall through to the global user config. Missing or invalid global fields should fall through to built-in defaults.
 
@@ -154,26 +164,28 @@ The most important safety boundary is that a cloned repo should not be able to c
 
 ## Loading Strategy
 
-jcode currently uses:
+Mercury currently uses:
 
 ```text
-nearest .jcode/workspace.toml found by walking upward from the current directory
+nearest .mercury/workspace.toml or .jcode/workspace.toml found by walking upward from the current directory
 ```
 
 Discovery stops at the filesystem root. Only one workspace file is loaded: the
-first `.jcode/workspace.toml` found while walking upward. Parent files above the
-nearest match are ignored and never merged.
+first directory containing `.mercury/workspace.toml` or `.jcode/workspace.toml`
+while walking upward. Parent files above the nearest match are ignored and never
+merged. If both files exist in the same directory, `.mercury/workspace.toml`
+wins.
 
 ## CLI Visibility
 
-`jcode config show` reports project-local customization compactly:
+`mercury config show` reports project-local customization compactly:
 
 * Discovered project-local workspace config path when loaded, or `not found`.
 * Whether the discovered file is in the current directory or a parent directory.
 * `workspace.name` when present.
 * Which project-local display fields override global config.
 
-`jcode config show` should remain safe and avoid printing secrets. Since project-local customization should not include secrets, this should be straightforward for workspace fields.
+`mercury config show` should remain safe and avoid printing secrets. Since project-local customization should not include secrets, this should be straightforward for workspace fields.
 
 ## Workspace Commands
 
@@ -181,18 +193,18 @@ Workspace-focused commands make the current-directory project-local file easier
 to inspect and manage:
 
 ```text
-jcode workspace show
-jcode workspace init
-jcode workspace edit
+mercury workspace show
+mercury workspace init
+mercury workspace edit
 ```
 
-`jcode workspace show` uses the same parent-directory discovery as config
+`mercury workspace show` uses the same parent-directory discovery as config
 loading. When present, it prints the discovered file path, whether it came from
 the current directory or a parent directory, `workspace.name`, and the supported
 project-local `display.*` fields. When missing, it prints the current-directory
-path that `jcode workspace init` or `jcode workspace edit` would use.
+path that `mercury workspace init` or `mercury workspace edit` would use.
 
-`jcode workspace init` creates `./.jcode/workspace.toml`, creating `./.jcode/`
+`mercury workspace init` creates `./.mercury/workspace.toml`, creating `./.mercury/`
 first when needed. It does not overwrite an existing file. The generated file is
 visual-only:
 
@@ -205,14 +217,17 @@ theme = "cursor"
 top_bar = true
 ```
 
-`jcode workspace edit` opens `./.jcode/workspace.toml` in the user's editor. If
-the file is missing, it creates the same safe default first. Editor selection
-matches `jcode config edit`: `VISUAL`, then `EDITOR`, then Notepad on Windows,
-with a helpful error on macOS/Linux if no editor is configured.
+`mercury workspace edit` opens an existing current-directory
+`.mercury/workspace.toml` first, then an existing current-directory
+`.jcode/workspace.toml`. If neither exists, it creates `./.mercury/workspace.toml`
+with the same safe default first. Editor selection matches `mercury config edit`:
+`VISUAL`, then `EDITOR`, then Notepad on Windows, with a helpful error on
+macOS/Linux if no editor is configured.
 
-`jcode workspace init` and `jcode workspace edit` remain current-directory
-commands. They create or edit only `./.jcode/workspace.toml` under the current
-working directory. They do not edit a discovered parent file.
+`mercury workspace init` and `mercury workspace edit` remain current-directory
+commands. They create or edit only current-directory workspace files. They do
+not edit a discovered parent file and do not migrate, move, or copy legacy
+`.jcode/workspace.toml` files automatically.
 
 Workspace commands do not modify global config, add secrets, or change
 provider, auth, network, execution, Queue, or server protocol behavior.
@@ -236,12 +251,12 @@ allowlist of fields, nearest-file-only discovery, and clear CLI visibility.
 The implemented MVP:
 
 * Adds a workspace config model containing `workspace.name` and the allowed `display.*` fields.
-* Searches upward from the current working directory for `.jcode/workspace.toml`.
+* Searches upward from the current working directory for `.mercury/workspace.toml` or `.jcode/workspace.toml`.
 * Loads only the nearest discovered workspace file.
 * Merges workspace values over global config at the field level for the allowlisted fields.
 * Reuses existing validation and fallback behavior for themes, accent colors, splash text, terminal-safe background fields, and `top_bar`.
-* Updates `jcode config show` to report the discovered workspace path, workspace location, workspace name, and project-local display overrides.
-* Adds `jcode workspace show`, `jcode workspace init`, and `jcode workspace edit`.
+* Updates `mercury config show` to report the discovered workspace path, workspace location, workspace name, and project-local display overrides.
+* Adds `mercury workspace show`, `mercury workspace init`, and `mercury workspace edit`; `jcode` remains a supported compatibility command for the same subcommands.
 * Rejects non-allowlisted project-local sections instead of treating them as config.
 
 The MVP does not include multi-workspace merging, project-local secrets,

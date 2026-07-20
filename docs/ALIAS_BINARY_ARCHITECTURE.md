@@ -8,12 +8,15 @@ Implemented:
 
 * added a second Cargo bin target named `mercury`
 * pointed `mercury` at the same `src/main.rs` startup source as `jcode`
-* kept `jcode` as the canonical command
-* preserved existing config directories, environment variables, project-local `.jcode` paths, provider user-agent constants, package/crate names, Queue behavior, server protocol behavior, and hard rename deferrals
+* kept `jcode` as a supported compatibility command
+* added Mercury-specific config/workspace defaults in later compatibility slices
+* preserved `JCODE_HOME`, `~/.jcode/config.toml`, and `.jcode/workspace.toml` as compatibility fallbacks
+* preserved provider user-agent constants, package/crate names, Queue behavior, server protocol behavior, and hard rename deferrals
 
 The only intended behavioral difference for the MVP is the unavoidable executable name / `argv[0]` surface when users launch the app as `mercury`.
 
-Installer, release artifact, shell completion, config directory, environment variable, and hard rename work remain deferred.
+Installer, release artifact, shell completion, package/crate rename, and hard
+rename work remain deferred.
 
 ## Goal
 
@@ -98,14 +101,17 @@ The first alias step should preserve compatibility:
 
 * keep the `jcode` binary working
 * make the alias binary share config initially
-* do not rename `~/.jcode` yet
-* do not rename `JCODE_HOME` yet
-* do not rename `.jcode/workspace.toml` yet
+* preserve `~/.jcode/config.toml` as a fallback
+* preserve `JCODE_HOME` as a fallback
+* preserve `.jcode/workspace.toml` as a fallback
 * keep `app.name` as the user-facing brand layer
 
 The alias should behave like another way to launch the same app, not like a new app with separate state.
 
-Initial examples should continue to show `jcode` unless the example is specifically about the alias. This prevents docs from implying that the alias is required or that existing installs are obsolete.
+New user-facing examples for config, workspace, theme, and customization should
+prefer `mercury` now that the alias and Mercury defaults exist. Docs should
+still say that `jcode` remains supported as a compatibility command so existing
+installs and scripts are not implied obsolete.
 
 ## Risks
 
@@ -128,8 +134,8 @@ The MVP follows the narrow path:
 1. Add a tiny second bin target because the Cargo structure supports it cleanly.
 2. Reuse the shared `src/main.rs` startup path.
 3. Keep behavior identical except for unavoidable process `argv[0]` or binary-name differences.
-4. Keep `jcode` as the canonical compatible command.
-5. Keep config, state, env vars, server protocol, and workspace paths unchanged.
+4. Keep `jcode` as a supported compatibility command.
+5. Prefer Mercury config/workspace defaults while preserving legacy env vars and paths as fallbacks.
 6. Update docs after implementation to explain the alias as optional.
 7. Defer installer and release changes until the code-level alias is proven safe.
 
@@ -148,6 +154,6 @@ Do not do these in the alias-binary investigation or first implementation slice:
 * no release artifact rename
 * no installer rewrite
 * no Queue changes
-* no forced migration from `jcode` examples
+* no implication that `jcode` compatibility has been removed
 
 The safest next step is an optional alias that launches the same app and preserves all existing names that carry compatibility risk.

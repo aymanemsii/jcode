@@ -8,7 +8,7 @@ sessions appear*); lifecycle hooks tell you *what is happening inside them*.
 ## Configuration
 
 ```toml
-# ~/.jcode/config.toml
+# ~/.mercury/config.toml
 [hooks]
 turn_end      = "~/bin/jcode-turn-notify"     # observer
 session_start = ""                            # observer

@@ -2,6 +2,12 @@
 
 This document investigates the safest compatibility rename layer for the Mercury fork. It is documentation-only and does not implement new config paths, environment variables, workspace paths, migration commands, protocol names, package names, crate names, or installer behavior.
 
+Implementation has since added the `mercury` alias binary, `MERCURY_HOME`,
+`~/.mercury/config.toml`, and `.mercury/workspace.toml` as preferred Mercury
+surfaces/defaults. This is still not a hard rename: `jcode`, `JCODE_HOME`,
+`~/.jcode/config.toml`, and `.jcode/workspace.toml` remain supported
+compatibility paths.
+
 ## Goal
 
 Mercury should feel like its own app while preserving existing `jcode` compatibility.
@@ -10,21 +16,22 @@ The rename layer should support new Mercury-specific paths and environment varia
 
 The immediate goal is not a hard rename. The safe path is a compatibility layer that can read new Mercury locations while continuing to honor existing `jcode` locations for a long compatibility window.
 
-## Future Compatibility Targets
+## Compatibility Targets
 
-Future Mercury-compatible surfaces may include:
+Mercury-compatible surfaces include:
 
 * `MERCURY_HOME`
 * `~/.mercury/config.toml`
 * `.mercury/workspace.toml`
 
-Legacy compatibility should be preserved for:
+Legacy compatibility is preserved for:
 
 * `JCODE_HOME`
 * `~/.jcode/config.toml`
 * `.jcode/workspace.toml`
 
-These should initially be compatibility aliases and fallback locations, not destructive replacements.
+These are compatibility aliases and preferred new defaults, not destructive
+replacements for the legacy `jcode` surfaces.
 
 ## Config Resolution Strategy
 

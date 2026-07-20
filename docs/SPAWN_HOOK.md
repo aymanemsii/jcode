@@ -13,7 +13,7 @@ pane, a tab in a wrapper app like herd, a specific monitor/workspace, etc.
 ## Configuration
 
 ```toml
-# ~/.jcode/config.toml
+# ~/.mercury/config.toml
 [terminal]
 spawn_hook = "tmux new-window"
 ```

@@ -53,7 +53,7 @@ The report names the conflicting jcode action and its config field, e.g.:
 
 To fix, either:
 
-- rebind the jcode action in `~/.jcode/config.toml` under `[keybindings]`
+- rebind the jcode action in `~/.mercury/config.toml` under `[keybindings]`
   (e.g. `model_switch_next = "ctrl+shift+m"`), or
 - change the conflicting shortcut in your terminal or OS settings.
 
