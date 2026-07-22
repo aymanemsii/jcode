@@ -1,5 +1,23 @@
 # TODO
 
+## Task 62 - Plan Mercury Core mini animation MVP
+
+Task Type: Planning
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added implementation plan for Mercury Core mini animation MVP.
+* Scoped the first visual implementation slice to a small branded conversation-area status strip.
+* Deferred command palette, homepage redesign, input prompt, Top Bar V2, and multi-session UI.
+
+Validation:
+
+* Manual plan review will be run separately before implementation.
+
 ## Task 61 - Document Mercury UI design direction
 
 Task Type: Design
