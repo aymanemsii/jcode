@@ -1,5 +1,25 @@
 # TODO
 
+## Task 59 - Add Mercury migrate all copy
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added `migrate all` to run config migration and current-directory workspace migration together.
+* Reused copy-first, non-destructive migration behavior.
+* Preserved `migrate all --dry-run`.
+* Avoided overwriting existing Mercury files and left legacy jcode files in place.
+* Deferred force/overwrite/backups.
+
+Validation:
+
+* Manual cargo test/check/smoke validation will be run separately after this change.
+
 ## Task 58 - Add Mercury workspace migration copy
 
 Task Type: Implementation

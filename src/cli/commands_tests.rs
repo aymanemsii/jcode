@@ -790,17 +790,27 @@ fn migrate_all_dry_run_includes_config_and_workspace_sections() {
     let _guard = crate::storage::lock_test_env();
     let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
     let _cwd = SavedCurrentDir::capture();
-    let temp = tempfile::tempdir().expect("tempdir");
+    let home = tempfile::tempdir().expect("home tempdir");
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
     crate::env::remove_var("MERCURY_HOME");
     crate::env::remove_var("JCODE_HOME");
-    crate::env::set_var("HOME", temp.path());
-    crate::env::set_var("USERPROFILE", temp.path());
-    std::env::set_current_dir(temp.path()).expect("set temp cwd");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    std::env::set_current_dir(workspace.path()).expect("set temp cwd");
+    let config_source = home.path().join(".jcode").join("config.toml");
+    let workspace_source = workspace.path().join(".jcode").join("workspace.toml");
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::create_dir_all(workspace_source.parent().expect("workspace source parent")).unwrap();
+    std::fs::write(&config_source, b"[display]\n").unwrap();
+    std::fs::write(&workspace_source, b"[workspace]\n").unwrap();
 
     let output = render_migrate_all_dry_run().expect("render migration");
 
     assert!(output.contains("Mercury config migration dry-run"));
     assert!(output.contains("Mercury workspace migration dry-run"));
+    assert!(output.contains("action: would copy"));
+    assert!(!home.path().join(".mercury").exists());
+    assert!(!workspace.path().join(".mercury").exists());
 }
 
 #[test]
@@ -815,11 +825,201 @@ fn migrate_workspace_without_dry_run_returns_success() {
 }
 
 #[test]
-fn migrate_all_without_dry_run_returns_helpful_error() {
-    let err = run_migrate_command(MigrateSubcommand::All { dry_run: false })
-        .expect_err("all actual migration should fail");
+fn migrate_all_copies_config_and_workspace_when_sources_exist() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    std::env::set_current_dir(workspace.path()).expect("set temp cwd");
+    let config_source = home.path().join(".jcode").join("config.toml");
+    let config_destination = home.path().join(".mercury").join("config.toml");
+    let workspace_source = workspace.path().join(".jcode").join("workspace.toml");
+    let workspace_destination = workspace.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::create_dir_all(workspace_source.parent().expect("workspace source parent")).unwrap();
+    std::fs::write(&config_source, b"[display]\naccent_color = \"#123456\"\n").unwrap();
+    std::fs::write(&workspace_source, b"[workspace]\nname = \"legacy\"\n").unwrap();
 
-    assert!(err.to_string().contains("only --dry-run is supported"));
+    let output = render_migrate_all().expect("migrate all");
+
+    assert_eq!(
+        std::fs::read(&config_destination).unwrap(),
+        b"[display]\naccent_color = \"#123456\"\n"
+    );
+    assert_eq!(
+        std::fs::read(&workspace_destination).unwrap(),
+        b"[workspace]\nname = \"legacy\"\n"
+    );
+    assert!(output.contains("Mercury config migration"));
+    assert!(output.contains("Mercury workspace migration"));
+    assert!(output.contains("action: copied"));
+    assert!(!output.contains("#123456"));
+    assert!(!output.contains("legacy"));
+}
+
+#[test]
+fn migrate_all_leaves_config_and_workspace_sources_in_place() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    std::env::set_current_dir(workspace.path()).expect("set temp cwd");
+    let config_source = home.path().join(".jcode").join("config.toml");
+    let workspace_source = workspace.path().join(".jcode").join("workspace.toml");
+    let config_contents = b"[app]\nname = \"legacy-config\"\n";
+    let workspace_contents = b"[workspace]\nname = \"legacy-workspace\"\n";
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::create_dir_all(workspace_source.parent().expect("workspace source parent")).unwrap();
+    std::fs::write(&config_source, config_contents).unwrap();
+    std::fs::write(&workspace_source, workspace_contents).unwrap();
+
+    run_migrate_command(MigrateSubcommand::All { dry_run: false }).expect("migrate all");
+
+    assert_eq!(std::fs::read(&config_source).unwrap(), config_contents);
+    assert_eq!(std::fs::read(&workspace_source).unwrap(), workspace_contents);
+}
+
+#[test]
+fn migrate_all_does_not_overwrite_existing_config_or_workspace_destinations() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    std::env::set_current_dir(workspace.path()).expect("set temp cwd");
+    let config_source = home.path().join(".jcode").join("config.toml");
+    let config_destination = home.path().join(".mercury").join("config.toml");
+    let workspace_source = workspace.path().join(".jcode").join("workspace.toml");
+    let workspace_destination = workspace.path().join(".mercury").join("workspace.toml");
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::create_dir_all(config_destination.parent().expect("config destination parent"))
+        .unwrap();
+    std::fs::create_dir_all(workspace_source.parent().expect("workspace source parent")).unwrap();
+    std::fs::create_dir_all(
+        workspace_destination
+            .parent()
+            .expect("workspace destination parent"),
+    )
+    .unwrap();
+    std::fs::write(&config_source, b"[display]\naccent_color = \"#abcdef\"\n").unwrap();
+    std::fs::write(&config_destination, b"[app]\nname = \"existing-config\"\n").unwrap();
+    std::fs::write(&workspace_source, b"[workspace]\nname = \"legacy\"\n").unwrap();
+    std::fs::write(
+        &workspace_destination,
+        b"[workspace]\nname = \"existing-workspace\"\n",
+    )
+    .unwrap();
+
+    run_migrate_command(MigrateSubcommand::All { dry_run: false }).expect("migrate all");
+
+    assert_eq!(
+        std::fs::read(&config_destination).unwrap(),
+        b"[app]\nname = \"existing-config\"\n"
+    );
+    assert_eq!(
+        std::fs::read(&workspace_destination).unwrap(),
+        b"[workspace]\nname = \"existing-workspace\"\n"
+    );
+}
+
+#[test]
+fn migrate_all_succeeds_when_one_or_both_sources_are_missing() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+
+    let config_only_home = tempfile::tempdir().expect("config-only home");
+    let config_only_workspace = tempfile::tempdir().expect("config-only workspace");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", config_only_home.path());
+    crate::env::set_var("USERPROFILE", config_only_home.path());
+    std::env::set_current_dir(config_only_workspace.path()).expect("set config-only cwd");
+    let config_source = config_only_home.path().join(".jcode").join("config.toml");
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::write(&config_source, b"[display]\n").unwrap();
+    run_migrate_command(MigrateSubcommand::All { dry_run: false }).expect("migrate all config only");
+    assert!(config_only_home.path().join(".mercury").join("config.toml").exists());
+    assert!(
+        !config_only_workspace
+            .path()
+            .join(".mercury")
+            .join("workspace.toml")
+            .exists()
+    );
+
+    let workspace_only_home = tempfile::tempdir().expect("workspace-only home");
+    let workspace_only_workspace = tempfile::tempdir().expect("workspace-only workspace");
+    crate::env::set_var("HOME", workspace_only_home.path());
+    crate::env::set_var("USERPROFILE", workspace_only_home.path());
+    std::env::set_current_dir(workspace_only_workspace.path()).expect("set workspace-only cwd");
+    let workspace_source = workspace_only_workspace
+        .path()
+        .join(".jcode")
+        .join("workspace.toml");
+    std::fs::create_dir_all(workspace_source.parent().expect("workspace source parent")).unwrap();
+    std::fs::write(&workspace_source, b"[workspace]\n").unwrap();
+    run_migrate_command(MigrateSubcommand::All { dry_run: false })
+        .expect("migrate all workspace only");
+    assert!(
+        !workspace_only_home
+            .path()
+            .join(".mercury")
+            .join("config.toml")
+            .exists()
+    );
+    assert!(
+        workspace_only_workspace
+            .path()
+            .join(".mercury")
+            .join("workspace.toml")
+            .exists()
+    );
+
+    let missing_home = tempfile::tempdir().expect("missing home");
+    let missing_workspace = tempfile::tempdir().expect("missing workspace");
+    crate::env::set_var("HOME", missing_home.path());
+    crate::env::set_var("USERPROFILE", missing_home.path());
+    std::env::set_current_dir(missing_workspace.path()).expect("set missing cwd");
+    run_migrate_command(MigrateSubcommand::All { dry_run: false }).expect("migrate all missing");
+    assert!(!missing_home.path().join(".mercury").exists());
+    assert!(!missing_workspace.path().join(".mercury").exists());
+}
+
+#[test]
+fn migrate_all_creates_destination_parent_directories_only_when_copying() {
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["MERCURY_HOME", "JCODE_HOME", "HOME", "USERPROFILE"]);
+    let _cwd = SavedCurrentDir::capture();
+    let home = tempfile::tempdir().expect("home tempdir");
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    crate::env::remove_var("MERCURY_HOME");
+    crate::env::remove_var("JCODE_HOME");
+    crate::env::set_var("HOME", home.path());
+    crate::env::set_var("USERPROFILE", home.path());
+    std::env::set_current_dir(workspace.path()).expect("set temp cwd");
+    let config_source = home.path().join(".jcode").join("config.toml");
+    std::fs::create_dir_all(config_source.parent().expect("config source parent")).unwrap();
+    std::fs::write(&config_source, b"[display]\n").unwrap();
+
+    run_migrate_command(MigrateSubcommand::All { dry_run: false }).expect("migrate all");
+
+    assert!(home.path().join(".mercury").is_dir());
+    assert!(!workspace.path().join(".mercury").exists());
 }
 
 #[test]

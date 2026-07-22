@@ -169,11 +169,7 @@ pub fn run_migrate_command(cmd: MigrateSubcommand) -> Result<()> {
         MigrateSubcommand::Workspace { dry_run: true } => render_migrate_workspace_dry_run()?,
         MigrateSubcommand::Workspace { dry_run: false } => render_migrate_workspace()?,
         MigrateSubcommand::All { dry_run: true } => render_migrate_all_dry_run()?,
-        MigrateSubcommand::All { dry_run: false } => {
-            anyhow::bail!(
-                "only --dry-run is supported for `migrate all` in this slice; retry with --dry-run"
-            );
-        }
+        MigrateSubcommand::All { dry_run: false } => render_migrate_all()?,
     };
     print!("{output}");
     Ok(())
@@ -913,6 +909,14 @@ fn render_migrate_all_dry_run() -> Result<String> {
         "{}\n{}",
         render_migrate_config_dry_run()?,
         render_migrate_workspace_dry_run()?
+    ))
+}
+
+fn render_migrate_all() -> Result<String> {
+    Ok(format!(
+        "{}\n{}",
+        render_migrate_config()?,
+        render_migrate_workspace()?
     ))
 }
 
