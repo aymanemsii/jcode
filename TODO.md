@@ -1,5 +1,23 @@
 # TODO
 
+## Task 61 - Document Mercury UI design direction
+
+Task Type: Design
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added Mercury UI design direction based on current screenshots and user feedback.
+* Documented target premium AI cockpit style, Mercury Core mini animation, command palette redesign, homepage/status card redesign, input prompt polish, and terminal-safe faux-glass effects.
+* Defined implementation roadmap before modifying TUI code.
+
+Validation:
+
+* Manual documentation review will be run separately after this change.
+
 ## Task 60 - Add final Mercury usage checklist
 
 Task Type: Documentation
