@@ -8,6 +8,17 @@ surfaces/defaults. This is still not a hard rename: `jcode`, `JCODE_HOME`,
 `~/.jcode/config.toml`, and `.jcode/workspace.toml` remain supported
 compatibility paths.
 
+## Final Practical Status
+
+The practical Mercury workflow is now documented in
+[`MERCURY_FINAL_USAGE_CHECKLIST.md`](MERCURY_FINAL_USAGE_CHECKLIST.md).
+
+In short, `mercury` is the preferred command for new usage, `jcode` remains a
+compatibility command, Mercury config/workspace paths are the new defaults, and
+legacy jcode paths remain supported fallbacks. The implemented migration
+commands copy legacy files into Mercury paths without overwriting, moving, or
+deleting existing files.
+
 ## Goal
 
 Mercury should feel like its own app while preserving existing `jcode` compatibility.

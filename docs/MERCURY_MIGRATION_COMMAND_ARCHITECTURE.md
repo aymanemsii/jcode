@@ -23,6 +23,14 @@ The migration command should help existing users copy legacy config and
 workspace files into Mercury locations without breaking older scripts or
 removing fallback paths.
 
+## Implementation Status
+
+`mercury migrate config`, `mercury migrate workspace`, and
+`mercury migrate all` are now implemented for both dry-run reporting and
+copy-first migration. The implemented copy behavior remains conservative:
+existing Mercury destinations are not overwritten, legacy jcode files are not
+deleted or moved, and workspace writes are limited to the current directory.
+
 ## Proposed Command Shape
 
 Recommended future command group:

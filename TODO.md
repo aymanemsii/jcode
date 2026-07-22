@@ -1,5 +1,23 @@
 # TODO
 
+## Task 60 - Add final Mercury usage checklist
+
+Task Type: Documentation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added final Mercury usage and migration checklist.
+* Documented preferred Mercury command usage, legacy jcode compatibility, migration commands, safe migration flow, and storage cleanup guidance.
+* Linked final checklist from Mercury compatibility and migration architecture docs.
+
+Validation:
+
+* Manual documentation diff review will be run separately after this change.
+
 ## Task 59 - Add Mercury migrate all copy
 
 Task Type: Implementation
