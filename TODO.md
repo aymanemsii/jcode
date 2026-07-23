@@ -1,5 +1,24 @@
 # TODO
 
+## Task 63 - Redesign Mercury homepage status card MVP
+
+Task Type: Implementation
+
+Status: Completed
+
+Priority: High
+
+Result:
+
+* Added a subtle Mercury Core header inside the existing centered homepage/status block.
+* Improved homepage branding without adding a second top bar or separate global strip.
+* Preserved existing status information, command menu behavior, top bar behavior, and input behavior.
+* Deferred animated Mercury Core strip, command palette redesign, input prompt polish, Top Bar V2, and multi-session UI.
+
+Validation:
+
+* Manual cargo test/check/visual smoke validation will be run separately after this change.
+
 ## Task 62 - Plan Mercury Core mini animation MVP
 
 Task Type: Planning

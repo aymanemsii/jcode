@@ -588,6 +588,33 @@ fn configured_auth_count(auth: &AuthStatus) -> usize {
     .count()
 }
 
+fn mercury_core_title(width: usize) -> Line<'static> {
+    let mut spans = Vec::new();
+
+    if width >= "☿ Mercury Core".chars().count() {
+        spans.push(Span::styled(
+            "☿ ",
+            Style::default().fg(rgb(190, 170, 255)).bold(),
+        ));
+        spans.push(Span::styled(
+            "Mercury Core",
+            Style::default().fg(header_name_color()).bold(),
+        ));
+    } else if width >= "Mercury Core".chars().count() {
+        spans.push(Span::styled(
+            "Mercury Core",
+            Style::default().fg(header_name_color()).bold(),
+        ));
+    } else if width >= "Mercury".chars().count() {
+        spans.push(Span::styled(
+            "Mercury",
+            Style::default().fg(header_name_color()).bold(),
+        ));
+    }
+
+    Line::from(spans).alignment(Alignment::Center)
+}
+
 pub(super) fn build_persistent_header(app: &dyn TuiState, width: u16) -> Vec<Line<'static>> {
     let model = app.provider_model();
     let session_name = app.session_display_name().unwrap_or_default();
@@ -626,6 +653,8 @@ pub(super) fn build_persistent_header(app: &dyn TuiState, width: u16) -> Vec<Lin
     if let Some(badge) = crate::perf::profile().tier.badge() {
         status_items.push(badge);
     }
+
+    lines.push(mercury_core_title(w));
 
     // Labeled versions for the `server:` / `client:` lines. Lots of users run
     // mismatched client/server binaries, so both lines carry their own version
@@ -1084,6 +1113,127 @@ mod tests {
                     .collect::<String>()
             })
             .collect()
+    }
+
+    #[test]
+    fn persistent_header_includes_mercury_core_inside_centered_block() {
+        let mut app = create_test_app();
+        app.set_remote_server_identity_for_tests(
+            Some("summit"),
+            None,
+            Some("v0.14.2-dev (old1234)"),
+            Some("session_parrot_1705012345678"),
+        );
+
+        let lines = build_persistent_header(&app, 80);
+        let rendered: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect();
+        let mercury_idx = rendered
+            .iter()
+            .position(|line| line.contains("Mercury Core"))
+            .expect("Mercury Core header line");
+        let status_idx = rendered
+            .iter()
+            .position(|line| line.contains("server:") || line.contains("client:"))
+            .expect("server/client status line");
+
+        assert!(
+            mercury_idx < status_idx,
+            "Mercury Core should live inside the persistent homepage block before the status badge: {rendered:?}"
+        );
+        assert_eq!(
+            lines[mercury_idx].alignment,
+            Some(Alignment::Center),
+            "Mercury Core header should be centered with the homepage status block"
+        );
+    }
+
+    #[test]
+    fn persistent_header_mercury_core_does_not_render_as_left_edge_strip() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        use ratatui::widgets::{Paragraph, Widget};
+
+        let app = create_test_app();
+        let lines = build_persistent_header(&app, 80);
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 80, lines.len() as u16));
+        Paragraph::new(lines).render(buffer.area, &mut buffer);
+
+        let mercury_row = (0..buffer.area.height)
+            .find(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, *y)].symbol())
+                    .collect::<String>()
+                    .contains("Mercury Core")
+            })
+            .expect("Mercury Core rendered row");
+        let row_text = (0..buffer.area.width)
+            .map(|x| buffer[(x, mercury_row)].symbol())
+            .collect::<String>();
+        let first_non_space = row_text
+            .chars()
+            .position(|ch| ch != ' ')
+            .expect("non-empty Mercury Core row");
+
+        assert!(
+            first_non_space > 0,
+            "Mercury Core should be centered in the prepared header, not painted at x=0: {row_text:?}"
+        );
+    }
+
+    #[test]
+    fn persistent_header_keeps_status_facts_with_mercury_core_branding() {
+        let mut app = create_test_app();
+        app.set_remote_server_identity_for_tests(
+            Some("summit"),
+            None,
+            Some("v0.14.2-dev (old1234)"),
+            Some("session_parrot_1705012345678"),
+        );
+
+        let lines = rendered_header_lines(&app, 120);
+        let expected_model = header_model_display_name(&app.provider_model(), &app.provider_name());
+
+        assert!(
+            lines.iter().any(|line| line.contains("Mercury Core")),
+            "Mercury Core branding should be present: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("server: Summit")),
+            "server status line should be preserved: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("client: Parrot")),
+            "client status line should be preserved: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains(&expected_model)),
+            "model status line should be preserved: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("built ")),
+            "build age/status line should be preserved: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn persistent_header_mercury_core_degrades_without_panicking_on_tiny_widths() {
+        let app = create_test_app();
+
+        for width in [0, 1, 4, 8, 12] {
+            let lines = build_persistent_header(&app, width);
+            assert!(
+                !lines.is_empty(),
+                "persistent header should still produce safe lines at width {width}"
+            );
+        }
     }
 
     #[test]
