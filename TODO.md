@@ -12,6 +12,9 @@ Result:
 
 * Added a subtle Mercury Core header inside the existing centered homepage/status block.
 * Improved homepage branding without adding a second top bar or separate global strip.
+* Replaced raw internal homepage labels with clearer Mercury Core status labels.
+* Removed `[client-dev]` and raw API key label from the homepage MVP.
+* Converted the homepage status block into a compact Mercury Core card/panel with clearer aligned labels.
 * Preserved existing status information, command menu behavior, top bar behavior, and input behavior.
 * Deferred animated Mercury Core strip, command palette redesign, input prompt polish, Top Bar V2, and multi-session UI.
 

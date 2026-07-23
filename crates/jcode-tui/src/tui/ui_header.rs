@@ -1,13 +1,11 @@
 use super::box_utils::render_rounded_box;
 use super::changelog::get_unseen_changelog_entries;
-use super::{
-    TuiState, binary_age, dim_color, header_name_color, is_running_stable_release, semver,
-    shorten_model_name,
-};
+use super::{TuiState, dim_color, header_name_color, shorten_model_name};
 use crate::auth::{AuthState, AuthStatus};
 use crate::tui::color_support::rgb;
-use crate::tui::connection_type_icon;
 use ratatui::prelude::*;
+#[cfg(test)]
+use super::semver;
 #[cfg(test)]
 use std::sync::OnceLock;
 
@@ -47,22 +45,12 @@ pub(crate) fn capitalize(s: &str) -> String {
 
 /// Compact form of a full build version string: `v0.25.19-dev (abc1234, dirty)`
 /// becomes `v0.25.19-dev`. Used for the per-line server/client version labels.
+#[cfg(test)]
 fn compact_version_label(version: &str) -> String {
     let trimmed = version.trim();
     match trimmed.split_once(" (") {
         Some((head, _)) => head.trim().to_string(),
         None => trimmed.to_string(),
-    }
-}
-
-/// Version label for a `server:`/`client:` header line. Normally compact
-/// (semver only); keeps the git-hash suffix when the two sides share a semver
-/// but differ by build, so the mismatch is still visible at a glance.
-fn header_version_label(version: &str, include_hash: bool) -> String {
-    if include_hash {
-        version.trim().to_string()
-    } else {
-        compact_version_label(version)
     }
 }
 
@@ -503,7 +491,6 @@ fn abbreviate_home(path: &str) -> String {
     path.to_string()
 }
 
-#[cfg(test)]
 fn truncate_to_width(text: &str, width: usize) -> String {
     let char_count = text.chars().count();
     if char_count <= width {
@@ -588,270 +575,321 @@ fn configured_auth_count(auth: &AuthStatus) -> usize {
     .count()
 }
 
-fn mercury_core_title(width: usize) -> Line<'static> {
-    let mut spans = Vec::new();
+const HOMEPAGE_CARD_MAX_WIDTH: usize = 56;
+const HOMEPAGE_CARD_MIN_WIDTH: usize = 32;
+const HOMEPAGE_LABEL_WIDTH: usize = 10;
 
-    if width >= "☿ Mercury Core".chars().count() {
-        spans.push(Span::styled(
-            "☿ ",
-            Style::default().fg(rgb(190, 170, 255)).bold(),
-        ));
-        spans.push(Span::styled(
-            "Mercury Core",
-            Style::default().fg(header_name_color()).bold(),
-        ));
-    } else if width >= "Mercury Core".chars().count() {
-        spans.push(Span::styled(
-            "Mercury Core",
-            Style::default().fg(header_name_color()).bold(),
-        ));
-    } else if width >= "Mercury".chars().count() {
-        spans.push(Span::styled(
-            "Mercury",
-            Style::default().fg(header_name_color()).bold(),
-        ));
-    }
-
-    Line::from(spans).alignment(Alignment::Center)
+struct HomepageCardRow {
+    label: &'static str,
+    value: String,
+    value_style: Style,
 }
 
-pub(super) fn build_persistent_header(app: &dyn TuiState, width: u16) -> Vec<Line<'static>> {
-    let model = app.provider_model();
-    let session_name = app.session_display_name().unwrap_or_default();
-    let server_name = app.server_display_name();
-    // The client line is identified by its session name, so show that name's
-    // icon (e.g. "ram" -> 🐏). Previously a remote http/ws connection icon
-    // (🌐/🕸️) replaced it entirely, which hid the name icon for every remote
-    // client. Keep the connection icon as a separate trailing hint instead.
-    let icon = crate::id::session_icon(&session_name);
-    let connection_icon = connection_type_icon(app.connection_type().as_deref());
-    let nice_model = header_model_display_name(&model, &app.provider_name());
-    let build_info = binary_age().unwrap_or_else(|| "unknown".to_string());
-    let align = Alignment::Center;
-    let mut lines: Vec<Line> = Vec::new();
-    let w = width as usize;
+fn homepage_plain_title(width: usize) -> Line<'static> {
+    let title = if width >= "Mercury Core".chars().count() {
+        "Mercury Core"
+    } else if width >= "Mercury".chars().count() {
+        "Mercury"
+    } else {
+        ""
+    };
 
-    let is_canary = app.is_canary();
-    let is_remote = app.is_remote_mode();
-    let server_update = app.server_update_available() == Some(true);
-    let client_update = app.client_update_available();
-    let mut status_items: Vec<&str> = Vec::new();
-    if app.is_replay() {
-        status_items.push("replay");
-    } else if is_remote {
-        status_items.push("client");
+    Line::from(Span::styled(
+        title.to_string(),
+        Style::default().fg(header_name_color()).bold(),
+    ))
+    .alignment(Alignment::Center)
+}
+
+fn provider_display_label(provider_name: &str) -> String {
+    let trimmed = provider_name.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    match trimmed.to_ascii_lowercase().as_str() {
+        "openrouter" => "OpenRouter".to_string(),
+        "openai" => "OpenAI".to_string(),
+        "openai-compatible" => "OpenAI-compatible".to_string(),
+        "anthropic" | "claude" => "Anthropic".to_string(),
+        "gemini" | "google" => "Google".to_string(),
+        "copilot" => "Copilot".to_string(),
+        "cursor" => "Cursor".to_string(),
+        other => other
+            .split(['-', '_', ' '])
+            .filter(|part| !part.is_empty())
+            .map(capitalize)
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn homepage_model_value(model: &str, provider_name: &str, upstream: Option<&str>) -> String {
+    let model = homepage_model_display_label(model);
+    if model.is_empty() {
+        return String::new();
+    }
+
+    let provider = upstream
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| provider_display_label(provider_name));
+    if provider.is_empty() || model.contains(&provider) {
+        model
+    } else {
+        format!("{} \u{00b7} {}", model, provider)
+    }
+}
+
+fn homepage_model_display_label(model: &str) -> String {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let route_stripped = trimmed
+        .rsplit_once(':')
+        .map(|(_, value)| value.trim())
+        .unwrap_or(trimmed);
+    let model_id = route_stripped
+        .rsplit_once('/')
+        .map(|(_, value)| value.trim())
+        .unwrap_or(route_stripped);
+
+    match model_id.to_ascii_lowercase().as_str() {
+        "claude-sonnet-4" | "claude-sonnet-4-20250514" | "claude-4-sonnet" => {
+            "Claude Sonnet 4".to_string()
+        }
+        "claude-opus-4" | "claude-opus-4-20250514" | "claude-4-opus" => {
+            "Claude Opus 4".to_string()
+        }
+        "claude-haiku-4" | "claude-haiku-4-20250514" | "claude-4-haiku" => {
+            "Claude Haiku 4".to_string()
+        }
+        _ => header_model_display_name(model_id, ""),
+    }
+}
+
+fn workspace_display_label(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    std::path::Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| abbreviate_home(trimmed))
+}
+
+fn homepage_mode_label(app: &dyn TuiState) -> String {
+    homepage_mode_label_from_flags(app.is_replay(), app.is_canary(), app.is_remote_mode())
+}
+
+fn homepage_mode_label_from_flags(is_replay: bool, is_canary: bool, is_remote: bool) -> String {
+    if is_replay {
+        return "replay".to_string();
     }
     if is_canary {
-        status_items.push("dev");
+        return "self-dev".to_string();
     }
-    if server_update {
-        status_items.push("srv↑");
+    if is_remote {
+        return "remote".to_string();
     }
-    if client_update {
-        status_items.push("cli↑");
-    }
-    if let Some(badge) = crate::perf::profile().tier.badge() {
-        status_items.push(badge);
+    "normal".to_string()
+}
+
+fn homepage_card_width(width: usize, rows: &[HomepageCardRow]) -> usize {
+    let content_width = rows
+        .iter()
+        .map(|row| {
+            HOMEPAGE_LABEL_WIDTH
+                + 2
+                + row.value.chars().count().min(HOMEPAGE_CARD_MAX_WIDTH)
+        })
+        .max()
+        .unwrap_or(0)
+        .max("/server details   /model switch".chars().count());
+    let desired = (content_width + 6).clamp(HOMEPAGE_CARD_MIN_WIDTH, HOMEPAGE_CARD_MAX_WIDTH);
+    desired.min(width)
+}
+
+fn homepage_card_border_top(card_width: usize) -> Line<'static> {
+    let title = " Mercury Core ";
+    let inner_width = card_width.saturating_sub(2);
+    if inner_width <= title.chars().count() {
+        return Line::from(Span::styled(
+            format!("+{}+", "-".repeat(inner_width)),
+            Style::default().fg(dim_color()),
+        ))
+        .alignment(Alignment::Center);
     }
 
-    lines.push(mercury_core_title(w));
+    let right = inner_width.saturating_sub(1 + title.chars().count());
+    Line::from(vec![
+        Span::styled(
+            "+-",
+            Style::default().fg(dim_color()),
+        ),
+        Span::styled(title, Style::default().fg(header_name_color()).bold()),
+        Span::styled(
+            format!("{}+", "-".repeat(right)),
+            Style::default().fg(dim_color()),
+        ),
+    ])
+    .alignment(Alignment::Center)
+}
 
-    // Labeled versions for the `server:` / `client:` lines. Lots of users run
-    // mismatched client/server binaries, so both lines carry their own version
-    // label (and highlight on mismatch) instead of relying on the single
-    // ambiguous version line at the bottom.
-    let server_version_full = app.server_display_version();
-    let client_version_full = server_name
-        .as_ref()
-        .map(|_| jcode_build_meta::VERSION.to_string());
-    let version_mismatch = matches!(
-        (&server_version_full, &client_version_full),
-        (Some(server), Some(client)) if server.trim() != client.trim()
+fn homepage_card_row(row: &HomepageCardRow, card_width: usize) -> Line<'static> {
+    let inner_width = card_width.saturating_sub(2);
+    let value_width = inner_width.saturating_sub(HOMEPAGE_LABEL_WIDTH + 5);
+    let value = truncate_to_width(&row.value, value_width);
+    let used = HOMEPAGE_LABEL_WIDTH + 5 + value.chars().count();
+    let trailing = inner_width.saturating_sub(used);
+
+    Line::from(vec![
+        Span::styled("|  ", Style::default().fg(dim_color())),
+        Span::styled(
+            format!("{:<width$}", row.label, width = HOMEPAGE_LABEL_WIDTH),
+            Style::default().fg(dim_color()),
+        ),
+        Span::styled("  ", Style::default().fg(dim_color())),
+        Span::styled(value, row.value_style),
+        Span::styled(" ".repeat(trailing), Style::default().fg(dim_color())),
+        Span::styled(" |", Style::default().fg(dim_color())),
+    ])
+    .alignment(Alignment::Center)
+}
+
+fn homepage_card_blank(card_width: usize) -> Line<'static> {
+    let inner_width = card_width.saturating_sub(2);
+    Line::from(Span::styled(
+        format!("|{}|", " ".repeat(inner_width)),
+        Style::default().fg(dim_color()),
+    ))
+    .alignment(Alignment::Center)
+}
+
+fn homepage_card_footer(card_width: usize) -> Line<'static> {
+    let inner_width = card_width.saturating_sub(2);
+    let hint = truncate_to_width("/server details   /model switch", inner_width.saturating_sub(3));
+    let trailing = inner_width.saturating_sub(3 + hint.chars().count());
+    Line::from(vec![
+        Span::styled("|  ", Style::default().fg(dim_color())),
+        Span::styled(hint, Style::default().fg(dim_color())),
+        Span::styled(" ".repeat(trailing), Style::default().fg(dim_color())),
+        Span::styled(" |", Style::default().fg(dim_color())),
+    ])
+    .alignment(Alignment::Center)
+}
+
+fn homepage_card_lines(rows: Vec<HomepageCardRow>, width: usize) -> Vec<Line<'static>> {
+    if width < HOMEPAGE_CARD_MIN_WIDTH {
+        return homepage_plain_lines(rows, width);
+    }
+
+    let card_width = homepage_card_width(width, &rows);
+    let mut lines = Vec::new();
+    lines.push(homepage_card_border_top(card_width));
+    for row in &rows {
+        lines.push(homepage_card_row(row, card_width));
+    }
+    lines.push(homepage_card_blank(card_width));
+    lines.push(homepage_card_footer(card_width));
+    lines.push(
+        Line::from(Span::styled(
+            format!("+{}+", "-".repeat(card_width.saturating_sub(2))),
+            Style::default().fg(dim_color()),
+        ))
+        .alignment(Alignment::Center),
     );
-    let include_hash = version_mismatch
-        && matches!(
-            (&server_version_full, &client_version_full),
-            (Some(server), Some(client))
-                if compact_version_label(server) == compact_version_label(client)
-        );
-    let version_style = if version_mismatch {
-        Style::default().fg(rgb(255, 200, 100))
-    } else {
-        Style::default().fg(dim_color())
-    };
-    let server_version_label = server_version_full
-        .as_deref()
-        .map(|version| header_version_label(version, include_hash));
-    let client_version_label = client_version_full
-        .as_deref()
-        .map(|version| header_version_label(version, include_hash));
+    lines
+}
 
-    if !status_items.is_empty() {
-        let badge_text = format!("⟨{}⟩", status_items.join("·"));
-        lines.push(
-            Line::from(Span::styled(badge_text, Style::default().fg(dim_color()))).alignment(align),
-        );
-    } else {
-        lines.push(Line::from(""));
-    }
-
-    if let Some(server_name) = server_name.as_deref() {
-        let server_icon = app.server_display_icon().unwrap_or_default();
-        let server_text = if server_icon.is_empty() {
-            format!("server: {}", capitalize(server_name))
-        } else {
-            format!("server: {} {}", capitalize(server_name), server_icon)
-        };
-        let mut spans = vec![Span::styled(
-            server_text.clone(),
-            Style::default().fg(header_name_color()),
-        )];
-        if let Some(version) = server_version_label.as_deref() {
-            let suffix = format!(" · {}", version);
-            if server_text.chars().count() + suffix.chars().count() <= w {
-                spans.push(Span::styled(suffix, version_style));
-            }
-        }
-        lines.push(Line::from(spans).alignment(align));
-    }
-
-    if !session_name.is_empty() {
-        let client_text = match connection_icon {
-            Some(conn) => format!("client: {} {} {}", capitalize(&session_name), icon, conn),
-            None => format!("client: {} {}", capitalize(&session_name), icon),
-        };
-        let mut spans = vec![Span::styled(
-            client_text.clone(),
-            Style::default().fg(header_name_color()),
-        )];
-        if let Some(version) = client_version_label.as_deref() {
-            let suffix = format!(" · {}", version);
-            if client_text.chars().count() + suffix.chars().count() <= w {
-                spans.push(Span::styled(suffix, version_style));
-            }
-        }
-        lines.push(Line::from(spans).alignment(align));
-    } else if server_name.is_none() {
+fn homepage_plain_lines(rows: Vec<HomepageCardRow>, width: usize) -> Vec<Line<'static>> {
+    let mut lines = vec![homepage_plain_title(width), Line::from("")];
+    for row in rows {
+        let text = format!("{} {}", row.label, row.value);
         lines.push(
             Line::from(Span::styled(
-                "JCode".to_string(),
-                Style::default().fg(header_name_color()),
+                truncate_to_width(&text, width as usize),
+                row.value_style,
             ))
-            .alignment(align),
+            .alignment(Alignment::Center),
         );
     }
+    lines
+}
 
-    // Single model line: dim active-route method on the left, styled model
-    // name in the middle, dim upstream/hint detail after. This used to be a
-    // second, unstyled line in the secondary header duplicating the model name.
+fn homepage_rows(app: &dyn TuiState, model: &str, nice_model: String) -> Vec<HomepageCardRow> {
+    let mut rows = vec![HomepageCardRow {
+        label: "Status",
+        value: "Ready".to_string(),
+        value_style: Style::default().fg(rgb(130, 220, 170)).bold(),
+    }];
+
+    let session_name = app.session_display_name().unwrap_or_default();
+    if !session_name.trim().is_empty() {
+        rows.push(HomepageCardRow {
+            label: "Session",
+            value: capitalize(&session_name),
+            value_style: Style::default().fg(header_name_color()).bold(),
+        });
+    }
+
     let model_is_placeholder = {
         let trimmed = model.trim();
         trimmed.is_empty()
             || trimmed == "connected"
-            || trimmed.ends_with('…')
+            || trimmed.ends_with("...")
+            || trimmed.chars().last().is_some_and(|c| c == '\u{2026}')
             || trimmed.starts_with("connecting")
     };
-    let auth = app.auth_status();
-    let provider_label = if model_is_placeholder {
-        String::new()
+    let model_value = if model_is_placeholder {
+        nice_model
     } else {
-        header_provider_label(&app.provider_name(), &auth)
+        homepage_model_value(&nice_model, &app.provider_name(), app.upstream_provider().as_deref())
     };
-    let upstream = if model_is_placeholder {
-        None
-    } else {
-        app.upstream_provider()
-    };
-    let mut model_spans: Vec<Span> = Vec::new();
-    let mut model_line_len = nice_model.chars().count();
-    // Keep a little headroom below the full width so the centered line never
-    // wraps when the render area subtracts side margins.
-    let fit_width = w.saturating_sub(4);
-    if !provider_label.is_empty() {
-        let prefix = format!("{} · ", provider_label);
-        if model_line_len + prefix.chars().count() <= fit_width {
-            model_line_len += prefix.chars().count();
-            model_spans.push(Span::styled(prefix, Style::default().fg(dim_color())));
-        }
+    if !model_value.trim().is_empty() {
+        rows.push(HomepageCardRow {
+            label: "Model",
+            value: model_value,
+            value_style: Style::default().fg(rgb(255, 150, 200)).bold(),
+        });
     }
-    model_spans.push(Span::styled(
-        nice_model.clone(),
-        // Match the info widget's model accent (pink, bold) instead of plain
-        // white so the model reads as a distinct, styled element.
-        Style::default().fg(rgb(255, 150, 200)).bold(),
-    ));
-    if let Some(upstream) = upstream.as_deref() {
-        let suffix = format!(" via {}", upstream);
-        if model_line_len + suffix.chars().count() <= fit_width {
-            model_line_len += suffix.chars().count();
-            model_spans.push(Span::styled(suffix, Style::default().fg(dim_color())));
-        }
-    }
-    if !nice_model.is_empty() {
-        let hint = " · /model to switch";
-        if !model_is_placeholder && model_line_len + hint.chars().count() <= fit_width {
-            model_spans.push(Span::styled(
-                hint.to_string(),
-                Style::default().fg(dim_color()),
-            ));
-        }
-        lines.push(Line::from(model_spans).alignment(align));
-    }
-
-    let version_text = if client_version_label.is_some() {
-        // The server/client lines above already state both versions, so this
-        // line keeps only the (non-duplicated) client build age.
-        format!("built {}", build_info)
-    } else if is_running_stable_release() {
-        let tag = jcode_build_meta::GIT_TAG;
-        if tag.is_empty() || tag.contains('-') {
-            let full = format!("{} · release · built {}", semver(), build_info);
-            if full.chars().count() <= w {
-                full
-            } else {
-                format!("{} · release", semver())
-            }
-        } else {
-            let full = format!("{} · release {} · built {}", semver(), tag, build_info);
-            if full.chars().count() <= w {
-                full
-            } else {
-                format!("{} · {}", semver(), tag)
-            }
-        }
-    } else {
-        let full = format!("{} · built {}", semver(), build_info);
-        if full.chars().count() <= w {
-            full
-        } else {
-            semver().to_string()
-        }
-    };
-    lines.push(
-        Line::from(Span::styled(version_text, Style::default().fg(dim_color()))).alignment(align),
-    );
 
     if let Some(dir) = app.working_dir() {
-        let display_dir = abbreviate_home(&dir);
-        lines.push(
-            Line::from(Span::styled(display_dir, Style::default().fg(dim_color())))
-                .alignment(align),
-        );
+        let workspace = workspace_display_label(&dir);
+        if !workspace.trim().is_empty() {
+            rows.push(HomepageCardRow {
+                label: "Workspace",
+                value: workspace,
+                value_style: Style::default().fg(header_name_color()),
+            });
+        }
     }
 
-    lines
+    rows.push(HomepageCardRow {
+        label: "Mode",
+        value: homepage_mode_label(app),
+        value_style: Style::default().fg(header_name_color()),
+    });
+
+    rows
+}
+
+pub(super) fn build_persistent_header(app: &dyn TuiState, width: u16) -> Vec<Line<'static>> {
+    let model = app.provider_model();
+    let nice_model = header_model_display_name(&model, &app.provider_name());
+    homepage_card_lines(homepage_rows(app, &model, nice_model), width as usize)
 }
 
 pub(crate) fn build_header_lines(app: &dyn TuiState, width: u16) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let align = ratatui::layout::Alignment::Center;
-    let auth = app.auth_status();
     let w = width as usize;
-
-    let auth_line = build_auth_status_line(&auth, w);
-    if !auth_line.spans.is_empty() {
-        lines.push(auth_line.alignment(align));
-    }
 
     if let Some(goal_badge) = crate::goal::header_badge(
         app.working_dir().as_deref().map(std::path::Path::new),
@@ -877,7 +915,7 @@ pub(crate) fn build_header_lines(app: &dyn TuiState, width: u16) -> Vec<Line<'st
         for entry in new_entries.iter().take(display_count) {
             content.push(
                 Line::from(Span::styled(
-                    format!("• {}", entry),
+                    format!("\u{2022} {}", entry),
                     Style::default().fg(dim_color()),
                 ))
                 .alignment(align),
@@ -887,7 +925,7 @@ pub(crate) fn build_header_lines(app: &dyn TuiState, width: u16) -> Vec<Line<'st
             content.push(
                 Line::from(Span::styled(
                     format!(
-                        "  …{} more · /changelog to see all",
+                        "  \u{2026}{} more \u{00b7} /changelog to see all",
                         new_entries.len() - MAX_LINES
                     ),
                     Style::default().fg(dim_color()),
@@ -907,90 +945,6 @@ pub(crate) fn build_header_lines(app: &dyn TuiState, width: u16) -> Vec<Line<'st
         }
     }
 
-    let mcps = app.mcp_servers();
-    let mcp_text = if mcps.is_empty() {
-        "mcp: (none)".to_string()
-    } else {
-        let full_parts: Vec<String> = mcps
-            .iter()
-            .map(|(name, count)| {
-                if *count > 0 {
-                    format!("{} ({} tools)", name, count)
-                } else {
-                    format!("{} (...)", name)
-                }
-            })
-            .collect();
-        let full = format!("mcp: {}", full_parts.join(", "));
-        if full.chars().count() <= w {
-            full
-        } else {
-            let short_parts: Vec<String> = mcps
-                .iter()
-                .map(|(name, count)| {
-                    if *count > 0 {
-                        format!("{}({})", name, count)
-                    } else {
-                        format!("{}(…)", name)
-                    }
-                })
-                .collect();
-            let short = format!("mcp: {}", short_parts.join(" "));
-            if short.chars().count() <= w {
-                short
-            } else {
-                format!("mcp: {} servers", mcps.len())
-            }
-        }
-    };
-    lines.push(
-        Line::from(Span::styled(mcp_text, Style::default().fg(dim_color()))).alignment(align),
-    );
-
-    let skills = app.available_skills();
-    if !skills.is_empty() {
-        let full = format!(
-            "skills: {}",
-            skills
-                .iter()
-                .map(|s| format!("/{}", s))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-        let skills_text = if full.chars().count() <= w {
-            full
-        } else {
-            format!("skills: {} loaded", skills.len())
-        };
-        lines.push(
-            Line::from(Span::styled(skills_text, Style::default().fg(dim_color())))
-                .alignment(align),
-        );
-    }
-
-    let client_count = app.connected_clients().unwrap_or(0);
-    let session_count = app.server_sessions().len();
-    if client_count > 0 || session_count > 1 {
-        let mut parts = Vec::new();
-        if client_count > 0 {
-            parts.push(format!(
-                "{} client{}",
-                client_count,
-                if client_count == 1 { "" } else { "s" }
-            ));
-        }
-        if session_count > 1 {
-            parts.push(format!("{} sessions", session_count));
-        }
-        lines.push(
-            Line::from(Span::styled(
-                format!("server: {}", parts.join(", ")),
-                Style::default().fg(dim_color()),
-            ))
-            .alignment(align),
-        );
-    }
-
     lines.push(Line::from(""));
     lines
 }
@@ -1008,6 +962,19 @@ mod tests {
     use std::sync::OnceLock;
 
     struct MockProvider;
+
+    struct ChangelogOverrideGuard;
+
+    impl Drop for ChangelogOverrideGuard {
+        fn drop(&mut self) {
+            set_unseen_changelog_entries_override_for_tests(None);
+        }
+    }
+
+    fn changelog_override(entries: Vec<String>) -> ChangelogOverrideGuard {
+        set_unseen_changelog_entries_override_for_tests(Some(entries));
+        ChangelogOverrideGuard
+    }
 
     #[async_trait]
     impl Provider for MockProvider {
@@ -1080,6 +1047,7 @@ mod tests {
     fn left_aligned_mode_keeps_secondary_header_centered() {
         let mut app = create_test_app();
         app.set_centered(false);
+        let _guard = changelog_override(vec!["Card polish".to_string()]);
 
         let lines = build_header_lines(&app, 80);
         let non_empty: Vec<&Line<'_>> = lines
@@ -1138,21 +1106,17 @@ mod tests {
         let mercury_idx = rendered
             .iter()
             .position(|line| line.contains("Mercury Core"))
-            .expect("Mercury Core header line");
+            .expect("Mercury Core card title");
         let status_idx = rendered
             .iter()
-            .position(|line| line.contains("server:") || line.contains("client:"))
-            .expect("server/client status line");
+            .position(|line| line.contains("Status") && line.contains("Ready"))
+            .expect("Status card row");
 
-        assert!(
-            mercury_idx < status_idx,
-            "Mercury Core should live inside the persistent homepage block before the status badge: {rendered:?}"
-        );
-        assert_eq!(
-            lines[mercury_idx].alignment,
-            Some(Alignment::Center),
-            "Mercury Core header should be centered with the homepage status block"
-        );
+        assert!(mercury_idx < status_idx);
+        assert_eq!(lines[mercury_idx].alignment, Some(Alignment::Center));
+        assert!(rendered[mercury_idx].starts_with('+'));
+        assert!(rendered[mercury_idx].ends_with('+'));
+        assert!(rendered.iter().any(|line| line.starts_with('+') && line.ends_with('+')));
     }
 
     #[test]
@@ -1182,14 +1146,11 @@ mod tests {
             .position(|ch| ch != ' ')
             .expect("non-empty Mercury Core row");
 
-        assert!(
-            first_non_space > 0,
-            "Mercury Core should be centered in the prepared header, not painted at x=0: {row_text:?}"
-        );
+        assert!(first_non_space > 0);
     }
 
     #[test]
-    fn persistent_header_keeps_status_facts_with_mercury_core_branding() {
+    fn persistent_header_uses_user_facing_status_labels() {
         let mut app = create_test_app();
         app.set_remote_server_identity_for_tests(
             Some("summit"),
@@ -1201,26 +1162,23 @@ mod tests {
         let lines = rendered_header_lines(&app, 120);
         let expected_model = header_model_display_name(&app.provider_model(), &app.provider_name());
 
-        assert!(
-            lines.iter().any(|line| line.contains("Mercury Core")),
-            "Mercury Core branding should be present: {lines:?}"
-        );
-        assert!(
-            lines.iter().any(|line| line.contains("server: Summit")),
-            "server status line should be preserved: {lines:?}"
-        );
-        assert!(
-            lines.iter().any(|line| line.contains("client: Parrot")),
-            "client status line should be preserved: {lines:?}"
-        );
-        assert!(
-            lines.iter().any(|line| line.contains(&expected_model)),
-            "model status line should be preserved: {lines:?}"
-        );
-        assert!(
-            lines.iter().any(|line| line.contains("built ")),
-            "build age/status line should be preserved: {lines:?}"
-        );
+        assert!(lines.iter().any(|line| line.contains("Mercury Core")));
+        assert!(lines.iter().any(|line| line.contains("Status") && line.contains("Ready")));
+        assert!(lines.iter().any(|line| line.contains("Session")));
+        assert!(lines.iter().any(|line| line.contains("Parrot")));
+        assert!(lines.iter().any(|line| line.contains("Model")));
+        assert!(lines.iter().any(|line| line.contains(&expected_model)));
+        if app.working_dir().is_some() {
+            assert!(lines.iter().any(|line| line.contains("Workspace")));
+        }
+        assert!(lines.iter().any(|line| line.contains("Mode")));
+        assert!(lines.iter().any(|line| line.contains("/server details")));
+        assert!(lines.iter().any(|line| line.contains("/model switch")));
+        assert!(lines.iter().all(|line| !line.contains("[client-dev]")));
+        assert!(lines.iter().all(|line| !line.contains("server:")));
+        assert!(lines.iter().all(|line| !line.contains("client:")));
+        assert!(lines.iter().all(|line| !line.contains("api-key:")));
+        assert!(lines.iter().all(|line| !line.contains("remote - self-dev")));
     }
 
     #[test]
@@ -1229,50 +1187,69 @@ mod tests {
 
         for width in [0, 1, 4, 8, 12] {
             let lines = build_persistent_header(&app, width);
-            assert!(
-                !lines.is_empty(),
-                "persistent header should still produce safe lines at width {width}"
-            );
+            assert!(!lines.is_empty());
+            let rendered: Vec<String> = lines
+                .iter()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect::<String>()
+                })
+                .collect();
+            assert!(rendered.iter().all(|line| !line.starts_with('+')));
+            assert!(rendered.iter().all(|line| !line.starts_with('|')));
         }
     }
 
     #[test]
-    fn persistent_header_labels_server_and_client_versions() {
+    fn homepage_model_value_uses_display_provider_without_api_key_prefix() {
+        let value = homepage_model_value("Claude Sonnet 4", "openrouter", None);
+
+        assert_eq!(value, "Claude Sonnet 4 \u{00b7} OpenRouter");
+        assert!(!value.contains("api-key:"));
+    }
+
+    #[test]
+    fn homepage_model_value_cleans_openrouter_provider_prefixed_ids() {
+        let value = homepage_model_value(
+            "OpenRouter: anthropic/claude-sonnet-4",
+            "openrouter",
+            None,
+        );
+
+        assert_eq!(value, "Claude Sonnet 4 \u{00b7} OpenRouter");
+        assert!(!value.contains("anthropic/"));
+        assert!(!value.contains("OpenRouter:"));
+    }
+
+    #[test]
+    fn homepage_mode_label_prefers_self_dev_over_remote_suffix() {
+        let value = homepage_mode_label_from_flags(false, true, true);
+
+        assert_eq!(value, "self-dev");
+        assert_ne!(value, "remote - self-dev");
+    }
+
+    #[test]
+    fn persistent_header_represents_remote_session_without_server_client_labels() {
         let mut app = create_test_app();
         app.set_remote_server_identity_for_tests(
             Some("blazing"),
-            Some("🔥"),
+            Some("fire"),
             Some("v0.14.2-dev (old1234)"),
             Some("session_fox_1705012345678"),
         );
 
         let lines = rendered_header_lines(&app, 120);
-        let server_line = lines
-            .iter()
-            .find(|line| line.contains("server:"))
-            .expect("server line");
-        let client_line = lines
-            .iter()
-            .find(|line| line.contains("client:"))
-            .expect("client line");
-
-        assert!(
-            server_line.contains("server: Blazing 🔥 · v0.14.2-dev"),
-            "server line should carry the server version: {server_line}"
-        );
-        let client_version = compact_version_label(jcode_build_meta::VERSION);
-        assert!(
-            client_line.contains("client: Fox"),
-            "client line should keep the session name: {client_line}"
-        );
-        assert!(
-            client_line.contains(&format!("· {}", client_version)),
-            "client line should carry the client version: {client_line}"
-        );
+        assert!(lines.iter().any(|line| line.contains("Session") && line.contains("Fox")));
+        assert!(lines.iter().any(|line| line.contains("Mode") && line.contains("remote")));
+        assert!(lines.iter().all(|line| !line.contains("server:") && !line.contains("client:")));
+        assert!(lines.iter().all(|line| !line.contains("v0.14.2") && !line.contains("old1234")));
     }
 
     #[test]
-    fn persistent_header_keeps_git_hash_when_semvers_match_but_builds_differ() {
+    fn persistent_header_hides_build_hashes_from_homepage() {
         let mut app = create_test_app();
         let client_semver = compact_version_label(jcode_build_meta::VERSION);
         let fake_server_version = format!("{} (0000000)", client_semver);
@@ -1284,117 +1261,61 @@ mod tests {
         );
 
         let lines = rendered_header_lines(&app, 160);
-        let server_line = lines
-            .iter()
-            .find(|line| line.contains("server:"))
-            .expect("server line");
-        let client_line = lines
-            .iter()
-            .find(|line| line.contains("client:"))
-            .expect("client line");
-
-        assert!(
-            server_line.contains("(0000000)"),
-            "same-semver mismatch should keep the server git hash: {server_line}"
-        );
-        assert!(
-            client_line.contains(&format!("· {}", jcode_build_meta::VERSION)),
-            "same-semver mismatch should keep the client git hash: {client_line}"
-        );
+        assert!(lines.iter().any(|line| line.contains("Session") && line.contains("Fox")));
+        assert!(lines.iter().all(|line| !line.contains("(0000000)") && !line.contains(jcode_build_meta::VERSION)));
     }
 
     #[test]
-    fn persistent_header_omits_version_suffix_when_too_narrow() {
+    fn persistent_header_omits_versions_when_too_narrow() {
         let mut app = create_test_app();
         app.set_remote_server_identity_for_tests(
             Some("blazing"),
-            Some("🔥"),
+            Some("fire"),
             Some("v0.14.2-dev (old1234)"),
             Some("session_fox_1705012345678"),
         );
 
         let lines = rendered_header_lines(&app, 18);
-        let server_line = lines
-            .iter()
-            .find(|line| line.contains("server:"))
-            .expect("server line");
-        assert!(
-            !server_line.contains("v0.14.2"),
-            "narrow widths should drop the version suffix: {server_line}"
-        );
+        assert!(lines.iter().all(|line| !line.contains("server:")));
+        assert!(lines.iter().all(|line| !line.contains("v0.14.2")));
     }
 
     #[test]
     fn persistent_header_local_mode_has_no_version_labels() {
         let app = create_test_app();
         let lines = rendered_header_lines(&app, 120);
-        assert!(
-            !lines.iter().any(|line| line.contains("server:")),
-            "local mode should not render a server line: {lines:?}"
-        );
-        assert!(
-            !lines
-                .iter()
-                .any(|line| line.contains("client:") && line.contains(" · v")),
-            "local mode client line should not carry a version label: {lines:?}"
-        );
+        assert!(!lines.iter().any(|line| line.contains("server:")));
+        assert!(!lines.iter().any(|line| line.contains("client:") && line.contains(" - v")));
     }
 
     #[test]
-    fn persistent_header_client_line_shows_name_icon_with_connection_hint() {
+    fn persistent_header_hides_connection_hint_from_homepage() {
         let mut app = create_test_app();
         app.set_remote_server_identity_for_tests(
             Some("blazing"),
-            Some("🔥"),
+            Some("fire"),
             Some("v0.14.2-dev (old1234)"),
             Some("session_ram_1705012345678"),
         );
-        app.set_connection_type_for_tests(Some("https/sse"));
 
         let lines = rendered_header_lines(&app, 120);
-        let client_line = lines
-            .iter()
-            .find(|line| line.contains("client:"))
-            .expect("client line");
-
-        // The session name's own icon (ram -> 🐏) must be present rather than
-        // being replaced by the connection icon.
-        assert!(
-            client_line.contains("client: Ram 🐏"),
-            "client line should show the name icon: {client_line}"
-        );
-        // The connection icon is kept as a trailing hint, not a replacement.
-        assert!(
-            client_line.contains('🌐'),
-            "client line should keep the connection hint icon: {client_line}"
-        );
+        assert!(lines.iter().any(|line| line.contains("Session") && line.contains("Ram")));
+        assert!(lines.iter().all(|line| !line.contains("client:") && !line.contains("https/sse")));
     }
 
     #[test]
-    fn persistent_header_client_line_has_no_connection_hint_when_unknown() {
+    fn persistent_header_keeps_session_name_without_raw_client_label() {
         let mut app = create_test_app();
         app.set_remote_server_identity_for_tests(
             Some("blazing"),
-            Some("🔥"),
+            Some("fire"),
             Some("v0.14.2-dev (old1234)"),
             Some("session_fox_1705012345678"),
         );
-        app.set_connection_type_for_tests(None);
 
         let lines = rendered_header_lines(&app, 120);
-        let client_line = lines
-            .iter()
-            .find(|line| line.contains("client:"))
-            .expect("client line");
-
-        assert!(
-            client_line.contains("client: Fox 🦊"),
-            "client line should show the name icon: {client_line}"
-        );
-        assert!(
-            !client_line.contains('🌐') && !client_line.contains('🕸'),
-            "client line should not carry a connection hint when unknown: {client_line}"
-        );
+        assert!(lines.iter().any(|line| line.contains("Session") && line.contains("Fox")));
+        assert!(lines.iter().all(|line| !line.contains("client:")));
     }
 
     #[test]
