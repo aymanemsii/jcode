@@ -127,6 +127,13 @@ fn startup_splash_text_helpers_use_app_identity_fallbacks() {
     );
 }
 
+#[test]
+fn terminal_background_is_hidden_while_homepage_card_is_visible() {
+    let state = TestState::default();
+
+    assert!(!terminal_background_visible(&state));
+}
+
 #[derive(Clone, Default)]
 struct TestState {
     input: String,

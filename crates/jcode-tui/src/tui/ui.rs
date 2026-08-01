@@ -3120,6 +3120,15 @@ fn terminal_background_visible(app: &dyn TuiState) -> bool {
         && app.streaming_text().is_empty()
         && !app.is_processing()
         && !app.onboarding_welcome_active()
+        && !homepage_status_card_visible(app)
+}
+
+fn homepage_status_card_visible(app: &dyn TuiState) -> bool {
+    app.display_messages().is_empty()
+        && app.streaming_text().is_empty()
+        && !app.is_processing()
+        && !app.onboarding_welcome_active()
+        && !startup_splash_visible(app)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
